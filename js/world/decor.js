@@ -105,26 +105,11 @@ const DECOR = {
     };
     let prevR = null;
     let prevB = null;
-    let mouths = 0;
-    let doorDone = false;
     for (let i = 0; i < main.N; i += 5) {
       const inTunnel = Math.sin((i / main.N) * Math.PI * 2 * 3) > -0.3;
       if (!inTunnel) {
         prevR = prevB = null;
         continue;
-      }
-      // One tunnel mouth is sealed in the blue world: an iris door you can only pass through in RED. It goes on the
-      // first mouth (from the second on) whose road either side is drivable in RED and has no other walls near.
-      const redOK = (i0) => {
-        for (let k = -20; k < 90; k++) if (!solidIn(main.mask[main.wrap(i0 + k)], RED)) return false;
-        return !world.obstacles.some((o) => o.path === main && Math.abs(o.i - i0) < 40 && o.type === 'wall');
-      };
-      if (!prevR && ++mouths >= 2 && !doorDone && world.addDoor && !world.def.noDoor && redOK(i)) {
-        doorDone = true;
-        const at = main.frac(i + 1);
-        world.addObstacle({ type: 'wall', door: true, at, mask: M.B, r: main.halfW + 4.5 });
-        const tips = (world.def.tips ||= []);
-        if (!tips.some((t) => t.door)) tips.push({ door: true, at: main.frac(Math.max(0, i - 40)), text: 'TUNNEL SEALED IN BLUE: SHIFT TO RED', key: 'red' });
       }
       const R = hex(i, M.R, main.halfW + 4.5, 0);
       const B = hex(i + 2, M.B, main.halfW + 3.5, Math.PI / 6);
@@ -132,6 +117,32 @@ const DECOR = {
       if (prevB) for (let k = 0; k < 6; k++) L.line(M.B, prevB[k], B[k]);
       prevR = R;
       prevB = B;
+    }
+    // Secret bores: where a red-only branch leaves through the tunnel wall, a blue iris hatch seals it in the other
+    // worlds. Easy to miss, never needed; shift to RED as you pass and it opens.
+    for (const b of world.paths) {
+      if (!b.def?.hatch) continue;
+      let j = 0;
+      const fr = {};
+      for (; j < b.N; j++) {
+        if (!main.frame(b.px[j], b.pz[j], -1, fr)) break;
+        if (Math.abs(fr.lat) > main.halfW + 3) break;
+      }
+      world.addObstacle({ type: 'wall', door: true, path: b.id, at: b.frac(Math.min(b.N - 1, j)), mask: M.B, r: b.halfW + 1.8, cy: b.halfW * 0.45 });
+      // and the bore itself: red-only hex rings, a tunnel you only see through the red lens
+      let prev = null;
+      for (let k = j + 3; k < b.N - 6; k += 4) {
+        const c = b.point(k, 0, b.halfW * 0.35);
+        const u = V(b.rightX(k), 0, b.rightZ(k));
+        const P = [];
+        for (let q = 0; q <= 6; q++) {
+          const a = (q / 6) * Math.PI * 2;
+          P.push(c.clone().addScaledVector(u, Math.cos(a) * (b.halfW + 2.5)).addScaledVector(UP, Math.sin(a) * (b.halfW + 2.5)));
+        }
+        for (let q = 0; q < 6; q++) L.line(M.RO, P[q], P[q + 1]);
+        if (prev) for (let q = 0; q < 6; q++) L.line(M.RO, prev[q], P[q]);
+        prev = P;
+      }
     }
   },
 

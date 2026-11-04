@@ -350,19 +350,25 @@ export function buildBody(bodyId, paint, glowColor) {
 }
 
 // A light streak behind the car: a ribbon through recent thruster positions, fading out at the tail.
+// Twin exhaust streaks, one from each thruster, white-hot at the nozzle and fading to the trail colour.
 export class Trail {
-  constructor(color, n = 18) {
+  constructor(color, n = 18, sep = 0.55) {
     this.n = n;
+    this.sep = sep;
     this.pts = [];
     const g = new THREE.BufferGeometry();
-    this.pos = new Float32Array(n * 2 * 3);
-    this.col = new Float32Array(n * 2 * 3);
+    const V = n * 2 * 2;
+    this.pos = new Float32Array(V * 3);
+    this.col = new Float32Array(V * 3);
     g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
     g.setAttribute('color', new THREE.BufferAttribute(this.col, 3));
     const idx = [];
-    for (let k = 0; k < n - 1; k++) {
-      const a = k * 2;
-      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    for (let st = 0; st < 2; st++) {
+      const base = st * n * 2;
+      for (let k = 0; k < n - 1; k++) {
+        const a = base + k * 2;
+        idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      }
     }
     g.setIndex(idx);
     this.mat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
@@ -379,25 +385,30 @@ export class Trail {
     this.acc += dt;
     if (this.acc > 1 / 40 || !this.pts.length) {
       this.acc = 0;
-      this.pts.unshift({ x: p.x, y: p.y, z: p.z, rx, rz, w: 0.07 + power * 0.16, on });
+      this.pts.unshift({ x: p.x, y: p.y, z: p.z, rx, rz, w: 0.05 + power * 0.07, on });
       if (this.pts.length > this.n) this.pts.pop();
     } else {
       Object.assign(this.pts[0], { x: p.x, y: p.y, z: p.z, rx, rz });
     }
     const P = this.pos, C = this.col, c = this.color;
-    for (let k = 0; k < this.n; k++) {
-      const q = this.pts[Math.min(k, this.pts.length - 1)];
-      const f = (1 - k / (this.n - 1)) ** 1.6 * (q.on ? 0.5 : 0) * Math.min(1, power * 1.4);
-      const w = q.w * (1 - k / this.n);
-      for (let s = 0; s < 2; s++) {
-        const o = (k * 2 + s) * 3;
-        const side = s ? w : -w;
-        P[o] = q.x + q.rx * side;
-        P[o + 1] = q.y;
-        P[o + 2] = q.z + q.rz * side;
-        C[o] = c.r * f;
-        C[o + 1] = c.g * f;
-        C[o + 2] = c.b * f;
+    for (let st = 0; st < 2; st++) {
+      const off = st ? this.sep : -this.sep;
+      for (let k = 0; k < this.n; k++) {
+        const q = this.pts[Math.min(k, this.pts.length - 1)];
+        const u = k / (this.n - 1);
+        const f = (1 - u) ** 1.4 * (q.on ? 0.85 : 0) * Math.min(1, power * 1.4);
+        const hot = Math.max(0, 1 - u * 4); // white-hot right behind the nozzle
+        const w = q.w * (1 - u * 0.6);
+        for (let s = 0; s < 2; s++) {
+          const o = ((st * this.n + k) * 2 + s) * 3;
+          const side = off + (s ? w : -w);
+          P[o] = q.x + q.rx * side;
+          P[o + 1] = q.y;
+          P[o + 2] = q.z + q.rz * side;
+          C[o] = (c.r + (1 - c.r) * hot * 0.7) * f;
+          C[o + 1] = (c.g + (1 - c.g) * hot * 0.7) * f;
+          C[o + 2] = (c.b + (1 - c.b) * hot * 0.7) * f;
+        }
       }
     }
     this.mesh.geometry.attributes.position.needsUpdate = true;

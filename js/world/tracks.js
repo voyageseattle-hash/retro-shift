@@ -114,7 +114,12 @@ export const TRACKS = [
       [380, -40, 6], [260, -140, 8], [100, -170, 4], [20, -100, 0],
     ],
     features: (P) => ({
-      branches: [{ from: P(5, 0.4), to: P(8, 0.3), mask: M.R, side: -1, lift: 4, bulge: -20, label: 'RED BORE' }],
+      branches: [
+        { from: P(5, 0.4), to: P(8, 0.3), mask: M.R, side: -1, lift: 4, bulge: -20, label: 'RED BORE' },
+        // the secret one: red-only, behind a hatch, around the block field
+        // (leaves from inside the third tunnel, skips the overlap-only gap and the block field)
+        { from: 830 / 1007, to: 960 / 1007, mask: M.RO, side: 1, lift: 3, label: 'SECRET BORE', hatch: true },
+      ],
       gaps: [
         { at: P(2, 0.3), len: 34, mask: M.R, noRails: true },
         { at: P(3, 0.5), len: 34, mask: M.B, noRails: true },
