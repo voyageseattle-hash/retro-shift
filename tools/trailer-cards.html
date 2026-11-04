@@ -40,7 +40,8 @@
       <div class="foot">FREE IN YOUR BROWSER ON ITCH.IO · GITHUB GAME OFF 2026</div>
     </div></div>`;
   } else {
-    root.innerHTML = `<div class="card"><div class="words"><span class="w a">${q.get('a') || ''}</span><span class="w b">${q.get('b') || ''}</span></div><div class="bar"></div></div>`;
+    const long = ((q.get('a') || '') + (q.get('b') || '')).length > 12;
+    root.innerHTML = `<div class="card"><div class="words" style="font-size:${long ? 66 : 96}px"><span class="w a">${q.get('a') || ''}</span><span class="w b">${q.get('b') || ''}</span></div><div class="bar"></div></div>`;
   }
   window.ready = document.fonts.ready.then(() => true);
 </script>
