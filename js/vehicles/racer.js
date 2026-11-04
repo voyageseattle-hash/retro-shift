@@ -369,6 +369,14 @@ export class Racer {
     m.lineMat.color.set(col);
     const flash = this.shiftT > 0 ? 1 + this.shiftT * 4 : 1;
     m.lineMat.color.multiplyScalar(flash);
+    // the hull reflects the worlds you can see: red left and blue right in both, one colour through a single lens
+    if (m.hullMat.uniforms) {
+      const U = m.hullMat.uniforms;
+      U.uL.value.set(this.mode === BLUE ? COLORS.blue : COLORS.red);
+      U.uR.value.set(this.mode === RED ? COLORS.red : COLORS.blue);
+      U.uFlash.value = Math.max(0, this.shiftT || 0) * 2;
+      if (this.livery?.paint === 'spectrum') U.uPaint.value.copy(m.accentMat.color);
+    }
     const thrust = clamp(Math.abs(this.speed) / this.phys.topSpeed, 0, 1.4) + (this.boostTime > 0 ? 0.8 : 0);
     for (const f of m.flames) {
       f.scale.set(1, 0.3 + thrust * (0.8 + Math.random() * 0.4), 1);
@@ -383,14 +391,14 @@ export class Racer {
       if (L.glow === 'spectrum') m.glowMat.color.copy(m.accentMat.color);
     }
     const base = L.trail === 'spectrum' || (L.trail === undefined && L.paint === 'spectrum') ? m.accentMat.color.getHex() : hexOf(L.trail);
-    m.flameMat.color.set(this.boostTime > 0 ? 0xff4fd8 : this.drift.level >= 2 ? 0xff8a3a : L.trail === 'off' ? 0x8ac8ff : base);
+    m.flameMat.color.set(this.boostTime > 0 ? 0xff4fd8 : this.drift.level >= 2 ? 0xff8a3a : 0x8ac8ff); // blue-white exhaust; the trail carries the livery
     if (this.trailOn) {
       this.trail.setColor(this.boostTime > 0 ? 0xff4fd8 : base);
       const yaw = this.yaw;
       _v.set(this.pos.x - Math.sin(yaw) * 2.1, this.pos.y + 0.45, this.pos.z - Math.cos(yaw) * 2.1);
       this.trail.update(dt, _v, -Math.cos(yaw), Math.sin(yaw), clamp(Math.abs(this.speed) / this.phys.topSpeed, 0, 1) + (this.boostTime > 0 ? 0.4 : 0), this.grounded || this.airTime < 0.5);
     }
-    m.glowMat.opacity = 0.22 + (this.drift.active ? 0.18 : 0);
+    m.glowMat.opacity = 0.34 + (this.drift.active ? 0.2 : 0);
     // spinning out after a hit
     if (this.invuln > 0) root.visible = Math.floor(this.invuln * 14) % 2 === 0 || this.invuln < 0.2;
     else root.visible = true;

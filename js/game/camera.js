@@ -35,10 +35,10 @@ export class ChaseCamera {
   snap(v) {
     this.heading = v.yaw;
     const f = _d.set(Math.sin(v.yaw), 0, Math.cos(v.yaw));
-    const dist = 7.8 * v.scale;
+    const dist = 5.8 * v.scale;
     this.rel.copy(f).multiplyScalar(-dist);
     this.pos.copy(v.pos).add(this.rel);
-    this.pos.y += 3.1 * v.scale;
+    this.pos.y += 2.3 * v.scale;
     this.look.copy(v.pos).addScaledVector(f, 6).add(_l.set(0, 1.4, 0));
     this.kickOff.set(0, 0, 0);
     this.kickVel.set(0, 0, 0);
@@ -103,8 +103,8 @@ export class ChaseCamera {
     this.wasBoosting = boosting;
     // Boosting lets the truck pull away a little, then the camera catches up.
     this.pull = damp(this.pull, boosting ? 1.3 : 0, boosting ? 3 : 1.5, dt);
-    const dist = (7.6 + sp * 1.5 + this.pull) * v.scale;
-    const height = (3.0 + sp * 0.35) * v.scale;
+    const dist = (5.5 + sp * 1.0 + this.pull) * v.scale;
+    const height = (2.2 + sp * 0.25) * v.scale;
     const dir = lookBack ? -1 : 1;
     const f = _d.set(Math.sin(this.heading), 0, Math.cos(this.heading));
     this.rel.x = damp(this.rel.x, -f.x * dist * dir, 10, dt);

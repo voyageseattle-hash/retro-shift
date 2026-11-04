@@ -8,6 +8,62 @@ import * as THREE from '../../vendor/three.js';
 
 const HULL = 0x07030e;
 
+// The hull: faceted dark metal that reflects the two worlds, red down its left flank and blue down its right (both
+// red, or both blue, through a single lens), a bright streak where it catches the horizon, a glassy rim at grazing
+// angles and a wash of its own paint across the top. Flat-shaded, so every panel reads as a facet.
+const HULL_SHADER = {
+  uniforms: {
+    uL: { value: new THREE.Color(0xff2a4a) },
+    uR: { value: new THREE.Color(0x1e8cff) },
+    uPaint: { value: new THREE.Color(0xff4fd8) },
+    uFlash: { value: 0 },
+  },
+  vertexShader: `
+    varying vec3 vN; varying vec3 vV;
+    #include <fog_pars_vertex>
+    void main(){
+      vN = normalize(normalMatrix * normal);
+      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+      vV = -mvPosition.xyz;
+      gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
+    }`,
+  fragmentShader: `
+    uniform vec3 uL, uR, uPaint; uniform float uFlash;
+    varying vec3 vN; varying vec3 vV;
+    #include <fog_pars_fragment>
+    void main(){
+      vec3 n = normalize(vN) * (gl_FrontFacing ? 1.0 : -1.0);
+      vec3 v = normalize(vV);
+      float ndv = abs(dot(n, v));
+      float fres = pow(1.0 - ndv, 3.0);
+      vec3 r = reflect(-v, n);
+      vec3 world = mix(uL, uR, smoothstep(-0.45, 0.45, n.x + r.x * 0.5));
+      float horizon = exp(-pow((r.y + 0.02) * 6.0, 2.0));
+      float sky = pow(max(r.y, 0.0), 6.0);
+      float top = smoothstep(0.35, 0.95, n.y);
+      vec3 c = vec3(0.012, 0.01, 0.02) + uPaint * 0.02;
+      // side panels catch the worlds; panels facing you stay dark so the tail lights read
+      float sideOn = smoothstep(0.1, 0.65, abs(n.x)) + 0.25 * smoothstep(0.3, 0.9, n.y);
+      c += world * (0.02 + (0.4 * horizon + 0.3 * fres) * sideOn);
+      c += mix(vec3(0.85, 0.85, 0.95), uPaint, 0.25) * top * (0.05 + 0.22 * sky);
+      c += vec3(1.0) * uFlash * 0.35;
+      gl_FragColor = vec4(c, 1.0);
+      #include <fog_fragment>
+    }`,
+};
+export function hullMaterial(paint) {
+  const m = new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, THREE.UniformsUtils.clone(HULL_SHADER.uniforms)]),
+    vertexShader: HULL_SHADER.vertexShader,
+    fragmentShader: HULL_SHADER.fragmentShader,
+    side: THREE.DoubleSide,
+    fog: true,
+  });
+  m.uniforms.uPaint.value.set(typeof paint === 'number' ? paint : 0xff4fd8);
+  return m;
+}
+
 // ------------------------------------------------------------------ geometry helpers
 const trap = (z, w, h, y0 = 0.25, top = 0.8, x = 0) => ({ z, pts: [[x - w, y0], [x + w, y0], [x + w * top, y0 + h], [x - w * top, y0 + h]] });
 const poly = (z, n, r, cy, sy = 1, x = 0, a0 = Math.PI / n) => ({
@@ -70,6 +126,42 @@ class Kit {
     const hp = hg.attributes.position.array;
     for (let k = 0; k < hp.length; k += 3) this.H.push(hp[k] + x, hp[k + 1] + y, hp[k + 2] + z);
   }
+  // Details that make a wedge read as a machine from the chase camera.
+  // canopy: a faceted glass bubble on the deck
+  canopy(z0, z1, w, y, h, x = 0) {
+    this.loft([trap(z0, w, 0.02, y, 0.85, x), trap(z0 + (z1 - z0) * 0.35, w * 0.95, h, y, 0.55, x), trap(z1, w * 0.4, 0.02, y, 0.8, x)], { lines: this.A });
+  }
+  // louvres across the rear deck, following its slope from (z0, y0) to (z1, y1)
+  louvres(z0, z1, y0, y1, w, n = 4) {
+    for (let k = 0; k < n; k++) {
+      const t = (k + 0.5) / n, z = z0 + (z1 - z0) * t, y = y0 + (y1 - y0) * t + 0.015;
+      this.seg(this.A, [-w, y, z], [w, y, z]);
+    }
+  }
+  // a rear wing on two struts
+  wing(z, w, y, h, chord = 0.42) {
+    const a = [-w, y + h, z - chord / 2], b = [w, y + h, z - chord / 2], cc = [w, y + h + 0.06, z + chord / 2], d = [-w, y + h + 0.06, z + chord / 2];
+    this.path(this.A, [a, b, cc, d], true);
+    this.tri(this.H, a, b, cc);
+    this.tri(this.H, a, cc, d);
+    for (const s of [-1, 1]) {
+      this.seg(this.L, [s * w * 0.55, y, z], [s * w * 0.55, y + h, z - 0.05]);
+      this.seg(this.L, [s * w, y + h - 0.12, z - chord / 2], [s * w, y + h + 0.14, z + chord / 2]);
+    }
+  }
+  // hover pods at the corners, where wheels would be: a faceted block with a glow slot underneath
+  pods(list, size = [0.42, 0.34, 0.95]) {
+    for (const [x, z] of list) {
+      const [w, h, d] = size;
+      this.loft([trap(z - d / 2, w / 2, h, 0.08, 0.7, x), trap(z + d / 2, w / 2 * 0.8, h * 0.8, 0.1, 0.7, x)]);
+      this.seg(this.A, [x - w * 0.4, 0.07, z - d * 0.4], [x - w * 0.4, 0.07, z + d * 0.4]);
+      this.seg(this.A, [x + w * 0.4, 0.07, z - d * 0.4], [x + w * 0.4, 0.07, z + d * 0.4]);
+    }
+  }
+  // a side intake: a recessed triangle on each flank
+  intakes(z0, z1, y0, y1, x0, x1) {
+    for (const s of [-1, 1]) this.path(this.A, [[s * x0, y0, z0], [s * x1, y1, z1], [s * x1, y0, z1]], true);
+  }
   circle(arr, c, r, plane = 'yz', n = 16) {
     const pts = [];
     for (let k = 0; k < n; k++) {
@@ -93,7 +185,12 @@ export const BODIES = {
   // The concept-sheet wedge.
   vector(K) {
     K.loft([trap(-1.9, 1.15, 0.6, 0.25, 0.7), trap(0.4, 1.3, 0.5, 0.25, 0.55), trap(2.25, 0.55, 0.05, 0.25, 1)], { accentTop: [1] });
-    return { thrusters: [[-0.45, 0.4, -2.0], [0.45, 0.4, -2.0]], tails: [[-0.72, 0.55, -1.93], [0.72, 0.55, -1.93]], glow: [2.8, 4.4] };
+    K.canopy(-0.7, 1.0, 0.5, 0.78, 0.36);
+    K.louvres(-1.85, -0.75, 0.85, 0.8, 0.62, 5);
+    K.wing(-1.75, 1.05, 0.85, 0.32);
+    K.intakes(-0.2, 1.0, 0.35, 0.62, 1.32, 1.05);
+    K.pods([[-1.25, -1.25], [1.25, -1.25], [-1.2, 1.35], [1.2, 1.35]]);
+    return { thrusters: [[-0.42, 0.38, -1.95], [0.42, 0.38, -1.95]], tails: [[-0.62, 0.76, -1.93], [0.62, 0.76, -1.93]], tailW: 0.66, glow: [3.0, 4.6] };
   },
   // A long low dart with a tall fin and scan lines down its flanks.
   scanline(K) {
@@ -108,12 +205,22 @@ export const BODIES = {
     const fin = [[0, 0.72, -2.2], [0, 1.75, -2.65], [0, 0.66, -0.9]];
     K.path(K.A, fin, true);
     K.tri(K.AT, ...fin);
-    return { thrusters: [[-0.35, 0.45, -2.35], [0.35, 0.45, -2.35]], tails: [[-0.55, 0.58, -2.33], [0.55, 0.58, -2.33]], glow: [2.4, 5.4] };
+    K.canopy(-0.2, 1.5, 0.4, 0.68, 0.3);
+    K.louvres(-2.25, -1.0, 0.75, 0.72, 0.5, 4);
+    K.pods([[-1.05, -1.6], [1.05, -1.6], [-0.85, 1.6], [0.85, 1.6]], [0.36, 0.28, 0.9]);
+    return { thrusters: [[-0.35, 0.45, -2.35], [0.35, 0.45, -2.35]], tails: [[-0.48, 0.66, -2.33], [0.48, 0.66, -2.33]], tailW: 0.5, glow: [2.6, 5.6] };
   },
   // A faceted hexagonal pod: short, tall and chunky.
   polygon(K) {
     K.loft([poly(-1.7, 6, 0.75, 0.78, 0.55), poly(-0.7, 6, 1.25, 0.78, 0.5), poly(0.8, 6, 1.2, 0.74, 0.48), poly(1.9, 6, 0.55, 0.6, 0.5), poly(2.35, 6, 0.12, 0.55, 0.5)], { accentRings: [1, 2] });
-    return { thrusters: [[-0.42, 0.7, -1.75], [0.42, 0.7, -1.75]], tails: [[0, 1.05, -1.72]], glow: [2.8, 4.0] };
+    K.canopy(-0.4, 1.2, 0.55, 1.05, 0.32);
+    // stub wings with hover pods on their tips
+    for (const s of [-1, 1]) {
+      K.loft([trap(-1.2, 0.1, 0.06, 0.62, 1, s * 1.45), trap(0.2, 0.1, 0.06, 0.62, 1, s * 1.45)]);
+      K.seg(K.A, [s * 1.0, 0.68, -1.2], [s * 1.55, 0.68, -1.2]);
+    }
+    K.pods([[-1.65, -0.5], [1.65, -0.5]], [0.4, 0.42, 1.3]);
+    return { thrusters: [[-0.42, 0.7, -1.75], [0.42, 0.7, -1.75]], tails: [[0, 1.02, -1.7]], tailW: 0.95, glow: [3.2, 4.0] };
   },
   // Twin pontoons with a cockpit slung between them.
   chroma(K) {
@@ -127,7 +234,9 @@ export const BODIES = {
       K.seg(K.A, [0.66, 0.62, z], [0.5, 0.75, z]);
       K.seg(K.L, [-0.66, 0.5, z], [0.66, 0.5, z]);
     }
-    return { thrusters: [[-1.0, 0.42, -2.05], [1.0, 0.42, -2.05]], tails: [[-1.0, 0.55, -2.02], [1.0, 0.55, -2.02]], glow: [3.2, 4.4] };
+    K.canopy(-0.9, 1.3, 0.38, 0.98, 0.32);
+    K.wing(-1.85, 1.25, 0.66, 0.38, 0.36);
+    return { thrusters: [[-1.0, 0.42, -2.05], [1.0, 0.42, -2.05]], tails: [[-1.0, 0.6, -2.02], [1.0, 0.6, -2.02]], tailW: 0.5, glow: [3.4, 4.6] };
   },
   // Stair-stepped voxels: a car drawn on a pixel grid.
   raster(K) {
@@ -136,7 +245,11 @@ export const BODIES = {
     K.box(1.2, 0.3, 1.3, 0, 1.1, -0.95, true);
     K.box(0.9, 0.26, 0.5, 0, 0.38, 2.25);
     for (const s of [-1, 1]) K.box(0.36, 0.36, 0.36, s * 1.45, 0.43, -1.6, true);
-    return { thrusters: [[-0.5, 0.5, -2.0], [0.5, 0.5, -2.0]], tails: [[-0.85, 0.8, -1.86], [0.85, 0.8, -1.86]], glow: [2.8, 4.4] };
+    // a stepped pixel spoiler and pixel pods up front
+    K.box(2.3, 0.14, 0.42, 0, 1.42, -1.75, true);
+    for (const s of [-1, 1]) K.box(0.16, 0.36, 0.2, s * 0.8, 1.2, -1.75);
+    for (const s of [-1, 1]) K.box(0.4, 0.3, 0.7, s * 1.35, 0.33, 1.4);
+    return { thrusters: [[-0.5, 0.48, -2.0], [0.5, 0.48, -2.0]], tails: [[-0.78, 0.8, -1.86], [0.78, 0.8, -1.86]], tailW: 0.6, glow: [3.0, 4.6] };
   },
   // A wedge sliced into three, its slices slipping out of register.
   glitch(K, parts) {
@@ -153,7 +266,9 @@ export const BODIES = {
       parts.shards ||= [];
       parts.shards.push(tri);
     }
-    return { thrusters: [[-0.45, 0.4, -2.0], [0.45, 0.4, -2.0]], tails: [[-0.72, 0.55, -1.93], [0.72, 0.55, -1.93]], glow: [2.8, 4.4] };
+    K.canopy(-0.6, 1.0, 0.48, 0.76, 0.34);
+    K.pods([[-1.25, -1.25], [1.25, -1.25], [-1.2, 1.35], [1.2, 1.35]]);
+    return { thrusters: [[-0.42, 0.38, -1.95], [0.42, 0.38, -1.95]], tails: [[-0.62, 0.76, -1.93], [0.62, 0.76, -1.93]], tailW: 0.66, glow: [3.0, 4.6] };
   },
 
   // SECRET: Dash, LAST LINE's stick-figure hero, surfing a pencil (the Kid's line got him out of the finale too).
@@ -230,13 +345,15 @@ export function buildBody(bodyId, paint, glowColor) {
   const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, ...add });
   const accentLineMat = new THREE.LineBasicMaterial({ color: paint, ...add });
   const accentMat = new THREE.MeshBasicMaterial({ color: paint, side: THREE.DoubleSide, opacity: 0.3, ...add });
-  const hullMat = new THREE.MeshBasicMaterial({ color: HULL, side: THREE.DoubleSide });
+  const hullMat = hullMaterial(paint);
   const mk = (kit, into) => {
     if (kit.L.length) into.add(new THREE.LineSegments(lineGeo(kit.L), lineMat));
     if (kit.A.length) into.add(new THREE.LineSegments(lineGeo(kit.A), accentLineMat));
     if (kit.AT.length) into.add(new THREE.Mesh(lineGeo(kit.AT), accentMat));
     if (kit.H.length) {
-      const h = new THREE.Mesh(lineGeo(kit.H), hullMat);
+      const hg = lineGeo(kit.H);
+      hg.computeVertexNormals(); // unindexed: one normal per facet
+      const h = new THREE.Mesh(hg, hullMat);
       h.userData.hull = true;
       into.add(h);
     }
@@ -323,22 +440,44 @@ export function buildBody(bodyId, paint, glowColor) {
       for (const g of wheels) g.rotation.x += w;
     });
   }
-  // tail lights, thrusters and underglow
-  model.tailMat = new THREE.MeshBasicMaterial({ color: 0xff2a4a });
+  // tail lights: wide light bars with a red halo, bright enough to bloom
+  model.tailMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 0.04, 0.08) });
+  model.haloMat = new THREE.MeshBasicMaterial({ color: 0xff2a4a, opacity: 0.28, map: glowTexture(), ...add });
+  const tw = spec.tailW ?? 0.62;
   for (const [x, y, z] of spec.tails) {
-    const t = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.06), model.tailMat);
+    const t = new THREE.Mesh(new THREE.BoxGeometry(tw, 0.12, 0.05), model.tailMat);
     t.position.set(x, y, z);
     body.add(t);
+    const t2 = new THREE.Mesh(new THREE.BoxGeometry(tw * 0.9, 0.05, 0.05), model.tailMat);
+    t2.position.set(x, y - 0.13, z + 0.01);
+    body.add(t2);
+    const h = new THREE.Mesh(new THREE.PlaneGeometry(tw * 2.4, 0.9), model.haloMat);
+    h.position.set(x, y - 0.05, z - 0.06);
+    h.rotation.y = Math.PI;
+    body.add(h);
   }
-  model.flameMat = new THREE.MeshBasicMaterial({ color: 0x8ac8ff, ...add });
+  // thrusters: a nozzle frame round a white-hot core, and a flame in the trail colour around a white one
+  model.flameMat = new THREE.MeshBasicMaterial({ color: 0x8ac8ff, opacity: 0.5, ...add });
+  model.coreMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.55, 0.65, 0.9), ...add });
+  const nz = new Kit();
   for (const [x, y, z] of spec.thrusters) {
-    const f = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.6, 8), model.flameMat);
+    const f = new THREE.Mesh(new THREE.ConeGeometry(0.15, 1.2, 10), model.flameMat);
     f.rotation.x = -Math.PI / 2;
     f.position.set(x, y, z - 0.6);
     f.userData.z0 = z;
     body.add(f);
     model.flames.push(f);
+    // the nozzle's hot core: a small slot, not a disc, so it doesn't bloom into a headlight
+    const core = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.08), model.coreMat);
+    core.position.set(x, y, z - 0.02);
+    core.rotation.y = Math.PI;
+    body.add(core);
+    const w = 0.27, hh = 0.2;
+    nz.path(nz.A, [[x - w, y - hh, z], [x + w, y - hh, z], [x + w, y + hh, z], [x - w, y + hh, z]], true);
+    nz.path(nz.A, [[x - w * 0.8, y - hh * 0.8, z + 0.25], [x + w * 0.8, y - hh * 0.8, z + 0.25], [x + w * 0.8, y + hh * 0.8, z + 0.25], [x - w * 0.8, y + hh * 0.8, z + 0.25]], true);
+    for (const [a, b2] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) nz.seg(nz.A, [x + a * w, y + b2 * hh, z], [x + a * w * 0.8, y + b2 * hh * 0.8, z + 0.25]);
   }
+  mk(nz, body);
   model.glowMat = new THREE.MeshBasicMaterial({ color: glowColor ?? paint, opacity: 0.35, map: glowTexture(), ...add });
   const glow = new THREE.Mesh(new THREE.PlaneGeometry(spec.glow[0], spec.glow[1]), model.glowMat);
   glow.rotation.x = -Math.PI / 2;
