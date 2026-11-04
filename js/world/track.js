@@ -450,10 +450,29 @@ export class TrackWorld {
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
       return new THREE.LineSegments(g, mats.wire);
     };
-    const iris = seg(blades);
+    // the blades in three layers a little apart, so the iris has depth and glows like neon tubing
+    const iris = new THREE.Group();
+    for (const z of [-0.25, 0, 0.25]) {
+      const b = seg(blades);
+      b.position.z = z;
+      iris.add(b);
+    }
     root.add(seg(rim), iris);
-    // a warning chevron ring on the frame
-    const ring = new THREE.Mesh(new THREE.RingGeometry(r * 0.92, r, 6, 1), mats.ribbon);
+    // ribbon meshes take vertex colours: paint the lens colour in, scaled by k
+    const tint = (geo, k) => {
+      const c = new THREE.Color(colorForMask(mask)).multiplyScalar(k);
+      const n = geo.attributes.position.count;
+      const col = new Float32Array(n * 3);
+      for (let q = 0; q < n; q++) col.set([c.r, c.g, c.b], q * 3);
+      geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      return geo;
+    };
+    const glass = new THREE.Mesh(tint(new THREE.CircleGeometry(r * 0.98, 6), 0.1), mats.ribbon);
+    glass.rotation.z = Math.PI / 2;
+    glass.position.z = 0.1;
+    root.add(glass);
+    // the frame: a thick glowing hexagon band
+    const ring = new THREE.Mesh(tint(new THREE.RingGeometry(r * 0.86, r, 6, 1), 0.9), mats.ribbon);
     ring.rotation.z = Math.PI / 2;
     root.add(ring);
     const p = path.point(i, 0, cy);

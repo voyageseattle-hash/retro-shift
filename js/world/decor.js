@@ -2,7 +2,7 @@
 // world (red, blue, or both), so a shift changes the skyline as well as the road.
 
 import * as THREE from '../../vendor/three.js';
-import { M, COLORS } from './shift.js';
+import { M, COLORS, RED, solidIn } from './shift.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const UP = V(0, 1, 0);
@@ -98,21 +98,29 @@ const DECOR = {
         L.line(mask, P[k], P[k + 1]);
         const d = P[k].clone().lerp(c, -0.12);
         const e = P[k + 1].clone().lerp(c, -0.12);
-        L.quad(mask, P[k], P[k + 1], e, d, null, 0.5);
+        // kept dim: seen end-on down a tunnel these stack up additively into a white-out
+        L.quad(mask, P[k], P[k + 1], e, d, null, 0.26);
       }
       return P;
     };
     let prevR = null;
     let prevB = null;
     let mouths = 0;
+    let doorDone = false;
     for (let i = 0; i < main.N; i += 5) {
       const inTunnel = Math.sin((i / main.N) * Math.PI * 2 * 3) > -0.3;
       if (!inTunnel) {
         prevR = prevB = null;
         continue;
       }
-      // The second tunnel's mouth is sealed in the blue world: an iris door you can only pass through in RED.
-      if (!prevR && ++mouths === 2 && world.addDoor && !world.def.noDoor) {
+      // One tunnel mouth is sealed in the blue world: an iris door you can only pass through in RED. It goes on the
+      // first mouth (from the second on) whose road either side is drivable in RED and has no other walls near.
+      const redOK = (i0) => {
+        for (let k = -20; k < 90; k++) if (!solidIn(main.mask[main.wrap(i0 + k)], RED)) return false;
+        return !world.obstacles.some((o) => o.path === main && Math.abs(o.i - i0) < 40 && o.type === 'wall');
+      };
+      if (!prevR && ++mouths >= 2 && !doorDone && world.addDoor && !world.def.noDoor && redOK(i)) {
+        doorDone = true;
         const at = main.frac(i + 1);
         world.addObstacle({ type: 'wall', door: true, at, mask: M.B, r: main.halfW + 4.5 });
         const tips = (world.def.tips ||= []);
@@ -150,6 +158,19 @@ const DECOR = {
 
   // 05 GRID CITY: dense neon towers right up to the road, sky bridges.
   city(world, L, main, rng) {
+    // A row of buildings that exists in the red world exactly where the blue world has a ramp: in RED they're a
+    // block of rooftops, in BLUE their roofs are the road. (Branches with a facade mask.)
+    for (const b of world.paths) {
+      if (!b.def?.facade) continue;
+      const step = 4;
+      for (let j = 4; j < b.N - 4; j += step) {
+        const p = b.point(j, 0, 0);
+        const h = p.y - world.floorY - 0.4;
+        if (h < 4) continue;
+        const yaw = Math.atan2(b.thx[j], b.thz[j]);
+        L.tower(b.def.facade, p.x, world.floorY, p.z, b.halfW * 2 - 0.6, h, b.ds * step - 0.4, yaw);
+      }
+    }
     beside(main, 4, 6, (p, i, s) => {
       const q = p.clone().add(V((rng() - 0.5) * 6, 0, (rng() - 0.5) * 6));
       q.y = world.floorY;

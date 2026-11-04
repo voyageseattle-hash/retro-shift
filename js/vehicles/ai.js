@@ -155,6 +155,7 @@ export class RaceAI {
         if (free !== undefined) best = free;
       }
       this.wantMode = best;
+
     }
     if (this.wantMode !== r.mode && r.canShift(this.wantMode)) r.shiftTo(this.wantMode, r.session);
 
