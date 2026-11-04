@@ -3,10 +3,14 @@
 // pieces that aren't fade to ghosts you can see through (and drive through).
 
 import * as THREE from '../../vendor/three.js';
-import { colorForMask, solidIn } from './shift.js';
+import { colorForMask, solidIn, RED, BLUE, M } from './shift.js';
 import { damp } from '../core/util.js';
 
 const _c = new THREE.Color();
+const NEUTRAL = M.ALL;
+const TINT_BOTH = new THREE.Color(1, 1, 1);
+const TINT_RED = new THREE.Color(1, 0.2, 0.28);
+const TINT_BLUE = new THREE.Color(0.18, 0.52, 1);
 
 class Builder {
   constructor() {
@@ -24,6 +28,7 @@ export class Layers {
     this.mats = new Map();
     this.group = new THREE.Group();
     this.level = new Map(); // mask -> current solidity 0..1
+    this.signs = []; // { mat, hideIn }: a board that goes with its colour's world
   }
 
   b(mask) {
@@ -176,12 +181,21 @@ export class Layers {
 
   // --------------------------------------------------------------- finish
   build() {
+    // Neutral pieces carry red and blue accents (rails, lane edges). Through a lens they switch to a grey copy of
+    // their colours that the lens tint then colours, so nothing of the other world's colour is left on screen.
+    const grey = (c) => {
+      const out = new Float32Array(c.length);
+      for (let i = 0; i < c.length; i += 3) out[i] = out[i + 1] = out[i + 2] = Math.max(c[i], c[i + 1], c[i + 2]) * 0.85 + 0.15 * (c[i] + c[i + 1] + c[i + 2]) / 3;
+      return new THREE.Float32BufferAttribute(out, 3);
+    };
+    this.neutral = [];
     for (const [mask, B] of this.builders) {
       const m = this.materials(mask);
       if (B.lp.length) {
         const g = new THREE.BufferGeometry();
         g.setAttribute('position', new THREE.Float32BufferAttribute(B.lp, 3));
         g.setAttribute('color', new THREE.Float32BufferAttribute(B.lc, 3));
+        if (mask === NEUTRAL) this.neutral.push({ g, colour: g.getAttribute('color'), grey: grey(B.lc) });
         const o = new THREE.LineSegments(g, m.line);
         o.frustumCulled = false;
         o.renderOrder = 2;
@@ -191,6 +205,7 @@ export class Layers {
         const g = new THREE.BufferGeometry();
         g.setAttribute('position', new THREE.Float32BufferAttribute(B.rp, 3));
         g.setAttribute('color', new THREE.Float32BufferAttribute(B.rc, 3));
+        if (mask === NEUTRAL) this.neutral.push({ g, colour: g.getAttribute('color'), grey: grey(B.rc) });
         const o = new THREE.Mesh(g, m.ribbon);
         o.frustumCulled = false;
         o.renderOrder = 3;
@@ -220,21 +235,55 @@ export class Layers {
   }
 
   update(dt, mode, time = 0, instant = false) {
+    // Through a single lens the other world is gone completely, and what's left (the neutral road, rails and pads)
+    // takes that lens's colour, so the view is all red or all blue. BOTH shows both worlds and hides the lens-only
+    // secrets.
+    const T = mode === RED ? TINT_RED : mode === BLUE ? TINT_BLUE : TINT_BOTH;
+    // (kept in the level map, so each split-screen view has its own)
+    let tint = this.level.get('tint');
+    if (!tint || tint.view !== this.view) {
+      tint = tint ? tint.clone() : new THREE.Color(1, 1, 1);
+      tint.view = this.view;
+      this.level.set('tint', tint);
+    }
+    if (instant) tint.copy(T);
+    else tint.lerp(T, 1 - Math.exp(-10 * dt));
+    const lens = mode === RED || mode === BLUE;
+    for (const N of this.neutral || []) {
+      const want = lens ? N.grey : N.colour;
+      if (N.g.getAttribute('color') !== want) N.g.setAttribute('color', want);
+    }
     for (const [mask, m] of this.mats) {
       const want = solidIn(mask, mode) ? 1 : 0;
       let lv = this.level.get(mask);
-      lv = instant ? want : damp(lv, want, want ? 14 : 9, dt);
+      lv = instant ? want : damp(lv, want, want ? 14 : 12, dt);
+      if (lv < 0.003) lv = 0;
       this.level.set(mask, lv);
       // Single-lens-only pieces shimmer: they are a secret of that world.
-      const shimmer = mask === 2 || mask === 4 ? 0.85 + 0.15 * Math.sin(time * 9) : 1;
-      const ghost = 0.07 + 0.03 * Math.sin(time * 3 + mask);
-      const a = ghost + (1 - ghost) * lv;
-      m.line.opacity = a * shimmer;
-      m.ribbon.opacity = (0.05 + 0.95 * lv) * shimmer;
-      m.wire.opacity = a * shimmer;
+      const shimmer = mask === RED || mask === BLUE ? 0.85 + 0.15 * Math.sin(time * 9) : 1;
+      const on = lv > 0;
+      m.line.opacity = lv * shimmer;
+      m.ribbon.opacity = lv * shimmer;
+      m.wire.opacity = lv * shimmer;
       m.fill.opacity = 0.9 * lv;
+      m.solid.opacity = lv;
+      m.line.visible = m.ribbon.visible = m.wire.visible = m.solid.visible = on;
       m.fill.visible = lv > 0.02;
-      m.solid.opacity = 0.1 + 0.9 * lv;
+      if (mask === NEUTRAL) {
+        m.line.color.copy(tint);
+        m.ribbon.color.copy(tint);
+        m.wire.color.copy(tint);
+        m.solid.color.set(m.base).multiply(tint);
+      }
+    }
+    for (const S of this.signs) {
+      const key = `sign${S.hideIn}`;
+      const want = mode === S.hideIn ? 0 : 1;
+      let lv = this.level.get(key) ?? 1;
+      lv = instant ? want : damp(lv, want, 12, dt);
+      this.level.set(key, lv);
+      S.mat.opacity = lv;
+      S.mat.visible = lv > 0.01;
     }
   }
 }

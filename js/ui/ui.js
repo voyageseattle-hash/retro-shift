@@ -128,9 +128,9 @@ export class UI {
     const g = (a) => `<kbd>${a}</kbd>`;
     s.innerHTML = `<h2>HOW TO PLAY</h2>
       <div class="cols">
-        <div class="card both"><h3>BOTH WORLDS</h3><p>Red and blue overlap. Every road is there, and so is every wall. Your SHIFT bar refills.</p></div>
-        <div class="card red"><h3>RED ONLY</h3><p>Blue roads, blue walls and blue shortcuts vanish. Drive straight through blue walls. Drains SHIFT.</p></div>
-        <div class="card blue"><h3>BLUE ONLY</h3><p>Red things vanish instead. Look for blue-only cuts. Drains SHIFT.</p></div>
+        <div class="card both"><h3>BOTH WORLDS</h3><p>Red and blue overlap. The shared road and every wall are there. Your SHIFT bar refills.</p></div>
+        <div class="card red"><h3>RED ONLY</h3><p>The blue world is gone. Red-only shortcuts and hidden boost pads appear. Drains SHIFT, except on a red-only road.</p></div>
+        <div class="card blue"><h3>BLUE ONLY</h3><p>The red world is gone. Blue-only shortcuts and hidden boost pads appear. Drains SHIFT, except on a blue-only road.</p></div>
       </div>
       <p class="rule">Watch the road: if the strip under you is the colour you shifted away from, it's gone. Grab white shards for SHIFT, phase through walls for a little more.</p>
       <p class="rule"><b>MONO RUN</b> takes BOTH away: your BOTH button swaps RED and BLUE, each swap costs SHIFT, and nothing refills it but shards and phasing.</p>
@@ -594,6 +594,7 @@ export class UI {
         lines: [
           'Red walls vanish through the blue lens. Blue walls vanish through the red.',
           'Hold a lens and SHIFT drains. BOTH fills it back up.',
+          'Every course hides shortcuts and boost pads that only one lens can see. Watch for the signs.',
           'Grand Prix is waiting. HOW TO PLAY has every button.',
         ],
       },

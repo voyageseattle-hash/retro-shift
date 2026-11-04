@@ -499,6 +499,11 @@ export class TrackWorld {
     }
     // shards laid along a branch (a long lens-only road refills you on the way)
     for (const p of this.paths) {
+      // a lens-only road with no shards of its own gets a few, as a bonus for finding it
+      if (p !== this.main && p.def && !p.def.shards && (p.def.mask === M.RO || p.def.mask === M.BO)) {
+        const n = Math.max(1, Math.round(p.length / 160));
+        p.def.shards = Array.from({ length: n }, (_, k) => ({ at: 0.12 + (0.8 * (k + 0.5)) / n }));
+      }
       for (const s of (p !== this.main && p.def?.shards) || []) {
         const n = s.n ?? 1;
         for (let k = 0; k < n; k++) this.addShard({ mask: p.def.mask, ...s, path: p.id, at: s.at + k * (s.gap ?? 0.03) });

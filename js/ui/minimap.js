@@ -33,6 +33,8 @@ export function drawPaths(ctx, paths, w, h, mode = 7, pad = 10, racers = null, l
       const j = p.closed ? (i + 2) % p.N : Math.min(p.N - 1, i + 2);
       const mask = p.mask[i];
       const on = solidIn(mask, mode);
+      // a route that isn't there in your lens isn't on the map either (the main loop keeps a faint trace)
+      if (!on && !p.closed) continue;
       ctx.strokeStyle = hex(mask === M.ALL ? 0xd8c8ff : colorForMask(mask));
       ctx.globalAlpha = on ? 1 : 0.18;
       ctx.lineWidth = (p.closed ? lineW : lineW * 0.75) * (on ? 1 : 0.7);

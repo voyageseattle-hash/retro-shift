@@ -4,9 +4,9 @@ A neon wireframe racer through two overlapping worlds, made for **GitHub Game Of
 
 Race in **BOTH** worlds (red + blue), **RED only**, or **BLUE only**. Every piece of the course belongs to a world: shift and the track, its shortcuts and its obstacles change under you.
 
-- **BOTH**: the worlds overlap. Every road is there, and so is every wall. Your SHIFT bar refills.
-- **RED**: blue roads, blue walls and blue shortcuts vanish. Drive straight through blue walls. Drains SHIFT.
-- **BLUE**: red things vanish instead. Drains SHIFT.
+- **BOTH**: the worlds overlap. The shared road, every wall and every bridge are there, and your SHIFT bar refills. The lens-only shortcuts and boost pads are hidden.
+- **RED**: the blue world is gone completely and everything left glows red. Red shortcuts and hidden red boost pads appear. Drains SHIFT.
+- **BLUE**: the same, the other way round.
 
 If the strip under you belongs to the world you shifted away from, it's gone. Grab white shards for SHIFT, and phase through walls for a little more.
 
@@ -64,7 +64,7 @@ Staff ghosts live in `data/staff/` and are recorded by `node tools/make-staff.mj
 
 ## Secret routes
 
-Some roads only exist in one world. Grid City's BLUE ROOFTOPS rise out of the road when you look through the blue lens and are a row of buildings through the red. Deep in Shift Tunnels a blue iris hatch seals the SECRET BORE: shift to RED as you pass and it isn't there. Long one-lens roads carry their own shards so you can hold the lens to the end.
+Some roads only exist in one world. Grid City's BLUE ROOFTOPS rise out of the road when you look through the blue lens and are a row of buildings through the red. Deep in Shift Tunnels a blue iris hatch seals the SECRET BORE: shift to RED as you pass and it isn't there. Every coloured shortcut exists only through its lens, with an overhead sign at the fork. While you're on a road that only your lens can see, SHIFT doesn't drain, so finding a route is a reward, not a bar to ration.
 
 ## The ten courses
 

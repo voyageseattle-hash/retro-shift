@@ -247,12 +247,9 @@ export class RaceAI {
       const m = b.mask[Math.floor(b.N / 2)];
       return solidIn(m, r.mode) || r.energy >= SHIFT.monoCost * 2;
     }
-    // budget at the speed we will really hold through it, not top speed
-    const v = Math.max(18, Math.min(r.speed, r.phys.topSpeed * 0.6));
-    // shards on the branch itself top us up on the way (count most of them; we may clip past one)
-    let refill = 0;
-    for (const s of this.world.shards) if (s.path === b && solidIn(s.mask, b.mask[s.i])) refill += SHIFT.shard * 0.7;
-    return r.energy + refill >= SHIFT.drain * (len / v) + 0.12;
+    // a lens-only road doesn't drain SHIFT (see Racer.updateEnergy): we only need enough to shift in and hold the
+    // lens up to the fork
+    return r.energy >= SHIFT.minToShift + 0.15;
   }
 
   wantsBranch(b) {

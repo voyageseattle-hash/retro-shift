@@ -147,8 +147,14 @@ export class Racer {
   updateEnergy(dt, session) {
     this.shiftT = Math.max(0, this.shiftT - dt);
     if (this.mono) return;
+    // A road that only exists in your lens holds the lens for you: SHIFT doesn't drain on it (or in a short hop
+    // off it), so a secret route is a reward to find, not a bar to ration.
+    if (this.gnd.onRoad && !solidIn(this.gnd.mask, BOTH)) this.lensRoadT = 0.6;
+    else this.lensRoadT = Math.max(0, (this.lensRoadT || 0) - dt);
     if (this.mode === BOTH) this.energy = Math.min(1, this.energy + SHIFT.recharge * dt);
-    else {
+    else if (this.lensRoadT > 0 && solidIn(this.gnd.mask, this.mode)) {
+      // held by the road
+    } else {
       this.energy -= SHIFT.drain * dt;
       if (this.energy <= 0) {
         this.energy = 0;

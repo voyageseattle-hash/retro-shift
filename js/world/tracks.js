@@ -59,13 +59,13 @@ export const TRACKS = [
       [230, 70, 2], [320, 10, 4], [350, -120, 8], [270, -230, 6], [120, -250, 2], [20, -150, 0],
     ],
     features: (P) => ({
-      branches: [{ from: P(5, 0.2), to: P(9, 0.1), mask: M.B, side: 1, lift: 7, label: 'BLUE SHORTCUT' }],
+      branches: [{ from: P(5, 0.2), to: P(9, 0.1), mask: M.BO, side: 1, lift: 7, label: 'BLUE SHORTCUT' }],
       gaps: [{ at: P(10, 0.3), len: 46, mask: M.R, noRails: true }],
-      obstacles: [wall(P(1, 0.45), M.B), wall(P(3, 0.3), M.R), ...field(P(11, 0.1), 0.05, 6, 3), wall(P(13, 0.4), M.B)],
-      boosts: [{ at: P(0, 0.5), lat: 0 }, { at: P(7, 0.6), lat: -0.4 }, { at: P(12, 0.2), lat: 0.4, mask: M.R }],
+      obstacles: [wall(P(1, 0.45), M.B), wall(P(3, 0.3), M.R), ...field(P(11, 0.1), 0.05, 6, 3)],
+      boosts: [{ at: P(0, 0.5), lat: 0 }, { at: P(7, 0.6), lat: -0.4 }, { at: P(12, 0.2), lat: 0.4, mask: M.RO }, { at: P(13, 0.4), mask: M.RO }],
       shards: [{ at: P(1, 0.15), lat: 0, n: 3 }, { at: P(6, 0.3), lat: -0.4, n: 3 }, { at: P(12, 0.6), lat: 0, n: 3, mask: M.B }],
       tips: [
-        { at: P(5, 0.0), text: 'BLUE SHORTCUT ON THE RIGHT', key: 'blue' },
+        { at: P(5, 0.0), text: 'A BLUE-ONLY SHORTCUT ON THE RIGHT: SHIFT TO BLUE', key: 'blue' },
         { at: P(10, 0.1), text: 'RED BRIDGE: DON’T BE IN BLUE', key: 'both' },
       ],
     }),
@@ -87,12 +87,12 @@ export const TRACKS = [
     ],
     features: (P) => ({
       branches: [
-        { from: P(1, 0.6), to: P(5, 0.3), mask: M.R, side: 1, lift: 18, label: 'RED OVERPASS' },
+        { from: P(1, 0.6), to: P(5, 0.3), mask: M.RO, side: 1, lift: 18, label: 'RED OVERPASS' },
         { from: P(9, 0.2), to: P(13, 0.2), mask: M.BO, side: -1, lift: 10, label: 'BLUE-ONLY CUT' },
       ],
       gaps: [{ at: P(6, 0.2), len: 40, mask: M.B, noRails: true }],
-      obstacles: [...chicane(P(3, 0.1), 0.012, 4), wall(P(7, 0.5), M.R), ...field(P(10, 0.2), 0.06, 8, 7), wall(P(14, 0.3), M.B)],
-      boosts: [{ at: P(0, 0.4) }, { at: P(8, 0.5), lat: 0.5, mask: M.B }, { at: P(12, 0.3), mask: M.R, lat: -0.4 }],
+      obstacles: [...chicane(P(3, 0.1), 0.012, 4), wall(P(7, 0.5), M.R), ...field(P(10, 0.2), 0.06, 8, 7)],
+      boosts: [{ at: P(0, 0.4) }, { at: P(8, 0.5), lat: 0.5, mask: M.BO }, { at: P(12, 0.3), mask: M.RO, lat: -0.4 }, { at: P(14, 0.3), mask: M.RO }],
       shards: [{ at: P(2, 0.2), n: 3 }, { at: P(8, 0.2), lat: -0.4, n: 3 }, { at: P(15, 0.2), n: 3, mask: M.R }],
     }),
   }),
@@ -113,7 +113,7 @@ export const TRACKS = [
     ],
     features: (P) => ({
       branches: [
-        { from: P(5, 0.4), to: P(8, 0.3), mask: M.R, side: -1, lift: 4, bulge: -20, label: 'RED BORE' },
+        { from: P(5, 0.4), to: P(8, 0.3), mask: M.RO, side: -1, lift: 4, bulge: -20, label: 'RED BORE' },
         // the secret one: red-only, behind a hatch, around the block field
         // (leaves from inside the third tunnel, skips the overlap-only gap and the block field)
         { from: 830 / 1007, to: 960 / 1007, mask: M.RO, side: 1, lift: 3, label: 'SECRET BORE', hatch: true, shards: [{ at: 0.3 }, { at: 0.55 }, { at: 0.8 }] },
@@ -123,8 +123,8 @@ export const TRACKS = [
         { at: P(3, 0.5), len: 34, mask: M.B, noRails: true },
         { at: P(9, 0.4), len: 30, mask: M.X, noRails: true },
       ],
-      obstacles: [...chicane(P(0, 0.4), 0.01, 6), wall(P(6, 0.2), M.B), wall(P(6, 0.7), M.R), ...field(P(10, 0.1), 0.05, 6, 11)],
-      boosts: [{ at: P(1, 0.6) }, { at: P(7, 0.2), mask: M.B }, { at: P(11, 0.3) }],
+      obstacles: [...chicane(P(0, 0.4), 0.01, 6), wall(P(6, 0.2), M.B), ...field(P(10, 0.1), 0.05, 6, 11)],
+      boosts: [{ at: P(1, 0.6) }, { at: P(7, 0.2), mask: M.BO }, { at: P(11, 0.3) }, { at: P(6, 0.7), mask: M.BO }],
       shards: [{ at: P(1, 0.1), n: 4 }, { at: P(5, 0.1), n: 3, lat: 0.4 }, { at: P(8, 0.6), n: 3, mask: M.B }],
     }),
   }),
@@ -145,12 +145,12 @@ export const TRACKS = [
     ],
     features: (P) => ({
       branches: [
-        { from: P(1, 0.5), to: P(8, 0.2), mask: M.B, side: 1, lift: 14, label: 'BLUE SKYWAY' },
+        { from: P(1, 0.5), to: P(8, 0.2), mask: M.BO, side: 1, lift: 14, label: 'BLUE SKYWAY' },
         { from: P(10, 0.5), to: P(13, 0.3), mask: M.RO, side: 1, lift: 6, bulge: 30, label: 'RED-ONLY ORBIT' },
       ],
       gaps: [{ at: P(5, 0.0), len: 50, mask: M.R, noRails: true }, { at: P(11, 0.3), len: 40, mask: M.B, noRails: true }],
-      obstacles: [wall(P(3, 0.3), M.B), ...field(P(8, 0.4), 0.06, 7, 19), wall(P(12, 0.5), M.R), block(P(14, 0.3), -0.5, M.R, 4), block(P(14, 0.35), 0.5, M.B, 4)],
-      boosts: [{ at: P(0, 0.3) }, { at: P(6, 0.5) }, { at: P(9, 0.5), mask: M.R }],
+      obstacles: [wall(P(3, 0.3), M.B), ...field(P(8, 0.4), 0.06, 7, 19), block(P(14, 0.3), -0.5, M.R, 4), block(P(14, 0.35), 0.5, M.B, 4)],
+      boosts: [{ at: P(0, 0.3) }, { at: P(6, 0.5) }, { at: P(9, 0.5), mask: M.RO }, { at: P(12, 0.5), mask: M.BO }],
       shards: [{ at: P(2, 0.2), n: 3 }, { at: P(7, 0.3), n: 3 }, { at: P(13, 0.5), n: 3, mask: M.B }],
     }),
   }),
@@ -173,17 +173,17 @@ export const TRACKS = [
     ],
     features: (P) => ({
       branches: [
-        { from: P(1, 0.4), to: P(8, 0.45), mask: M.R, side: 1, lift: 16, label: 'RED SKYBRIDGE' },
-        { from: P(12, 0.25), to: P(16, 0.5), mask: M.B, side: 1, lift: 12, label: 'BLUE FLYOVER' },
+        { from: P(1, 0.4), to: P(8, 0.45), mask: M.RO, side: 1, lift: 16, label: 'RED SKYBRIDGE' },
+        { from: P(12, 0.25), to: P(16, 0.5), mask: M.BO, side: 1, lift: 12, label: 'BLUE FLYOVER' },
         { from: P(5, 0.6), to: P(7, 0.6), mask: M.BO, side: -1, lift: 14, label: 'BLUE ROOFTOPS', facade: M.R, shards: [{ at: 0.36 }, { at: 0.64 }] },
       ],
       gaps: [{ at: P(9, 0.2), len: 36, mask: M.R, noRails: true }, { at: P(19, 0.1), len: 36, mask: M.B, noRails: true }],
       obstacles: [
         ...field(P(3, 0.1), 0.03, 6, 23), wall(P(5, 0.4), M.B), ...chicane(P(13, 0.2), 0.012, 4),
         { type: 'block', at: P(15, 0.5), lat: 0, mask: M.R, size: 4, sweep: 0.6 },
-        { type: 'block', at: P(16, 0.5), lat: 0, mask: M.B, size: 4, sweep: 0.6, phase: 2 }, wall(P(20, 0.5), M.R),
+        { type: 'block', at: P(16, 0.5), lat: 0, mask: M.B, size: 4, sweep: 0.6, phase: 2 },
       ],
-      boosts: [{ at: P(0, 0.4) }, { at: P(10, 0.5), lat: 0.4 }, { at: P(18, 0.6), mask: M.B }],
+      boosts: [{ at: P(0, 0.4) }, { at: P(10, 0.5), lat: 0.4 }, { at: P(18, 0.6), mask: M.BO }, { at: P(20, 0.5), mask: M.BO }],
       shards: [{ at: P(2, 0.4), n: 3 }, { at: P(11, 0.4), n: 3 }, { at: P(16, 0.1), n: 3, mask: M.R }],
     }),
   }),
@@ -212,7 +212,7 @@ export const TRACKS = [
       ],
       noRails: [{ at: P(0, 0), len: 2000 }],
       obstacles: [...field(P(2, 0.2), 0.1, 12, 31), ...field(P(5, 0.1), 0.09, 10, 37), ...field(P(8, 0.4), 0.05, 6, 41)],
-      boosts: [{ at: P(0, 0.4) }, { at: P(4, 0.3), mask: M.B }, { at: P(6, 0.2), mask: M.R }],
+      boosts: [{ at: P(0, 0.4) }, { at: P(4, 0.3), mask: M.BO }, { at: P(6, 0.2), mask: M.RO }],
       shards: [{ at: P(0, 0.7), n: 3 }, { at: P(4, 0.6), n: 4 }, { at: P(6, 0.9), n: 3, mask: M.R }],
     }),
   }),
@@ -242,7 +242,7 @@ export const TRACKS = [
       return pts.map(([x, z, y]) => [x, z, y]);
     })(),
     features: (P) => ({
-      branches: [{ from: P(30, 0.5), to: P(36, 0.2), mask: M.B, side: -1, lift: -6, label: 'BLUE DROP' }],
+      branches: [{ from: P(30, 0.5), to: P(36, 0.2), mask: M.BO, side: -1, lift: -6, label: 'BLUE DROP' }],
       gaps: [
         { at: P(6, 0), len: 30, mask: M.R, noRails: false },
         { at: P(14, 0), len: 30, mask: M.B, noRails: false },
@@ -250,10 +250,10 @@ export const TRACKS = [
         { at: P(37, 0.3), len: 40, mask: M.B, noRails: true },
       ],
       obstacles: [
-        block(P(3, 0.5), 0.5, M.R), block(P(4, 0.5), -0.5, M.B), wall(P(10, 0.5), M.B), wall(P(18, 0.5), M.R),
-        block(P(26, 0.2), 0.5, M.B), block(P(27, 0.2), -0.5, M.R), wall(P(35, 0.5), M.R),
+        block(P(3, 0.5), 0.5, M.R), block(P(4, 0.5), -0.5, M.B), wall(P(10, 0.5), M.B),
+        block(P(26, 0.2), 0.5, M.B), block(P(27, 0.2), -0.5, M.R),
       ],
-      boosts: [{ at: P(1, 0.5) }, { at: P(12, 0.5) }, { at: P(24, 0.5) }, { at: P(34, 0.4), mask: M.R }],
+      boosts: [{ at: P(1, 0.5) }, { at: P(12, 0.5) }, { at: P(24, 0.5) }, { at: P(34, 0.4), mask: M.RO }, { at: P(18, 0.5), mask: M.BO }, { at: P(35, 0.5), mask: M.BO }],
       shards: [{ at: P(8, 0.2), n: 3 }, { at: P(20, 0.2), n: 3 }, { at: P(36, 0.6), n: 3, mask: M.R }],
     }),
   }),
@@ -275,15 +275,15 @@ export const TRACKS = [
     ],
     features: (P) => ({
       branches: [
-        { from: P(1, 0.3), to: P(5, 0.7), mask: M.R, side: 1, lift: 8, label: 'RED FOLD' },
-        { from: P(9, 0.2), to: P(14, 0.4), mask: M.B, side: -1, lift: 10, label: 'BLUE FOLD' },
+        { from: P(1, 0.3), to: P(5, 0.7), mask: M.RO, side: 1, lift: 8, label: 'RED FOLD' },
+        { from: P(9, 0.2), to: P(14, 0.4), mask: M.BO, side: -1, lift: 10, label: 'BLUE FOLD' },
       ],
       gaps: [{ at: P(6, 0.4), len: 30, mask: M.B, noRails: true }, { at: P(16, 0.3), len: 30, mask: M.R, noRails: true }],
       obstacles: [
-        ...chicane(P(3, 0.0), 0.008, 5), wall(P(7, 0.3), M.R), wall(P(7, 0.7), M.B), ...chicane(P(11, 0.2), 0.008, 5, M.B, M.R),
+        ...chicane(P(3, 0.0), 0.008, 5), wall(P(7, 0.3), M.R), ...chicane(P(11, 0.2), 0.008, 5, M.B, M.R),
         ...field(P(17, 0.1), 0.04, 6, 51),
       ],
-      boosts: [{ at: P(0, 0.5) }, { at: P(8, 0.4) }, { at: P(15, 0.5), mask: M.B }, { at: P(18, 0.5) }],
+      boosts: [{ at: P(0, 0.5) }, { at: P(8, 0.4) }, { at: P(15, 0.5), mask: M.BO }, { at: P(18, 0.5) }, { at: P(7, 0.7), mask: M.RO }],
       shards: [{ at: P(2, 0.3), n: 3 }, { at: P(10, 0.2), n: 3 }, { at: P(16, 0.8), n: 3 }],
     }),
   }),
@@ -304,14 +304,14 @@ export const TRACKS = [
     ],
     features: (P) => ({
       branches: [
-        { from: P(0, 0.5), to: P(3, 0.2), mask: M.R, side: -1, lift: 10, bulge: 10, label: 'RED STRAND' },
-        { from: P(1, 0.1), to: P(4, 0.0), mask: M.B, side: 1, lift: 20, bulge: -30, label: 'BLUE STRAND' },
+        { from: P(0, 0.5), to: P(3, 0.2), mask: M.RO, side: -1, lift: 10, bulge: 10, label: 'RED STRAND' },
+        { from: P(1, 0.1), to: P(4, 0.0), mask: M.BO, side: 1, lift: 20, bulge: -30, label: 'BLUE STRAND' },
         { from: P(5, 0.2), to: P(8, 0.3), mask: M.BO, side: 1, lift: 6, label: 'BLUE-ONLY WIRE' },
         { from: P(7, 0.6), to: P(10, 0.4), mask: M.RO, side: -1, lift: 12, label: 'RED-ONLY WIRE' },
       ],
       gaps: [{ at: P(2, 0.4), len: 40, mask: M.X, noRails: true }, { at: P(6, 0.2), len: 40, mask: M.R, noRails: true }, { at: P(9, 0.2), len: 40, mask: M.B, noRails: true }],
-      obstacles: [...field(P(3, 0.4), 0.04, 6, 61), wall(P(5, 0.6), M.B), wall(P(8, 0.6), M.R), ...chicane(P(10, 0.2), 0.01, 3)],
-      boosts: [{ at: P(0, 0.2) }, { at: P(4, 0.4), mask: M.R }, { at: P(7, 0.3), mask: M.B }],
+      obstacles: [...field(P(3, 0.4), 0.04, 6, 61), wall(P(5, 0.6), M.B), ...chicane(P(10, 0.2), 0.01, 3)],
+      boosts: [{ at: P(0, 0.2) }, { at: P(4, 0.4), mask: M.RO }, { at: P(7, 0.3), mask: M.BO }, { at: P(8, 0.6), mask: M.BO }],
       shards: [{ at: P(1, 0.6), n: 3 }, { at: P(5, 0.0), n: 3 }, { at: P(9, 0.6), n: 3 }],
     }),
   }),
@@ -332,8 +332,8 @@ export const TRACKS = [
     ],
     features: (P) => ({
       branches: [
-        { from: P(1, 0.3), to: P(4, 0.3), mask: M.B, side: 1, lift: 0, bulge: -60, label: 'BLUE ECHO' },
-        { from: P(6, 0.5), to: P(9, 0.4), mask: M.R, side: 1, lift: 14, bulge: -40, label: 'RED ECHO' },
+        { from: P(1, 0.3), to: P(4, 0.3), mask: M.BO, side: 1, lift: 0, bulge: -60, label: 'BLUE ECHO' },
+        { from: P(6, 0.5), to: P(9, 0.4), mask: M.RO, side: 1, lift: 14, bulge: -40, label: 'RED ECHO' },
       ],
       gaps: [
         { at: P(2, 0.6), len: 40, mask: M.R, noRails: true },
@@ -341,8 +341,8 @@ export const TRACKS = [
         { at: P(8, 0.4), len: 40, mask: M.R, noRails: true },
         { at: P(10, 0.5), len: 34, mask: M.X, noRails: true },
       ],
-      obstacles: [wall(P(1, 0.1), M.R), ...field(P(3, 0.3), 0.05, 8, 71), wall(P(6, 0.2), M.B), ...chicane(P(7, 0.5), 0.01, 4), wall(P(11, 0.3), M.B)],
-      boosts: [{ at: P(0, 0.5) }, { at: P(4, 0.6), mask: M.R }, { at: P(9, 0.7), mask: M.B }],
+      obstacles: [wall(P(1, 0.1), M.R), ...field(P(3, 0.3), 0.05, 8, 71), ...chicane(P(7, 0.5), 0.01, 4)],
+      boosts: [{ at: P(0, 0.5) }, { at: P(4, 0.6), mask: M.RO }, { at: P(9, 0.7), mask: M.BO }, { at: P(6, 0.2), mask: M.RO }, { at: P(11, 0.3), mask: M.RO }],
       shards: [{ at: P(1, 0.6), n: 3 }, { at: P(5, 0.7), n: 3 }, { at: P(10, 0.1), n: 3 }],
     }),
   }),
