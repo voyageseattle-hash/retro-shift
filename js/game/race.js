@@ -469,17 +469,21 @@ export class Race {
           r.vel.z -= P.rightZ(o.i) * s * vn * 1.4;
         }
         r.vel.multiplyScalar(0.94);
-        if (r.isPlayer) this.app.audio.play('scrape');
+        if (r.isPlayer && vn < -2) this.app.audio.play('scrape');
       } else {
         const s = Math.sign(along) || -1;
         r.pos.x += tx * s * penAlong;
         r.pos.z += tz * s * penAlong;
         const vt = r.vel.x * tx + r.vel.z * tz;
-        if (vt * s < 0) {
+        const into = vt * s < 0 ? Math.abs(vt) : 0;
+        if (into > 0) {
           r.vel.x -= tx * vt * 1.3;
           r.vel.z -= tz * vt * 1.3;
         }
-        const hard = Math.abs(vt) > 12;
+        // Pressing against a wall touches it every frame: only a fresh impact crashes, shakes and rumbles.
+        if (into < 3 || r.hitCd > 0) continue;
+        r.hitCd = 0.5;
+        const hard = into > 12;
         if (hard) r.spinOut(o.type === 'wall' ? 0.9 : 0.6, Math.random() < 0.5 ? -1 : 1);
         if (r.isPlayer) {
           this.app.audio.play(o.type === 'wall' ? 'wall' : 'hit');

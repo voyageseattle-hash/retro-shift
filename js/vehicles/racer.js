@@ -178,6 +178,7 @@ export class Racer {
     const P = this.phys;
     const ctl = this.ctl;
     this.invuln = Math.max(0, this.invuln - dt);
+    this.hitCd = Math.max(0, (this.hitCd || 0) - dt);
     this.boostTime = Math.max(0, this.boostTime - dt);
     this.spinTime = Math.max(0, this.spinTime - dt);
     this.updateEnergy(dt, session);
