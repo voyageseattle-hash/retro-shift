@@ -487,7 +487,7 @@ export class Race {
         }
       } else r.stuckT = 0;
       this.features(r, dt);
-      this.progress(r);
+      this.progress(r, dt);
     }
     this.bump();
   }
@@ -638,9 +638,16 @@ export class Race {
     }
   }
 
-  progress(r) {
+  progress(r, dt) {
     const tr = r.track;
     if (!tr || !r.grounded) return;
+    // Wrong way: moving back down the road, or sat facing back down it. (Progress along the loop can't tell: at
+    // driving speed the road sample under you only changes every few steps.)
+    const P = tr.path;
+    const along = r.vel.x * P.thx[tr.i] + r.vel.z * P.thz[tr.i];
+    const facing = Math.sin(r.yaw) * P.thx[tr.i] + Math.cos(r.yaw) * P.thz[tr.i];
+    if (along < -2 || (along <= 2 && facing < -0.3)) r.wrongWay = Math.min(2, (r.wrongWay || 0) + dt);
+    else if (along > 2) r.wrongWay = Math.max(0, (r.wrongWay || 0) - dt * 3);
     if (tr.path !== r.lastPath) {
       if (!tr.path.closed) r.branchUses = (r.branchUses || 0) + 1;
       r.lastPath = tr.path;
@@ -656,8 +663,6 @@ export class Race {
     }
     r.prog += du;
     r.lastU = u;
-    r.wrongWay = (r.wrongWay || 0) + (du < -1e-5 ? 1 / 120 : -1 / 60);
-    r.wrongWay = clamp(r.wrongWay, 0, 3);
     const lap = Math.floor(r.prog);
     if (lap > r.lap && !r.finished) {
       const lt = this.raceTime - r.lapStart;

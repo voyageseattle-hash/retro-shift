@@ -756,7 +756,7 @@ export class UI {
       <div class="h-controls"></div>
       <div class="h-comms"><b></b><span></span></div>
       <div class="h-count"></div>
-      <div class="h-wrong">WRONG WAY</div>
+      <div class="h-wrong">WRONG WAY<small>TURN AROUND</small></div>
       <div class="h-flash"></div>`;
     H.innerHTML = Array.from({ length: n }, (_, k) => `<div class="hud-view v${k}">${n > 1 ? `<div class="h-who">P${k + 1}</div>` : ''}${view}</div>`).join('') + '<button class="h-pause" aria-label="Pause">❚❚</button>';
     H.classList.toggle('split', n > 1);
@@ -923,7 +923,7 @@ export class UI {
     }
     h.energy.style.width = `${(p.energy * 100).toFixed(1)}%`;
     h.energyBox.className = `h-energy m${p.mode}${p.energy < 0.25 ? ' low' : ''}${h.energyBox.classList.contains('deny') ? ' deny' : ''}`;
-    h.wrong.classList.toggle('on', (p.wrongWay || 0) > 1.2 && race.state === 'race');
+    h.wrong.classList.toggle('on', (p.wrongWay || 0) > 0.8 && race.state === 'race' && !p.finished);
     h.root.dataset.mode = MODE_NAME[p.mode];
     // the controls, on the device in hand, while the grid waits for GO
     const pre = race.state === 'intro' || race.state === 'countdown';
