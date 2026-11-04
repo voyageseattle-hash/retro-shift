@@ -8,6 +8,7 @@ import { BOTH, RED, BLUE, MODE_NAME } from '../world/shift.js';
 import { formatTime, ordinal, storage } from '../core/util.js';
 import { CUPS, POINTS, TROPHY, getProgress, saveProgress as saveProgressUI, medalInfo, isUnlocked, unlockFor, COLORWAYS, getGarage, setLivery, liveryFor } from '../game/modes.js';
 import { loadGhost } from '../game/ghost.js';
+import { playerName, setPlayerName, courseName, MAX_PLAYERS } from '../net/online.js';
 import { PREMISE, CUP_STORY, SECRET_SCENES, DRIVERS } from '../game/story.js';
 
 const el = (tag, cls, html) => {
@@ -55,6 +56,7 @@ class Menu {
   update() {
     const I = this.app.input;
     const c = this.cols;
+    if (document.activeElement?.tagName === 'INPUT') return;
     if (I.menu('down')) this.setFocus(this.focus + c);
     if (I.menu('up')) this.setFocus(this.focus - c);
     if (c > 1 && I.menu('right')) this.setFocus(this.focus + 1);
@@ -82,6 +84,7 @@ export class UI {
   }
 
   clear() {
+    this.screenWas = this.root.querySelector('.screen.lobby') ? 'lobby' : null;
     this.root.innerHTML = '';
     this.root.className = '';
     this.menu = null;
@@ -104,6 +107,7 @@ export class UI {
       { label: 'SINGLE RACE', action: () => ((this.choice.mode = 'race'), this.trackSelect()) },
       { label: 'TIME TRIAL', action: () => ((this.choice.mode = 'trial'), this.trackSelect()) },
       { label: 'MONO RUN', action: () => ((this.choice.mode = 'mono'), this.trackSelect()) },
+      { label: 'ONLINE', action: () => this.onlineMenu() },
       { label: 'GARAGE', action: () => this.garage() },
       { label: 'HOW TO PLAY', action: () => this.howTo() },
       { label: 'SETTINGS', action: () => this.settingsScreen() },
@@ -255,6 +259,10 @@ export class UI {
           if (!open) return this.app.audio.play('denied');
           this.choice.car = car.id;
           storage.set('rs.lastCar', car.id);
+          if (this.choice.mode === 'online') {
+            this.app.net.setCar(car.id, liveryFor(car.id));
+            return this.lobby();
+          }
           if (this.choice.mode === 'gp') this.app.startGP(this.choice.cup);
           else this.app.startRace();
         },
@@ -263,8 +271,155 @@ export class UI {
     s.appendChild(grid);
     this.root.appendChild(s);
     const focus = Math.max(0, CARS.findIndex((c) => c.id === this.choice.car));
-    this.menu = new Menu(this.app, grid, items, { cols: 4, focus, onBack: () => (this.choice.mode === 'gp' ? this.cupSelect() : this.trackSelect()) });
+    this.menu = new Menu(this.app, grid, items, { cols: 4, focus, onBack: () => (this.choice.mode === 'online' ? this.lobby() : this.choice.mode === 'gp' ? this.cupSelect() : this.trackSelect()) });
     this.menu.nodes.forEach((n) => grid.appendChild(n));
+  }
+
+  // ------------------------------------------------------------------ online: host or join a room, then the lobby
+  onlineMenu(msg) {
+    this.clear();
+    this.hideHud();
+    this.app.showAttract(true);
+    this.choice.mode = 'online';
+    const net = this.app.net;
+    const s = el('div', 'screen online');
+    s.innerHTML = `<h2>ONLINE</h2><div class="sub">Up to ${MAX_PLAYERS} racers. One of you hosts and shares the room code; empty places on the grid go to AI rivals.</div>
+      ${msg ? `<div class="net-msg">${msg}</div>` : ''}
+      <label class="field"><span>YOUR NAME</span><input class="net-name" maxlength="12" spellcheck="false" autocomplete="off"></label>`;
+    const nameIn = s.querySelector('.net-name');
+    nameIn.value = playerName();
+    nameIn.addEventListener('change', () => setPlayerName(nameIn.value));
+    const list = el('div', 'list');
+    const code = el('div', 'join-row');
+    code.innerHTML = '<input class="net-code" maxlength="4" placeholder="CODE" spellcheck="false" autocomplete="off">';
+    const codeIn = code.querySelector('input');
+    const status = el('div', 'net-status');
+    const profile = () => {
+      setPlayerName(nameIn.value);
+      return { name: playerName(), car: this.choice.car, livery: liveryFor(this.choice.car) };
+    };
+    const fail = (e) => {
+      status.textContent = e?.message || 'Could not connect';
+      status.classList.add('bad');
+    };
+    const hostIt = async () => {
+      status.textContent = 'Opening a room...';
+      status.classList.remove('bad');
+      try {
+        await net.host(profile());
+        this.lobby();
+      } catch (e) {
+        net.close();
+        fail(e);
+      }
+    };
+    const joinIt = async () => {
+      const c = codeIn.value.trim();
+      if (c.length < 4) {
+        codeIn.focus();
+        return fail(new Error('Type the 4-letter room code first'));
+      }
+      status.textContent = `Looking for room ${c.toUpperCase()}...`;
+      status.classList.remove('bad');
+      try {
+        await net.join(c, profile());
+        this.lobby();
+      } catch (e) {
+        net.close();
+        fail(e);
+      }
+    };
+    codeIn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') joinIt();
+      if (e.key === 'Escape') codeIn.blur();
+    });
+    nameIn.addEventListener('keydown', (e) => (e.key === 'Enter' || e.key === 'Escape') && nameIn.blur());
+    const items = [
+      { label: 'HOST A ROOM', action: hostIt },
+      { label: 'JOIN A ROOM', action: () => (codeIn.value.trim().length >= 4 ? joinIt() : codeIn.focus()) },
+      { label: 'BACK', action: () => this.title() },
+    ];
+    s.appendChild(code);
+    s.appendChild(list);
+    s.appendChild(status);
+    this.root.appendChild(s);
+    this.menu = new Menu(this.app, list, items, { onBack: () => this.title() });
+    this.menu.nodes.forEach((n) => list.appendChild(n));
+  }
+
+  lobby() {
+    this.clear();
+    this.hideHud();
+    this.app.showAttract(true);
+    this.choice.mode = 'online';
+    const net = this.app.net;
+    if (!net.active) return this.onlineMenu();
+    const s = el('div', 'screen lobby');
+    const host = net.isHost;
+    const rows = Array.from({ length: MAX_PLAYERS }, (_, k) => {
+      const p = net.players[k];
+      if (!p) return `<tr class="empty"><td>${k + 1}</td><td>AI RIVAL</td><td></td></tr>`;
+      const car = CARS.find((c) => c.id === p.car) || CARS[0];
+      return `<tr class="${p.slot === net.mySlot ? 'me' : ''}"><td>${k + 1}</td><td>${p.name}${p.slot === 0 ? ' <small>HOST</small>' : ''}</td><td style="color:${hex(car.color)}">${car.name}</td></tr>`;
+    }).join('');
+    s.innerHTML = `<h2>ROOM <span class="code">${net.code}</span></h2>
+      <div class="sub">${host ? 'Share the code. Friends pick ONLINE, then JOIN A ROOM.' : 'Waiting for the host to start the race.'}</div>
+      <div class="rgrid"><table class="standings lobby-table">${rows}</table>
+      <div class="lobby-course"><span>COURSE</span><b>${courseName(net.course)}</b><canvas width="220" height="130"></canvas></div></div>`;
+    const cv = s.querySelector('canvas');
+    const def = TRACKS.find((t) => t.id === net.course);
+    if (def) requestAnimationFrame(() => drawPaths(cv.getContext('2d'), this.preview(def).paths, cv.width, cv.height, 7, 10, null, 2.5));
+    const list = el('div', 'list row');
+    const cycleCourse = (d) => {
+      const i = TRACKS.findIndex((t) => t.id === net.course);
+      net.setCourse(TRACKS[(i + d + TRACKS.length) % TRACKS.length].id);
+    };
+    const items = [
+      ...(host ? [{ label: 'START RACE', action: () => net.start() }, { label: '◀ COURSE ▶', action: () => cycleCourse(1), cycle: cycleCourse }] : []),
+      { label: 'CHANGE CRAFT', action: () => this.carSelect() },
+      { label: 'LEAVE ROOM', action: () => (net.close(), this.onlineMenu()) },
+    ];
+    s.appendChild(list);
+    this.root.appendChild(s);
+    const keep = this.menu?.focus;
+    this.menu = new Menu(this.app, list, items, { cols: items.length, onBack: () => (net.close(), this.onlineMenu()) });
+    if (this.screenWas === 'lobby' && keep != null && keep < items.length) this.menu.setFocus(keep);
+    this.menu.nodes.forEach((n) => list.appendChild(n));
+    this.screenWas = 'lobby';
+    net.onChange = () => {
+      if (this.screenWas === 'lobby' && !this.app.race && this.root.querySelector('.screen.lobby')) {
+        const f = this.menu?.focus;
+        this.lobby();
+        if (f != null && f < this.menu.items.length) this.menu.setFocus(f);
+      }
+    };
+  }
+
+  onlineResults(race) {
+    this.clear();
+    const net = this.app.net;
+    const p = race.player;
+    const place = race.placeOf(p);
+    const s = el('div', 'screen results');
+    s.innerHTML = `<h2>${place === 1 ? 'YOU WIN' : `${ordinal(place)} PLACE`}</h2><div class="rgrid"><table class="standings"></table>
+      <div class="rstats"><div><span>TIME</span><b>${formatTime(p.finishTime)}</b></div><div><span>BEST LAP</span><b>${formatTime(p.bestLap)}</b></div><div><span>SHIFTS</span><b>${race.stats.shifts}</b></div></div></div>
+      <div class="sub">${net.isHost ? '' : 'The host will bring everyone back to the lobby.'}</div>`;
+    const table = s.querySelector('table');
+    const draw = () => {
+      table.innerHTML = race
+        .standings()
+        .map((r, k) => `<tr class="${r.isPlayer ? 'me' : ''}"><td>${ordinal(k + 1)}</td><td style="color:${hex(r.color)}">${r.name}</td><td>${r.finished ? formatTime(r.finishTime) : 'RACING'}</td></tr>`)
+        .join('');
+    };
+    draw();
+    clearInterval(this.resultsTimer);
+    this.resultsTimer = setInterval(() => (this.app.race === race ? draw() : clearInterval(this.resultsTimer)), 1000);
+    const list = el('div', 'list row');
+    s.appendChild(list);
+    this.root.appendChild(s);
+    const items = [...(net.isHost ? [{ label: 'BACK TO LOBBY', action: () => net.backToLobby() }] : []), { label: 'LEAVE ROOM', action: () => (net.close(), this.app.netLeft()) }];
+    this.menu = new Menu(this.app, list, items, { cols: items.length });
+    this.menu.nodes.forEach((n) => list.appendChild(n));
   }
 
   // ------------------------------------------------------------------ garage: paint, trail, underglow per car
@@ -328,6 +483,16 @@ export class UI {
     s.appendChild(list);
     this.root.appendChild(s);
     const gp = this.app.race?.kind === 'gp';
+    if (this.app.race?.online) {
+      s.querySelector('h2').textContent = 'MENU · STILL RACING';
+      this.menu = new Menu(this.app, list, [
+        { label: 'RESUME', action: () => this.app.resume() },
+        ...(this.app.net.isHost ? [{ label: 'END RACE · BACK TO LOBBY', action: () => this.app.net.backToLobby() }] : []),
+        { label: 'LEAVE ROOM', action: () => (this.app.net.close(), this.app.netLeft()) },
+      ], { onBack: () => this.app.resume() });
+      this.menu.nodes.forEach((n) => list.appendChild(n));
+      return;
+    }
     this.menu = new Menu(this.app, list, [
       { label: 'RESUME', action: () => this.app.resume() },
       ...(gp ? [] : [{ label: 'RESTART', action: () => this.app.startRace() }]),
@@ -338,6 +503,7 @@ export class UI {
 
   results(race) {
     this.hudRoot.hidden = true;
+    if (race.online) return this.onlineResults(race);
     if (race.kind === 'gp') return this.gpResults(race);
     this.clear();
     const p = race.player;

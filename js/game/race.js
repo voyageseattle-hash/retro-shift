@@ -14,6 +14,7 @@ import { monoDef, medalFor, recordMedal } from './modes.js';
 import { driverOf, pick } from './story.js';
 
 const _v = new THREE.Vector3();
+const NO_INPUT = { throttle: 0, brake: 0, steer: 0, drift: false, item: false, special: false, jump: false, reset: false, look: false };
 
 export class Race {
   constructor(app, def, opts = {}) {
@@ -43,16 +44,26 @@ export class Race {
     this.finishOrder = [];
     this.tipShown = new Set();
     this.stats = { phased: 0, crashes: 0, shifts: 0 };
-    // player + rivals
+    // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
+    // browser simulates only its own racers (the host also runs the AI); everyone else is a puppet fed by the network.
+    this.online = opts.online || null;
     const playerCar = CARS.find((c) => c.id === opts.car) || CARS[0];
-    const field = opts.rivals ?? 5;
+    const field = this.online ? this.online.slots.length - 1 : opts.rivals ?? 5;
     const others = CARS.filter((c) => c !== playerCar && !c.secret);
     const diff = opts.difficulty ?? 1; // 0 easy, 1 normal, 2 hard
     for (let k = 0; k <= field; k++) {
-      const isPlayer = k === field; // player starts at the back of the grid
-      const car = isPlayer ? playerCar : others[k % others.length];
-      const r = new Racer(car, { isPlayer, index: k, name: isPlayer ? 'YOU' : car.name, livery: isPlayer ? opts.livery : null });
+      const S = this.online?.slots[k];
+      const isPlayer = S ? S.slot === this.online.mySlot : k === field; // offline, the player starts at the back of the grid
+      const car = S ? CARS.find((c) => c.id === S.car) || CARS[0] : isPlayer ? playerCar : others[k % others.length];
+      const name = isPlayer ? 'YOU' : S?.human ? S.name : car.name;
+      const r = new Racer(car, { isPlayer, index: k, name, livery: isPlayer ? opts.livery : S?.livery || null });
       r.session = this;
+      if (S) {
+        r.slot = S.slot;
+        r.human = !!S.human;
+        // puppets: other people's racers, and (on a joiner's screen) the host's AI
+        r.puppet = !isPlayer && (S.human || !this.online.isHost);
+      }
       if (this.mono) {
         r.mono = true;
         r.mode = RED;
@@ -67,11 +78,11 @@ export class Race {
       r.lapStart = 0;
       r.finished = false;
       r.respawnT = 0;
-      if (!isPlayer) {
+      if (!isPlayer && !r.puppet) {
         const skill = clamp([0.55, 0.75, 0.92][diff] + (k / field) * 0.1 + rand(-0.05, 0.05), 0.3, 1);
         r.ai = new RaceAI(r, this.world, skill);
         r.speedMul = [0.9, 0.97, 1.02][diff] + (k / field) * 0.03;
-      } else {
+      } else if (isPlayer) {
         this.player = r;
         // headless staff runs: the AI drives the player's car flat out
         if (opts.autopilot) r.ai = new RaceAI(r, this.world, 1);
@@ -108,7 +119,7 @@ export class Race {
 
   // A rival gets on the radio.
   comms(r, kind) {
-    const d = r && driverOf(r.car.id);
+    const d = r && !r.human && driverOf(r.car.id);
     if (!d) return;
     const text = Array.isArray(d[kind]) ? pick(d[kind]) : d[kind];
     if (!text) return;
@@ -196,7 +207,7 @@ export class Race {
     const input = this.app.input;
     const p = this.player;
     // player controls
-    const c = input.controls(0);
+    const c = this.app.paused ? NO_INPUT : input.controls(0);
     p.ctl.throttle = c.throttle;
     p.ctl.brake = c.brake;
     p.ctl.steer = c.steer;
@@ -215,10 +226,10 @@ export class Race {
       if (!c.reset) this.resetHeld = false;
     }
     if (this.state === 'intro') {
-      if (this.introT < 0.5 && this.introT + dt >= 0.5 && !this.solo) this.comms(pick(this.racers.filter((r) => !r.isPlayer)), 'pre');
+      if (this.introT < 0.5 && this.introT + dt >= 0.5 && !this.solo) this.comms(pick(this.racers.filter((r) => !r.isPlayer && !r.human)), 'pre');
       this.introT += dt;
       for (const r of this.racers) r.controlLocked = true;
-      if (this.introT > 2.2 || input.menu('confirm')) {
+      if (this.online ? this.netGo : this.introT > 2.2 || input.menu('confirm')) {
         this.state = 'countdown';
         this.lastBeep = 4;
       }
@@ -260,7 +271,8 @@ export class Race {
     for (const g of this.ghosts) g.update(this.raceTime, p.mode);
 
     // visuals
-    for (const r of this.racers) if (r.respawnT <= 0) r.syncVisual(dt);
+    this.app.net?.applyPuppets(this);
+    for (const r of this.racers) if (r.puppet ? r.root.visible : r.respawnT <= 0) r.syncVisual(dt);
     this.world.update(dt, this.t, p.mode);
     const look = c.look;
     if (this.state === 'intro') {
@@ -307,6 +319,7 @@ export class Race {
   step(dt) {
     const w = this.world;
     for (const r of this.racers) {
+      if (r.puppet) continue;
       if (r.respawnT > 0) {
         r.respawnT -= dt;
         if (r.respawnT <= 0) this.respawn(r);
@@ -432,6 +445,7 @@ export class Race {
       if (sh.root.position.distanceToSquared(r.pos) > 3.2 * 3.2) continue;
       sh.taken = 5;
       sh.root.visible = false;
+      if (this.online) this.app.net?.shard(w.shards.indexOf(sh));
       r.energy = Math.min(1, r.energy + SHIFT.shard);
       if (r.isPlayer) {
         this.app.audio.play('shard');
@@ -458,8 +472,12 @@ export class Race {
         if (d > min || d < 1e-4) continue;
         _v.multiplyScalar(1 / d);
         // heavier cars shove lighter ones (GREAT WEDGE weighs as much as two wedges)
-        const wa = B.mass / (A.mass + B.mass);
-        const wb = 1 - wa;
+        if (A.puppet && B.puppet) continue;
+        // a puppet is moved by its own browser, so only our side of the bump moves here
+        let wa = B.mass / (A.mass + B.mass);
+        let wb = 1 - wa;
+        if (A.puppet) [wa, wb] = [0, 1];
+        if (B.puppet) [wa, wb] = [1, 0];
         const pen = min - d;
         A.pos.addScaledVector(_v, -pen * wa);
         B.pos.addScaledVector(_v, pen * wb);
@@ -520,7 +538,7 @@ export class Race {
     this.finishOrder.push(r);
     if (r.isPlayer) {
       this.state = 'finished';
-      this.app.audio.play('finish', this.solo || this.finishOrder.length <= 3 ? 1 : 0);
+      this.app.audio.play('finish', this.solo || this.placeOf(r) <= 3 ? 1 : 0);
       if (this.recorder) {
         // a ghost is saved only when it beats the one you've got
         const old = loadGhost(this.def.id, this.mono);
@@ -530,7 +548,7 @@ export class Race {
         this.medal = medalFor(r.finishTime, this.staffTime);
         if (!this.opts.autopilot) recordMedal(this.kind, this.def.id, this.medal);
       }
-      if (!this.mono && !this.opts.autopilot) {
+      if (!this.mono && !this.opts.autopilot && !this.online) {
         const key = `rs.best.${this.def.id}`;
         const best = storage.get(key, null);
         this.newRecord = !best || r.finishTime < best.time;
@@ -539,8 +557,8 @@ export class Race {
         const bl = storage.get(lkey, null);
         if (!bl || r.bestLap < bl) storage.set(lkey, r.bestLap);
       } else if (this.mono) this.newRecord = this.newGhost;
-      this.emit('finish', { place: this.finishOrder.length });
-      if (!this.solo) {
+      this.emit('finish', { place: this.placeOf(r) });
+      if (!this.solo && !this.online) {
         const st = this.standings();
         const winner = st[0];
         // the winner gloats, or if you won, whoever came second sulks
@@ -552,7 +570,7 @@ export class Race {
 
   // Standings: finished racers by finish order, the rest by progress.
   standings() {
-    const done = this.finishOrder.slice();
+    const done = this.racers.filter((r) => r.finished).sort((a, b) => a.finishTime - b.finishTime);
     const rest = this.racers.filter((r) => !r.finished).sort((a, b) => b.prog - a.prog);
     return done.concat(rest);
   }

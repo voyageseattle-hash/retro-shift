@@ -43,6 +43,10 @@ Touch controls appear on phones and tablets.
 - **Time Trial**: alone against your best ghost and the staff ghost, for bronze, silver and gold medals.
 - **Mono Run**: never both worlds. You start in RED, the BOTH button swaps lenses, every swap costs SHIFT, and only shards and phasing refill it. Road that exists only in the overlap is opened to both lenses.
 
+## Online
+
+Up to six racers. One player picks ONLINE → HOST A ROOM and shares the four-letter code; the others pick JOIN A ROOM. Empty grid places go to AI rivals, and anyone who drops out mid-race is handed to the AI. Built on Absurd Combat Racing's transport: WebRTC data channels brokered by [PeerJS](https://peerjs.com) (MIT, vendored in `vendor/peerjs.min.js`), STUN only by default; set `window.RETROSHIFT_ICE` to add a TURN relay. Each browser simulates its own craft and streams its state; the host runs the AI, relays everyone at 30 Hz, and owns the start and the shards. `?net=local` swaps WebRTC for a BroadcastChannel so several tabs of one browser can race each other (add `&netlag=80` to fake latency).
+
 ## Craft and the garage
 
 Eight wireframe bodies: VECTOR, SCANLINE and POLYGON from the start; CHROMA, RASTER and GLITCH unlocked by trophies and medals; and two secret drivers from the studio's other games: **DASH** from LAST LINE, surfing a pencil, and **GREAT WEDGE** from ABSURD COMBAT RACING, Captain Finn Razorback's shark truck. The garage sets each car's paint, trail and underglow. `?unlockall` unlocks everything for testing.

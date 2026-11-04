@@ -14,6 +14,7 @@ import { trackById, TRACKS } from './world/tracks.js';
 import { BOTH, RED, BLUE } from './world/shift.js';
 import { CUPS, POINTS, loadStaff, recordCup, checkUnlocks, liveryFor } from './game/modes.js';
 import { Showroom } from './game/showroom.js';
+import { Online } from './net/online.js';
 
 class App {
   constructor() {
@@ -22,6 +23,7 @@ class App {
     this.input = new Input();
     this.audio = new Audio();
     this.ui = new UI(this);
+    this.net = new Online(this);
     this.race = null;
     this.paused = false;
     this.attract = null;
@@ -37,7 +39,7 @@ class App {
     window.addEventListener('pointerdown', wake);
     window.addEventListener('keydown', wake);
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden && this.race && !this.paused && this.race.state !== 'finished') this.pause();
+      if (document.hidden && this.race && !this.race.online && !this.paused && this.race.state !== 'finished') this.pause();
     });
     const params = new URLSearchParams(location.search);
     if (params.get('track')) {
@@ -198,9 +200,55 @@ class App {
   pause() {
     if (!this.race || this.paused) return;
     this.paused = true;
-    this.audio.stopEngines();
-    this.audio.duckMusic(true);
+    // an online race keeps running under the menu
+    if (!this.race.online) {
+      this.audio.stopEngines();
+      this.audio.duckMusic(true);
+    }
     this.ui.pause();
+  }
+
+  // ------------------------------------------------------------------ online
+  startOnline(cfg, mySlot, isHost) {
+    this.audio.init();
+    const def = trackById(cfg.course);
+    const me = cfg.slots.find((s) => s.slot === mySlot);
+    if (this.race) this.race.dispose();
+    this.audio.stopEngines();
+    this.audio.duckMusic(false);
+    this.showAttract(false);
+    this.hideCar();
+    this.recentUnlocks = [];
+    this.ui.clear();
+    this.ui.choice.track = def.id;
+    this.race = new Race(this, def, { kind: 'online', car: me?.car, livery: me?.livery, online: { slots: cfg.slots, mySlot, isHost } });
+    this.race.cam.setAspect(this.renderer.width / this.renderer.height);
+    this.ui.buildHud(this.race);
+    this.paused = false;
+    this.resultsShown = false;
+    document.body.classList.add('racing');
+  }
+  endRace() {
+    if (this.race) this.race.dispose();
+    this.race = null;
+    this.paused = false;
+    this.audio.stopEngines();
+    this.audio.duckMusic(false);
+    this.audio.setMode(BOTH, true);
+    document.body.classList.remove('racing');
+    delete document.body.dataset.mode;
+  }
+  onlineLobby() {
+    const was = !!this.race;
+    this.endRace();
+    if (was) this.audio.playTitle();
+    this.ui.lobby();
+  }
+  netLeft(why) {
+    const was = !!this.race;
+    this.endRace();
+    if (was) this.audio.playTitle();
+    this.ui.onlineMenu(why);
   }
   resume() {
     this.paused = false;
@@ -209,6 +257,7 @@ class App {
   }
   quit() {
     this.gp = null;
+    if (this.net.active) this.net.close();
     if (this.race) this.race.dispose();
     this.race = null;
     this.paused = false;
@@ -229,8 +278,9 @@ class App {
     if (this.race) {
       if (!this.paused && this.input.menu('pause') && this.race.state !== 'finished') this.pause();
       else if (this.paused) this.ui.update();
-      if (!this.paused) {
+      if (!this.paused || this.race.online) {
         this.race.update(dt);
+        this.net.tick(dt, this.race);
         this.ui.updateHud(this.race, dt);
         if (this.race.state === 'finished') {
           this.race.finishT = (this.race.finishT || 0) + dt;
