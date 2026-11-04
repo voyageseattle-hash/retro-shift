@@ -737,6 +737,7 @@ export class UI {
       </div>
       <div class="h-center"></div>
       <div class="h-tip"></div>
+      <div class="h-controls"></div>
       <div class="h-comms"><b></b><span></span></div>
       <div class="h-count"></div>
       <div class="h-wrong">WRONG WAY</div>
@@ -768,6 +769,7 @@ export class UI {
         energyBox: q('.h-energy'),
         center: q('.h-center'),
         tip: q('.h-tip'),
+        controls: q('.h-controls'),
         comms: q('.h-comms'),
         count: q('.h-count'),
         wrong: q('.h-wrong'),
@@ -857,9 +859,14 @@ export class UI {
         h.tip.innerHTML = `${e.text}${glyph ? ` <kbd>${glyph}</kbd>` : ''}`;
         h.tip.className = `h-tip on k-${e.key}`;
         clearTimeout(h.tipTimer);
-        h.tipTimer = setTimeout(() => (h.tip.className = 'h-tip'), 3200);
+        // hold 0: stays up until a 'tipoff'
+        if (e.hold !== 0) h.tipTimer = setTimeout(() => (h.tip.className = 'h-tip'), (e.hold || 3.2) * 1000);
         break;
       }
+      case 'tipoff':
+        clearTimeout(h.tipTimer);
+        h.tip.className = 'h-tip';
+        break;
       case 'comms': {
         const c = h.comms;
         c.querySelector('b').textContent = `${e.name} · ${e.car}`;
@@ -901,6 +908,16 @@ export class UI {
     h.energyBox.className = `h-energy m${p.mode}${p.energy < 0.25 ? ' low' : ''}${h.energyBox.classList.contains('deny') ? ' deny' : ''}`;
     h.wrong.classList.toggle('on', (p.wrongWay || 0) > 1.2 && race.state === 'race');
     h.root.dataset.mode = MODE_NAME[p.mode];
+    // the controls, on the device in hand, while the grid waits for GO
+    const pre = race.state === 'intro' || race.state === 'countdown';
+    h.controls.classList.toggle('on', pre);
+    if (pre) {
+      const g = (key) => `<kbd>${this.lensGlyph(race, k, key)}</kbd>`;
+      const html = `<div><span>GAS ${g('gas')}</span><span>BRAKE ${g('brake')}</span><span>STEER ${g('steer')}</span><span>DRIFT ${g('drift')}</span></div>
+        <div><span class="red">RED ${g('red')}</span><span class="both">${race.mono ? 'SWAP' : 'BOTH'} ${g('both')}</span><span class="blue">BLUE ${g('blue')}</span></div>
+        <p>${race.mono ? 'SWAP flips your lens.' : 'Shift to one colour and the other colour’s walls and roads vanish.'}</p>`;
+      if (h.controlsHtml !== html) h.controls.innerHTML = h.controlsHtml = html;
+    }
     if (drawMap) h.map.draw(race.world, race.racers, p.mode, p);
   }
 }

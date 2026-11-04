@@ -235,6 +235,14 @@ kbd { font-family: 'Chakra Petch', monospace; font-weight: 700; font-size: 0.8em
 @keyframes pop { 0% { transform: scale(1.6); opacity: 0; } 12% { transform: scale(1); opacity: 1; } 75% { opacity: 1; } 100% { transform: translateY(-30px); opacity: 0; } }
 .h-tip { position: absolute; left: 50%; top: 18%; transform: translateX(-50%) skewX(-10deg); padding: 8px 18px; background: var(--panel); border: 1.5px solid var(--violet); font-size: 18px; letter-spacing: 0.12em; opacity: 0; transition: opacity 0.2s; white-space: nowrap; }
 .h-tip.on { opacity: 1; }
+.h-controls { position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 20px; background: var(--panel); border: 1.5px solid var(--violet); font-size: 15px; letter-spacing: 0.1em; opacity: 0; transition: opacity 0.4s; pointer-events: none; white-space: nowrap; }
+.h-controls.on { opacity: 1; }
+.h-controls div { display: flex; gap: 18px; }
+.h-controls .red { color: var(--red); }
+.h-controls .blue { color: #4ab0ff; }
+.h-controls .both { color: #e8dcff; }
+.h-controls p { margin: 0; font-size: 12px; letter-spacing: 0.06em; opacity: 0.8; }
+#hud.split .h-controls { bottom: 70px; font-size: 12px; padding: 8px 14px; }
 .h-tip.k-red { border-color: var(--red); color: #ff8a9a; }
 .h-tip.k-blue { border-color: var(--blue); color: #8ac8ff; }
 .h-count { position: absolute; inset: 0; display: grid; place-content: center; font-family: 'Russo One'; font-style: italic; font-size: 160px; opacity: 0; }

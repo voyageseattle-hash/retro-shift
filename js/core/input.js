@@ -49,10 +49,10 @@ const BIND_SPLIT = [
     horn: ['Numpad9', 'Backslash'],
   },
 ];
-// Keyboard key names for each player's lens buttons in split-screen.
+// Keyboard key names for each player in split-screen.
 export const SPLIT_GLYPHS = [
-  { red: 'Q', both: 'F', blue: 'E' },
-  { red: ',', both: '.', blue: '/' },
+  { red: 'Q', both: 'F', blue: 'E', gas: 'W', brake: 'S', steer: 'A D', drift: 'SPACE' },
+  { red: ',', both: '.', blue: '/', gas: '▲', brake: '▼', steer: '◀ ▶', drift: 'R-SHIFT' },
 ];
 // Buttons that act once per press. The game latches them per rendered frame so a short tap is
 // never lost between fixed sim steps, and online joiners send them as running counts.
@@ -108,12 +108,12 @@ export function padStyleOf(id = '') {
 
 // Button prompts per device family.
 const GLYPHS = {
-  keyboard: { confirm: 'ENTER', back: 'ESC', pause: 'ESC', gas: 'W', brake: 'S', drift: 'SPACE', fire: 'X', item: 'Q', special: 'E', red: 'Q', blue: 'E', both: 'F', look: 'C', reset: 'R', jump: 'U', rear: 'I', horn: 'H', paint: '▲ ▼', choose: '◀ ▶' },
-  xbox: { confirm: 'A', back: 'B', pause: 'MENU', gas: 'RT', brake: 'LT', drift: 'X', red: 'LB', blue: 'RB', both: 'Y', item: 'LB', special: 'RB', look: 'RS', reset: 'VIEW', jump: 'D-PAD ▲', rear: 'D-PAD ▼', horn: 'LS', paint: '▲ ▼', choose: '◀ ▶' },
-  ps: { confirm: '✕', back: '○', pause: 'OPTIONS', gas: 'R2', brake: 'L2', drift: '□', red: 'L1', blue: 'R1', both: '△', item: 'L1', special: 'R1', look: 'R3', reset: 'SHARE', jump: 'D-PAD ▲', rear: 'D-PAD ▼', horn: 'L3', paint: '▲ ▼', choose: '◀ ▶' },
+  keyboard: { confirm: 'ENTER', back: 'ESC', pause: 'ESC', gas: 'W', brake: 'S', steer: 'A D', drift: 'SPACE', fire: 'X', item: 'Q', special: 'E', red: 'Q', blue: 'E', both: 'F', look: 'C', reset: 'R', jump: 'U', rear: 'I', horn: 'H', paint: '▲ ▼', choose: '◀ ▶' },
+  xbox: { confirm: 'A', back: 'B', pause: 'MENU', gas: 'RT', brake: 'LT', steer: 'L-STICK', drift: 'X', red: 'LB', blue: 'RB', both: 'Y', item: 'LB', special: 'RB', look: 'RS', reset: 'VIEW', jump: 'D-PAD ▲', rear: 'D-PAD ▼', horn: 'LS', paint: '▲ ▼', choose: '◀ ▶' },
+  ps: { confirm: '✕', back: '○', pause: 'OPTIONS', gas: 'R2', brake: 'L2', steer: 'L-STICK', drift: '□', red: 'L1', blue: 'R1', both: '△', item: 'L1', special: 'R1', look: 'R3', reset: 'SHARE', jump: 'D-PAD ▲', rear: 'D-PAD ▼', horn: 'L3', paint: '▲ ▼', choose: '◀ ▶' },
 };
 GLYPHS.generic = GLYPHS.xbox;
-GLYPHS.touch = { ...GLYPHS.keyboard, confirm: 'TAP', back: '✕', pause: '❚❚', reset: '↺', look: 'REAR', red: 'RED', blue: 'BLUE', both: 'BOTH' };
+GLYPHS.touch = { ...GLYPHS.keyboard, gas: 'GAS', brake: 'BRK', steer: '◀ ▶', drift: 'DRIFT', confirm: 'TAP', back: '✕', pause: '❚❚', reset: '↺', look: 'REAR', red: 'RED', blue: 'BLUE', both: 'BOTH' };
 
 function normalizePad(p) {
   const buttons = p.buttons.map((b) => (typeof b === 'number' ? b : b.value || (b.pressed ? 1 : 0)));

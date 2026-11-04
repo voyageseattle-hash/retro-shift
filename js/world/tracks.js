@@ -65,8 +65,6 @@ export const TRACKS = [
       boosts: [{ at: P(0, 0.5), lat: 0 }, { at: P(7, 0.6), lat: -0.4 }, { at: P(12, 0.2), lat: 0.4, mask: M.R }],
       shards: [{ at: P(1, 0.15), lat: 0, n: 3 }, { at: P(6, 0.3), lat: -0.4, n: 3 }, { at: P(12, 0.6), lat: 0, n: 3, mask: M.B }],
       tips: [
-        { at: P(1, 0.25), text: 'BLUE WALL AHEAD: SHIFT TO RED', key: 'red' },
-        { at: P(3, 0.05), text: 'RED WALL: SHIFT TO BLUE', key: 'blue' },
         { at: P(5, 0.0), text: 'BLUE SHORTCUT ON THE RIGHT', key: 'blue' },
         { at: P(10, 0.1), text: 'RED BRIDGE: DON’T BE IN BLUE', key: 'both' },
       ],

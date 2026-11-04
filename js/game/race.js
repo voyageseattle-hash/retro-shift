@@ -43,6 +43,9 @@ export class Race {
     this.racers = [];
     this.finishOrder = [];
     this.tipShown = new Set();
+    // Wall coaching: until a player has phased through a few walls, a wall that's solid in their lens is called out
+    // (with the button that gets them through) and stays called out until they shift or pass it.
+    this.coachLeft = 6 - storage.get('rs.coach.phased', 0);
     this.stats = { phased: 0, crashes: 0, shifts: 0 };
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
     // browser simulates only its own racers (the host also runs the AI); everyone else is a puppet fed by the network.
@@ -347,6 +350,8 @@ export class Race {
     // player 2 is heard like a rival, from player 1's camera
     A.rivalEngines(this._listener, this.racers, this.split ? p : null);
 
+    // wall coaching
+    if (this.state === 'race' && this.coachLeft > 0) for (const pl of this.players) this.coachWalls(pl);
     // tips (tutorial track)
     for (const tip of this.def.tips || []) {
       const key = tip.at;
@@ -357,6 +362,46 @@ export class Race {
         this.tipShown.add(key);
         this.emit('tip', { text: tip.text, key: tip.key });
       }
+    }
+  }
+
+  // The lens that phases through a wall of this mask, as a tip: { text, key }. Null if no lens does.
+  throughWay(mask) {
+    const red = !solidIn(mask, RED);
+    const blue = !solidIn(mask, BLUE);
+    if (!red && !blue) return null;
+    const colour = red && blue ? 'WHITE' : red ? 'BLUE' : 'RED';
+    const to = red && !blue ? 'RED' : 'BLUE';
+    if (this.mono) return { text: `${colour} WALL: SWAP TO ${to}`, key: 'both' };
+    return { text: `${colour} WALL: SHIFT TO ${to}`, key: to === 'RED' ? 'red' : 'blue' };
+  }
+
+  coachWalls(r) {
+    const tr = r.track;
+    if (!tr || r.finished) return;
+    const P = tr.path;
+    let near = null;
+    let nearD = 1e9;
+    for (const o of this.world.obstacles) {
+      if (o.type !== 'wall' || o.path !== P) continue;
+      let di = o.i - tr.i;
+      if (P.closed) {
+        if (di > P.N / 2) di -= P.N;
+        if (di < -P.N / 2) di += P.N;
+      }
+      const ahead = di * P.ds;
+      if (ahead > 0 && ahead < 90 && ahead < nearD) {
+        near = o;
+        nearD = ahead;
+      }
+    }
+    const solid = near && solidIn(near.mask, r.mode) && this.throughWay(near.mask);
+    if (solid && r.coachWall !== near) {
+      r.coachWall = near;
+      this.emitP(r, 'tip', { ...this.throughWay(near.mask), hold: 0 });
+    } else if (!solid && r.coachWall) {
+      r.coachWall = null;
+      this.emitP(r, 'tipoff');
     }
   }
 
@@ -449,6 +494,10 @@ export class Race {
             this.app.audio.play('phase');
             this.emitP(r, 'popup', { text: 'PHASED', color: r.mode === RED ? '#ff4a6a' : r.mode === BLUE ? '#4ab0ff' : '#d8c8ff', small: true });
             this.stats.phased++;
+            if (o.type === 'wall' && this.coachLeft > 0) {
+              this.coachLeft--;
+              storage.set('rs.coach.phased', 6 - this.coachLeft);
+            }
           }
         }
         continue;
@@ -492,6 +541,8 @@ export class Race {
           this.aberr = 1;
           this.stats.crashes++;
           if (hard) this.emitP(r, 'popup', { text: 'CRASH', color: '#ff4a6a' });
+          const way = o.type === 'wall' && this.throughWay(o.mask);
+          if (way) this.emitP(r, 'tip', { ...way, text: `${way.text} TO PHASE THROUGH`, hold: 3 });
         }
       }
     }
