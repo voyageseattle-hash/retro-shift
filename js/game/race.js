@@ -112,8 +112,9 @@ export class Race {
     if (!d) return;
     const text = Array.isArray(d[kind]) ? pick(d[kind]) : d[kind];
     if (!text) return;
-    this.emit('comms', { name: d.name, car: r.car.name, color: r.color, text });
-    return { name: d.name, car: r.car.name, color: r.color, text };
+    const msg = { id: r.car.id, name: d.name, car: r.car.name, color: r.color, text, kind };
+    this.emit('comms', msg);
+    return msg;
   }
 
   emit(type, data = {}) {

@@ -5,14 +5,26 @@
 import { Audio as Engine } from './engine.js';
 import { SONGS, COURSE_SONG } from './songs.js';
 import { clamp } from './util.js';
+import { syllable } from './synth.js';
 import { BOTH, RED, BLUE } from '../world/shift.js';
 
 const WORLD = { [BOTH]: 'both', [RED]: 'red', [BLUE]: 'blue' };
+// Radio voices for the rival drivers and the two secret guests: pitch, formant scale, pace and colour.
+const RADIO_VOICES = {
+  vector: { f0: 0.72, form: 0.92, rate: 1.1 }, // VEX: low and unhurried
+  scanline: { f0: 1.3, form: 1.12, rate: 0.7, cons: ['b', 'g', 'y', 'w', ''] }, // LINA SCAN: fast and bright
+  polygon: { f0: 1.12, form: 1.05, rate: 0.9, wave: 'square', cons: ['g', 'b', 'h', ''] }, // POLLY GONE: precise
+  chroma: { f0: 1.22, form: 1.16, rate: 1.0, vib: true, cons: ['w', 'y', 'h', 'r', ''] }, // KROMA: theatrical
+  raster: { f0: 1.6, form: 1.2, rate: 0.78, wave: 'square' }, // RAZ: chiptune kid
+  glitch: { f0: 0.95, form: 1.0, rate: 0.85, wave: 'square', glitch: true }, // GL1TCH: comes through wrong
+  dash: { f0: 1.02, form: 1.04, rate: 0.9 }, // DASH: plucky
+  greatwedge: { f0: 0.6, form: 0.86, rate: 1.15, growl: 0.45 }, // Captain Finn Razorback
+};
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
 export class Audio extends Engine {
-  constructor() {
-    super();
+  constructor(ctx = null) {
+    super(ctx);
     this.player = null;
     this.rivals = new Map();
   }
@@ -92,6 +104,78 @@ export class Audio extends Engine {
     this.stopAllEngines();
     this.player = null;
     this.rivals.clear();
+  }
+
+  // ------------------------------------------------------------ radio voices
+  // Each rival mumbles in gibberish (Absurd Combat Racing's formant voices) through a radio: a key-up click and a
+  // little static, a band-limited, slightly crunchy voice, the music dipping under it, and a click off.
+  radioBus() {
+    if (this._radio) return this._radio;
+    const ctx = this.ctx;
+    const inp = ctx.createGain();
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 420;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 3200;
+    const peak = ctx.createBiquadFilter();
+    peak.type = 'peaking';
+    peak.frequency.value = 1600;
+    peak.gain.value = 6;
+    const crush = ctx.createWaveShaper();
+    crush.curve = this.curves.warm;
+    const out = ctx.createGain();
+    out.gain.value = 1.3;
+    inp.connect(hp).connect(lp).connect(peak).connect(crush).connect(out).connect(this.sfxDry);
+    this._radio = inp;
+    return inp;
+  }
+  // text sets the length; returns how long the transmission lasts
+  radio(voiceId, text = '', mood = 'talk', at0 = null) {
+    if (!this.ctx || (!this.offline && this.ctx.state !== 'running')) return 0;
+    const v = RADIO_VOICES[voiceId] || RADIO_VOICES.vector;
+    const bus = this.radioBus();
+    const t = (at0 ?? this.now()) + 0.02;
+    const r = (a, b) => a + Math.random() * (b - a);
+    const pick = (a) => a[Math.floor(Math.random() * a.length)];
+    // key up
+    this.tone('square', 2100, t, 0.025, 0.06, bus);
+    this.swell(t, 0.16, 0.18, bus, 'bandpass', 3000, 1400, 1.5);
+    const words = Math.max(2, Math.min(9, Math.round(text.split(/\s+/).length * 0.8)));
+    const P = 175;
+    let at = t + 0.12;
+    for (let w = 0; w < words; w++) {
+      const syl = 1 + (Math.random() < 0.45 ? 1 : 0);
+      for (let k = 0; k < syl; k++) {
+        const last = w === words - 1 && k === syl - 1;
+        // questions and exclamations bend the last syllable
+        const bend = last ? (text.endsWith('?') ? 1.35 : text.endsWith('!') ? 1.2 : mood === 'lose' ? 0.7 : 0.88) : 1;
+        let f0 = P * r(0.92, 1.12) * (v.lift || 1);
+        if (v.glitch && Math.random() < 0.3) f0 *= pick([0.5, 1.8, 2.4]);
+        const dur = r(0.06, 0.1) * (last ? 1.7 : 1);
+        syllable(this, at, { c: pick(v.cons || ['b', 'g', 'w', 'y', '', 'h', 'r']), v: pick(['a', 'e', 'i', 'o', 'u', 'ae']), f0, f1: f0 * bend, dur, vol: 0.9 }, v, bus);
+        at += dur * v.rate + 0.02;
+        // GL1TCH stutters
+        if (v.glitch && Math.random() < 0.25) {
+          syllable(this, at, { c: '', v: 'i', f0: f0 * 1.5, dur: 0.035, vol: 0.7 }, v, bus);
+          at += 0.05;
+        }
+      }
+      at += r(0.04, 0.09) * v.rate;
+    }
+    // key off: a tail of static and a click
+    this.swell(at, 0.1, 0.12, bus, 'bandpass', 1800, 2800, 1.5);
+    this.tone('square', 1500, at + 0.08, 0.02, 0.05, bus);
+    // dip the music under the voice
+    if (this.music) {
+      const g = this.music.gain;
+      const vol = this.musicVolume;
+      g.cancelScheduledValues(t);
+      g.setTargetAtTime(vol * 0.45, t, 0.05);
+      g.setTargetAtTime(vol, at + 0.1, 0.25);
+    }
+    return at - t + 0.15;
   }
 
   // ------------------------------------------------------------ effects

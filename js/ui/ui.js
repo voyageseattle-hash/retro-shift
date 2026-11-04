@@ -415,6 +415,14 @@ export class UI {
     const sc = SECRET_SCENES[id];
     this.app.audio.play('finish', 1);
     this.storyCard({ title: sc.title, sub: sc.from, lines: sc.lines, cls: 'secret', car: CARS.find((c) => c.id === id) }, () => this.afterScenes(fn));
+    // the guest speaks as their quoted lines appear
+    let free = 0;
+    sc.lines.forEach((l, k) => {
+      if (!l.includes('“')) return;
+      const at = Math.max((0.45 + k * 0.9) * 1000, free);
+      free = at + 2600;
+      setTimeout(() => this.app.audio.radio(id, l), at);
+    });
   }
   // The cup intro (and, the first time ever, the premise) before race one of a Grand Prix.
   gpIntro(cupId, go) {
@@ -455,6 +463,10 @@ export class UI {
 
   quoteHtml(race) {
     const q = race.quote;
+    if (q && !race.quotePlayed) {
+      race.quotePlayed = true;
+      setTimeout(() => this.app.audio.radio(q.id, q.text, q.kind), 500);
+    }
     return q ? `<div class="quote"><b style="color:${hex(q.color)}">${q.name}</b> “${q.text}”</div>` : '';
   }
 
@@ -650,6 +662,7 @@ export class UI {
           c.querySelector('span').textContent = e.text;
           c.style.setProperty('--c', hex(e.color));
           c.classList.add('on');
+          this.app.audio.radio(e.id, e.text, e.kind === 'lose' ? 'lose' : 'talk');
           clearTimeout(this.commsTimer);
           this.commsTimer = setTimeout(() => c.classList.remove('on'), 4200);
           break;
