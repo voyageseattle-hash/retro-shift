@@ -8,6 +8,8 @@ import { M, RED, BLUE, colorForMask } from './shift.js';
 import { boardTexture } from './signs.js';
 
 const TEASE = ['NOTHING TO SEE HERE', 'NO ROAD AHEAD', 'DEAD END', 'KEEP TO THE ROAD', 'ROAD CLOSED', 'PRIVATE PROPERTY'];
+// what a hidden bridge passes for where it crosses the road: overhead traffic signs
+const GANTRY = [['NEXT EXIT', 'NONE'], ['LANES MERGE', 'KEEP RIGHT'], ['SPEED LIMIT', 'NONE'], ['NO EXIT', 'KEEP DRIVING'], ['ALL LANES', 'STRAIGHT ON'], ['EXIT CLOSED', 'NO DETOUR']];
 
 // Is (x, z) at height y clear of every road but `skip`?
 function offRoads(world, skip, x, z, y, r) {
@@ -75,6 +77,59 @@ export function buildCovers(world) {
       const ty = Math.atan2(b.thx[j], b.thz[j]);
       L.tower(cover, p.x, world.floorY, p.z, b.halfW * 2 + 1, h, b.ds * step - 0.4, ty);
     }
+    // where it crosses over a road, it passes for an overhead sign gantry spanning that road at the bridge's height
+    let run = [];
+    const flush = () => {
+      if (run.length >= 2) gantry(world, b, run[Math.floor(run.length / 2)], cover, lens, n + run[0].j);
+      run = [];
+    };
+    for (const path of world.paths) {
+      if (path === b) continue;
+      const fq = {};
+      for (let j = 0; j < b.N; j += 2) {
+        const over = path.frame(b.px[j], b.pz[j], -1, fq) && Math.abs(fq.lat) < path.halfW + 1 && b.py[j] - fq.y > 4 && b.py[j] - fq.y < 40;
+        if (over) run.push({ j, path, i: fq.i, y: fq.y });
+        else flush();
+      }
+      flush();
+    }
     n++;
   }
+}
+
+// An overhead gantry across `on.path` where the hidden route passes over it: a girder at the bridge's height on two
+// posts beside the road, and a sign board hung under it facing the traffic. Gone in the route's own lens, where
+// the bridge itself is there instead.
+function gantry(world, b, on, cover, lens, seed) {
+  const L = world.layers;
+  const p = on.path;
+  const i = on.i;
+  const top = b.py[on.j] - 0.6;
+  const span = p.halfW + 2.5;
+  const a = p.point(i, -span, 0, new THREE.Vector3());
+  const c = p.point(i, span, 0, new THREE.Vector3());
+  // posts and girder
+  for (const q of [a, c]) L.tower(cover, q.x, q.y, q.z, 0.9, top - q.y, 0.9, Math.atan2(p.thx[i], p.thz[i]));
+  const mid = a.clone().lerp(c, 0.5);
+  const yaw = Math.atan2(p.thx[i], p.thz[i]);
+  L.box(cover, mid.x, top - 0.6, mid.z, span * 2, 1.2, 1.4, yaw, null, true);
+  // the board, facing the traffic
+  const [t1, t2] = GANTRY[seed % GANTRY.length];
+  // hung clear of the cars (4.5 m of headroom), shrunk to fit under a low bridge, left off under a very low one
+  let W = Math.min(p.halfW * 1.4, 14);
+  let H = (W * 200) / 512;
+  const room = top - 1.2 - (mid.y + 4.5);
+  if (room < 1.6) return;
+  if (H > room) {
+    H = room;
+    W = (H * 512) / 200;
+  }
+  const mat = new THREE.MeshBasicMaterial({ map: boardTexture(t1, t2, colorForMask(cover), 0), transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(W, H), mat);
+  board.position.set(mid.x, top - 1.2 - H / 2, mid.z);
+  board.rotation.y = yaw + Math.PI;
+  board.renderOrder = 10;
+  world.group.add(board);
+  L.signs.push({ mat, hideIn: lens });
+  L.box(cover, mid.x, top - 1.2 - H / 2, mid.z, W + 0.4, H + 0.4, 0.3, yaw, null, false);
 }
