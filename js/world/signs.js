@@ -1,6 +1,6 @@
-// Overhead warning boards, so the course tells you what's coming instead of the HUD: a sign ahead of every shortcut
-// (which side, and which world it's in), every one-world wall and every one-world stretch of road. The secret
-// routes (hatches, facades) stay unsigned.
+// Overhead warning boards, so the course tells you what's coming instead of the HUD: a sign ahead of every
+// one-world wall, every one-world stretch of road and every shortcut you can see in BOTH. Lens-only routes are
+// secrets and stay unsigned (covers.js hides them).
 
 import * as THREE from '../../vendor/three.js';
 import { M, RED, BLUE, solidIn, colorForMask } from './shift.js';
@@ -15,7 +15,7 @@ function lensWords(mask, gone) {
   return red ? 'RED' : blue ? 'BLUE' : '';
 }
 
-function boardTexture(title, sub, color, arrow) {
+export function boardTexture(title, sub, color, arrow) {
   const cv = document.createElement('canvas');
   cv.width = 512;
   cv.height = 200;
@@ -104,7 +104,8 @@ export function buildSigns(world) {
   const back = (path, at, metres) => path.index(at) - Math.round(metres / path.ds);
   for (const p of world.paths) {
     const b = p.def;
-    if (p === main || !b?.label || b.hatch || b.facade) continue;
+    // lens-only routes are secrets, hidden behind the other world's billboards and buildings (covers.js)
+    if (p === main || !b?.label || b.hatch || b.facade || b.mask === M.RO || b.mask === M.BO) continue;
     const where = lensWords(b.mask ?? M.ALL, false);
     const sub = b.mask === M.RO || b.mask === M.BO ? `${where} LENS ONLY` : where ? `${where} ROAD` : b.mask === M.X ? 'BOTH WORLDS ONLY' : '';
     addSign(world, main, back(main, b.from, 75), p.side, b.label, sub, b.mask ?? M.ALL, p.side);

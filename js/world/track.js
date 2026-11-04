@@ -9,6 +9,7 @@ import { M, BOTH, solidIn, colorForMask, COLORS } from './shift.js';
 import { Layers } from './layers.js';
 import { buildDecor } from './decor.js';
 import { buildSigns } from './signs.js';
+import { buildCovers } from './covers.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -257,6 +258,7 @@ export class TrackWorld {
     this.buildStart();
     buildDecor(this);
     buildSigns(this);
+    buildCovers(this);
     this.group.add(this.layers.build());
     this._f = {};
     this._g = { y: -1e4, nx: 0, ny: 1, nz: 0, lat: 0, path: null, i: 0, f: 0, rx: 1, rz: 0, mask: 0, onRoad: false };
