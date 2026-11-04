@@ -144,6 +144,8 @@ export class RaceAI {
       if (m !== BOTH) s += afford ? 3 : 200;
       if (m !== BOTH && saving) s += 6;
       if (m === r.mode) s -= 1.5;
+      // a storm in this lens: worth dodging, unless it's the one guarding the shortcut we're going for
+      if (r.session?.storms?.threat(r, m) && !(saving && m !== BOTH)) s += 5;
       return s;
     };
     this.think -= dt;

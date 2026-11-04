@@ -10,6 +10,7 @@ import { Layers } from './layers.js';
 import { buildDecor } from './decor.js';
 import { buildSigns } from './signs.js';
 import { buildCovers } from './covers.js';
+import { layStorms } from './storms-def.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -257,6 +258,7 @@ export class TrackWorld {
     this.buildFeatures();
     this.buildStart();
     buildDecor(this);
+    this.storms = layStorms(this);
     buildSigns(this);
     buildCovers(this);
     this.group.add(this.layers.build());

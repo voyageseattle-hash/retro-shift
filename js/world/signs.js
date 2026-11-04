@@ -117,6 +117,10 @@ export function buildSigns(world) {
     const name = o.mask === M.X ? 'OVERLAP' : lensWords(o.mask, false) || 'WHITE';
     addSign(world, main, back(main, o.at, 60), 0, `${name} WALL`, `PASSES IN ${pass}`, o.mask);
   }
+  // a storm ahead, in its world's colour (it goes with that world, like the storm)
+  for (const z of world.storms || []) {
+    addSign(world, main, back(main, z.u0 + 0.035, 120), 0, z.name, z.kind === 'meteor' ? 'RED WORLD · GO BLUE OR RIDE IT OUT' : 'BLUE WORLD · GO RED OR RIDE IT OUT', z.mask);
+  }
   for (const g of def.gaps || []) {
     const path = g.path ? world.paths.find((q) => q.id === g.path) : main;
     if (!path || g.secret) continue;

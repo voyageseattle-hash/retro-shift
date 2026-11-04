@@ -541,6 +541,13 @@ export class Audio extends Engine {
         this.thump(t, 110, 30, 0.5, 0.5);
         this.arp(t + 0.08, [96, 91, 99, 88, 94], 0.035, 0.06, 'bell');
         break;
+      case 'meteor':
+        super.play('explosion', 0.8);
+        break;
+      case 'strike':
+        super.play('thunder', 0.9);
+        super.play('bolt');
+        break;
       case 'smash':
         super.play('crunch');
         super.play('spark');

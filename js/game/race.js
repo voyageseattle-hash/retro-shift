@@ -14,6 +14,7 @@ import { monoDef, medalFor, recordMedal } from './modes.js';
 import { driverOf, pick } from './story.js';
 import { Debris } from './wreck.js';
 import { SpeedLines } from './speedlines.js';
+import { Storms } from './storms.js';
 
 const _v = new THREE.Vector3();
 const _a = new THREE.Vector3();
@@ -60,6 +61,8 @@ export class Race {
     this.scene.add(this.debris.mesh);
     this.speedLines = new SpeedLines();
     this.scene.add(this.speedLines.mesh);
+    this.storms = new Storms(this);
+    this.scene.add(this.storms.group);
     this.slowT = 0;
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
     // browser simulates only its own racers (the host also runs the AI); everyone else is a puppet fed by the network.
@@ -402,6 +405,7 @@ export class Race {
     }
     for (const g of this.ghosts) g.update(this.raceTime, p.mode);
     this.debris.update(sim);
+    this.storms.update(sim, p);
 
     // visuals
     this.app.net?.applyPuppets(this);

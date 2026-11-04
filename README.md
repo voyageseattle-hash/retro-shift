@@ -64,6 +64,10 @@ Eight neon craft, faceted hulls that catch the red world on one flank and the bl
 
 Staff ghosts live in `data/staff/` and are recorded by `node tools/make-staff.mjs` (the race AI driving each course alone).
 
+## Storms
+
+From Layered Grid on, every course has a storm over one of its hidden routes, and the bigger courses have two. A METEOR STORM rains down in the red world over a red-only route, and a LIGHTNING STORM strikes in the blue world over a blue-only one. A ring on the road marks each strike a second before it lands. A direct hit wrecks you, and a near miss spins you out. Shift to the other lens and the storm isn't there, but neither is the shortcut. Ride it out in the storm's lens and the shortcut is yours. Sit in BOTH and you get the storm and no shortcut. A sign before each storm says which world it's in.
+
 ## Wrecks and takedowns
 
 Hit a wall or a block flat out and your car comes apart into its own neon lines. They tumble, bounce down the road and flicker out, the race drops into slow motion for a beat, and you're back on the road a second later. Ram a rival hard enough and it's a TAKEDOWN: their car breaks apart instead. Rivals wreck each other too. Blocks smash into pieces and come back twenty seconds later, and every scrape and bump throws sparks and tears a few lines off the car.
