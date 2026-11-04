@@ -75,6 +75,17 @@ export class Audio extends Engine {
     }
     return buf.duration;
   }
+  // The studio card's sting: a bright detuned chord stab that rings out into the room.
+  splashSting() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime + 0.03;
+    const out = this.sfxDry || this.sfx;
+    [52, 59, 64, 68, 71, 76].forEach((m, k) => {
+      const f = 440 * Math.pow(2, (m - 69) / 12);
+      this.tone(k % 2 ? 'square' : 'sawtooth', f, t + k * 0.035, 1.1, 0.05, out);
+      if (this.roomIn) this.tone('sine', f * 2, t + k * 0.035, 1.4, 0.03, this.roomIn);
+    });
+  }
   // The title shout: an engine winding up, a whoosh, and the announcer over the top.
   titleShout(delay = 0.15) {
     if (!this.ctx) return;
