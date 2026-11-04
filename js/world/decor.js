@@ -104,11 +104,19 @@ const DECOR = {
     };
     let prevR = null;
     let prevB = null;
+    let mouths = 0;
     for (let i = 0; i < main.N; i += 5) {
       const inTunnel = Math.sin((i / main.N) * Math.PI * 2 * 3) > -0.3;
       if (!inTunnel) {
         prevR = prevB = null;
         continue;
+      }
+      // The second tunnel's mouth is sealed in the blue world: an iris door you can only pass through in RED.
+      if (!prevR && ++mouths === 2 && world.addDoor && !world.def.noDoor) {
+        const at = main.frac(i + 1);
+        world.addObstacle({ type: 'wall', door: true, at, mask: M.B, r: main.halfW + 4.5 });
+        const tips = (world.def.tips ||= []);
+        if (!tips.some((t) => t.door)) tips.push({ door: true, at: main.frac(Math.max(0, i - 40)), text: 'TUNNEL SEALED IN BLUE: SHIFT TO RED', key: 'red' });
       }
       const R = hex(i, M.R, main.halfW + 4.5, 0);
       const B = hex(i + 2, M.B, main.halfW + 3.5, Math.PI / 6);

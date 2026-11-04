@@ -212,11 +212,18 @@ export class Audio extends Engine {
       lastR = r;
     }
     eg.gain.linearRampToValueAtTime(0, end);
-    mixG.connect(shaper).connect(res1).connect(res2).connect(lp).connect(eg).connect(out);
+    // the engine ducks hard under the announcer, then swells back as the voice's echoes tail off
+    const duck = ctx.createGain();
+    duck.gain.setValueAtTime(1, t);
+    duck.gain.setValueAtTime(1, t + 3.5);
+    duck.gain.linearRampToValueAtTime(0.28, t + 3.62);
+    duck.gain.setValueAtTime(0.28, t + 4.9);
+    duck.gain.linearRampToValueAtTime(0.6, t + 5.6);
+    mixG.connect(shaper).connect(res1).connect(res2).connect(lp).connect(eg).connect(duck).connect(out);
     if (this.roomIn) {
       const w = ctx.createGain();
       w.gain.value = 0.25;
-      eg.connect(w).connect(this.roomIn);
+      duck.connect(w).connect(this.roomIn);
     }
     for (const n of [sw, chug, body, lope, jit, nz]) {
       n.start(t);
@@ -226,7 +233,7 @@ export class Audio extends Engine {
     this.swell?.(t + 2.2, 0.08, 0.3, out, 'lowpass', 900, 200, 0.8);
     // the whoosh as the logo slams in, and the announcer on top of the scream
     this.swell?.(t + 3.3, 0.6, 0.3, out, 'bandpass', 300, 5000, 1.2);
-    this.announce('title', delay + 3.55, 1.25);
+    this.announce('title', delay + 3.55, 1.9);
   }
   get ready() {
     return !!this.ctx && this.ctx.state === 'running';

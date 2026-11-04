@@ -420,6 +420,53 @@ export class TrackWorld {
     }
   }
 
+  // A tunnel mouth that is shut in one world: a hexagonal iris filling the whole bore. It collides like a wall
+  // (shift to the other world and it's open), and its blades turn slowly so it reads as a mechanism, not a box.
+  addDoor(o, path, i, w, len, mask, mats, root) {
+    const r = o.r ?? path.halfW + 4.5;
+    const cy = o.cy ?? path.halfW * 0.35;
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(r, 6), mats.fill);
+    disc.rotation.z = Math.PI / 2;
+    root.add(disc);
+    const rim = [];
+    const blades = [];
+    for (let k = 0; k < 6; k++) {
+      const a0 = (k / 6) * Math.PI * 2;
+      const a1 = ((k + 1) / 6) * Math.PI * 2;
+      rim.push(Math.sin(a0) * r, Math.cos(a0) * r, 0, Math.sin(a1) * r, Math.cos(a1) * r, 0);
+      // iris blades: from each corner, a curved cut toward a small hexagonal hole in the middle
+      for (let s = 0; s < 4; s++) {
+        const f0 = s / 4;
+        const f1 = (s + 1) / 4;
+        const b0 = a0 + f0 * 0.9;
+        const b1 = a0 + f1 * 0.9;
+        const r0 = r * (1 - f0 * 0.82);
+        const r1 = r * (1 - f1 * 0.82);
+        blades.push(Math.sin(b0) * r0, Math.cos(b0) * r0, 0.05, Math.sin(b1) * r1, Math.cos(b1) * r1, 0.05);
+      }
+    }
+    const seg = (pos) => {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      return new THREE.LineSegments(g, mats.wire);
+    };
+    const iris = seg(blades);
+    root.add(seg(rim), iris);
+    // a warning chevron ring on the frame
+    const ring = new THREE.Mesh(new THREE.RingGeometry(r * 0.92, r, 6, 1), mats.ribbon);
+    ring.rotation.z = Math.PI / 2;
+    root.add(ring);
+    const p = path.point(i, 0, cy);
+    root.position.copy(p);
+    root.rotation.y = Math.atan2(path.thx[i], path.thz[i]);
+    this.group.add(root);
+    const h = 4.2;
+    const ob = { path, i, f: path.frac(i), lat: 0, w, len, h, mask, type: 'wall', door: true, root, sweep: 0, phase: 0, baseLat: 0 };
+    this.obstacles.push(ob);
+    this.animated.push((t) => (iris.rotation.z = t * 0.35));
+    return ob;
+  }
+
   // ------------------------------------------------------------------ obstacles, pads, shards
   buildFeatures() {
     const def = this.def;
@@ -465,6 +512,7 @@ export class TrackWorld {
     const mask = o.mask ?? M.R;
     const mats = this.layers.materials(mask);
     const root = new THREE.Group();
+    if (o.door) return this.addDoor(o, path, i, w, len, mask, mats, root);
     const geo = new THREE.BoxGeometry(w * 2, h, len * 2);
     const fill = new THREE.Mesh(geo, mats.fill);
     const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), mats.wire);
