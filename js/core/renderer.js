@@ -1,0 +1,225 @@
+import * as THREE from '../../vendor/three.js';
+
+// Ported from WEDGEWRECK RALLY (bloom + grade composer), retuned for neon wireframe.
+// Final colour grade, per stage: saturation, contrast, a highlight tint and a shadow lift colour,
+// plus vignette and film grain. Hits add chromatic aberration; lightning adds a flash.
+export const GRADES = {
+  neon: { sat: 1.2, contrast: 1.12, tint: [1, 1, 1], lift: [0.1, 0.0, 0.2], vignette: 0.45 },
+  default: { sat: 1.08, contrast: 1.05, tint: [1, 1, 1], lift: [0.2, 0.1, 0.3], vignette: 0.32 },
+  mesa: { sat: 1.1, contrast: 1.06, tint: [1.04, 0.99, 0.94], lift: [0.45, 0.12, 0.5], vignette: 0.34 },
+  city: { sat: 1.12, contrast: 1.08, tint: [0.97, 0.98, 1.06], lift: [0.1, 0.15, 0.55], vignette: 0.4 },
+  magma: { sat: 1.06, contrast: 1.1, tint: [1.06, 0.97, 0.9], lift: [0.5, 0.1, 0.05], vignette: 0.42 },
+  scrapyard: { sat: 1.05, contrast: 1.07, tint: [1.03, 1, 0.97], lift: [0.05, 0.25, 0.35], vignette: 0.36 },
+  crucible: { sat: 1.04, contrast: 1.12, tint: [1.07, 0.95, 0.88], lift: [0.55, 0.05, 0.02], vignette: 0.46 },
+  island: { sat: 1.1, contrast: 1.04, tint: [0.98, 0.98, 1.05], lift: [0.25, 0.1, 0.55], vignette: 0.36 },
+  lagoon: { sat: 1.12, contrast: 1.04, tint: [1.03, 1, 0.97], lift: [0.05, 0.3, 0.4], vignette: 0.28 },
+  sky: { sat: 1.08, contrast: 1.03, tint: [1.04, 0.98, 0.98], lift: [0.35, 0.15, 0.5], vignette: 0.3 },
+};
+
+const GRADE_SHADER = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uSat: { value: 1 },
+    uContrast: { value: 1 },
+    uTint: { value: new THREE.Vector3(1, 1, 1) },
+    uLift: { value: new THREE.Vector3() },
+    uVignette: { value: 0.3 },
+    uAberr: { value: 0 },
+    uFlash: { value: 0 },
+    uTime: { value: 0 },
+    uGrain: { value: 0.025 },
+  },
+  vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float uSat, uContrast, uVignette, uAberr, uFlash, uTime, uGrain;
+    uniform vec3 uTint, uLift;
+    varying vec2 vUv;
+    void main() {
+      vec2 d = vUv - 0.5;
+      float r2 = dot(d, d);
+      vec3 c;
+      if (uAberr > 0.002) {
+        vec2 off = d * uAberr * 0.025;
+        c = vec3(texture2D(tDiffuse, vUv + off).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - off).b);
+      } else c = texture2D(tDiffuse, vUv).rgb;
+      c = (c - 0.5) * uContrast + 0.5;
+      float l = dot(c, vec3(0.299, 0.587, 0.114));
+      c = mix(vec3(l), c, uSat);
+      c += uLift * (1.0 - smoothstep(0.0, 0.45, l)) * 0.07;
+      c *= mix(vec3(1.0), uTint, smoothstep(0.25, 1.0, l));
+      c *= 1.0 - uVignette * smoothstep(0.12, 0.62, r2 * 1.5);
+      c += uFlash * vec3(0.75, 0.85, 1.0);
+      float n = fract(sin(dot(vUv * 1000.0 + uTime, vec2(12.9898, 78.233))) * 43758.5453);
+      c += (n - 0.5) * uGrain;
+      gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+    }`,
+};
+
+const PRESETS = {
+  high: { pixelRatio: 1.75, shadows: 0, bloom: true, fx: 1 },
+  medium: { pixelRatio: 1.1, shadows: 0, bloom: true, fx: 0.7 },
+  low: { pixelRatio: 0.75, shadows: 0, bloom: true, fx: 0.45 },
+};
+
+export class Renderer {
+  constructor(container) {
+    const r = (this.renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance',
+      stencil: false,
+    }));
+    r.outputColorSpace = THREE.SRGBColorSpace;
+    r.toneMapping = THREE.NoToneMapping;
+    r.toneMappingExposure = 1.05;
+    r.shadowMap.enabled = true;
+    r.shadowMap.type = THREE.PCFShadowMap;
+    container.appendChild(r.domElement);
+
+    this.composer = new THREE.EffectComposer(r);
+    this.renderPass = new THREE.RenderPass(new THREE.Scene(), new THREE.PerspectiveCamera());
+    this.bloom = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), 0.8, 0.35, 0.3);
+    this.output = new THREE.OutputPass();
+    this.grade = new THREE.ShaderPass(GRADE_SHADER);
+    this.composer.addPass(this.renderPass);
+    this.composer.addPass(this.bloom);
+    this.composer.addPass(this.output);
+    this.composer.addPass(this.grade);
+    this.gradeState = { id: 'default', aberr: 0, flash: 0 };
+
+    // Mirror mode (the MIRRORBALL magic code): the scene pass renders through a left-right flipped
+    // projection, so triangle winding flips with it. three.js only accounts for mirrored objects,
+    // so front-face selection is inverted at the GL call while a mirrored view draws.
+    this.mirror = false;
+    this.flipWinding = false;
+    const gl = r.getContext();
+    const frontFace = gl.frontFace.bind(gl);
+    gl.frontFace = (mode) => frontFace(this.flipWinding ? (mode === gl.CW ? gl.CCW : gl.CW) : mode);
+    const scenePass = this.renderPass.render.bind(this.renderPass);
+    this.renderPass.render = (...args) => this.mirrored(this.renderPass.camera, () => scenePass(...args));
+
+    this.pmrem = new THREE.PMREMGenerator(r);
+    this.quality = 'high';
+    this.autoQuality = true;
+    this.frameTimes = [];
+    this.lowFpsTime = 0;
+    this.width = 1;
+    this.height = 1;
+    this.onResize = [];
+    window.addEventListener('resize', () => this.resize());
+    this.setQuality(this.detectQuality());
+  }
+
+  detectQuality() {
+    const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && window.innerWidth < 1100);
+    return mobile ? 'medium' : 'high';
+  }
+
+  setQuality(q) {
+    this.quality = q;
+    const p = PRESETS[q];
+    this.preset = p;
+    this.renderer.shadowMap.enabled = p.shadows > 0;
+    this.resize();
+    for (const fn of this.onResize) fn();
+  }
+
+  resize() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    this.width = w;
+    this.height = h;
+    const pr = Math.min(window.devicePixelRatio || 1, this.preset.pixelRatio);
+    this.renderer.setPixelRatio(pr);
+    this.renderer.setSize(w, h);
+    this.composer.setPixelRatio(pr);
+    this.composer.setSize(w, h);
+    for (const fn of this.onResize) fn();
+  }
+
+  environmentFrom(scene) {
+    const rt = this.pmrem.fromScene(scene, 0, 0.1, 2000);
+    return rt.texture;
+  }
+
+  // Grade for the next frame: a stage id from GRADES plus hit aberration and flash (0..1).
+  setGrade(id, aberr = 0, flash = 0) {
+    const g = this.gradeState;
+    g.id = id;
+    g.aberr = aberr;
+    g.flash = flash;
+  }
+  applyGrade() {
+    const g = this.gradeState;
+    const G = GRADES[g.id] || GRADES.default;
+    const u = this.grade.uniforms;
+    u.uSat.value = G.sat;
+    u.uContrast.value = G.contrast;
+    u.uTint.value.set(...G.tint);
+    u.uLift.value.set(...G.lift);
+    u.uVignette.value = G.vignette;
+    u.uAberr.value = g.aberr;
+    u.uFlash.value = g.flash * 0.18;
+    u.uTime.value = (performance.now() * 0.001) % 100;
+    // Grain only where there are enough pixels for it to read as texture.
+    u.uGrain.value = this.quality === 'high' ? 0.022 : 0.012;
+  }
+
+  // Runs draw() with the camera flipped left-right when mirror mode is on.
+  mirrored(camera, draw) {
+    if (!this.mirror) return draw();
+    const pm = camera.projectionMatrix;
+    pm.elements[0] *= -1;
+    camera.projectionMatrixInverse.copy(pm).invert();
+    this.flipWinding = true;
+    this.renderer.resetState();
+    try {
+      draw();
+    } finally {
+      pm.elements[0] *= -1;
+      camera.projectionMatrixInverse.copy(pm).invert();
+      this.flipWinding = false;
+      this.renderer.resetState();
+    }
+  }
+
+  // views: [{ camera, x, y, w, h }] in 0..1 screen fractions.
+  render(scene, views, bloomStrength = 0.75) {
+    const r = this.renderer;
+    if (views.length === 1 && this.preset.bloom) {
+      this.renderPass.scene = scene;
+      this.renderPass.camera = views[0].camera;
+      // Kept a little under each stage's nominal strength: neon reads better without the haze.
+      this.bloom.strength = bloomStrength;
+      this.applyGrade();
+      this.composer.render();
+      return;
+    }
+    const W = this.width;
+    const H = this.height;
+    r.setScissorTest(views.length > 1);
+    for (const v of views) {
+      const x = v.x * W;
+      const y = v.y * H;
+      const w = v.w * W;
+      const h = v.h * H;
+      r.setViewport(x, y, w, h);
+      r.setScissor(x, y, w, h);
+      this.mirrored(v.camera, () => r.render(scene, v.camera));
+    }
+    r.setScissorTest(false);
+    r.setViewport(0, 0, W, H);
+  }
+
+  // Drops quality if the frame rate stays low, so slower machines stay playable.
+  trackFrame(dt) {
+    if (!this.autoQuality) return;
+    if (dt > 0.05) this.lowFpsTime += dt;
+    else this.lowFpsTime = Math.max(0, this.lowFpsTime - dt * 0.5);
+    if (this.lowFpsTime > 3) {
+      this.lowFpsTime = 0;
+      if (this.quality === 'high') this.setQuality('medium');
+      else if (this.quality === 'medium') this.setQuality('low');
+    }
+  }
+}

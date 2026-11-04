@@ -1,0 +1,347 @@
+// The ten courses from the Retro Shift concept sheets. Each one is a closed main loop (x, z, y control points) plus
+// branches, gaps, walls, obstacle fields, boost pads and SHIFT shards, every piece tagged with the worlds it's
+// solid in (shift.js): M.R red world, M.B blue world, M.RO / M.BO a single lens only, M.X the overlap only.
+//
+// Features are placed with P(k, t): the fraction of the lap at control point k (plus t of the way to k + 1).
+
+import { M } from './shift.js';
+
+function fractions(points) {
+  const d = [0];
+  for (let i = 1; i <= points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i % points.length];
+    d.push(d[i - 1] + Math.hypot(b[0] - a[0], b[1] - a[1], (b[2] || 0) - (a[2] || 0)));
+  }
+  const L = d[d.length - 1];
+  return (k, t = 0) => {
+    const i = ((k % points.length) + points.length) % points.length;
+    return ((d[i] + (d[i + 1] - d[i]) * t) / L) % 1;
+  };
+}
+
+// Small builders for repeated patterns.
+const wall = (at, mask) => ({ type: 'wall', at, mask });
+const gate = (at, mask, lat) => ({ type: 'gate', at, mask, lat });
+const block = (at, lat, mask, size = 3) => ({ type: 'block', at, lat, mask, size });
+function field(at, len, n, seed, masks = [M.R, M.B]) {
+  const out = [];
+  let s = seed;
+  const r = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  for (let k = 0; k < n; k++) out.push(block(at + (len * (k + 0.5)) / n, (r() - 0.5) * 1.5, masks[k % masks.length], 2.4 + r() * 1.6));
+  return out;
+}
+function chicane(at, step, n, maskA = M.R, maskB = M.B) {
+  const out = [];
+  for (let k = 0; k < n; k++) out.push(gate(at + k * step, k % 2 ? maskB : maskA, k % 2 ? 1 : -1));
+  return out;
+}
+
+function make(def) {
+  const P = fractions(def.points);
+  const f = def.features(P);
+  return { ...def, ...f, features: undefined };
+}
+
+export const TRACKS = [
+  // ------------------------------------------------------------------ 01
+  make({
+    id: 'core',
+    num: '01',
+    name: 'CORE CIRCUIT',
+    blurb: 'Clean, classic, and fast. Learn the shift.',
+    decor: 'core',
+    seed: 11,
+    laps: 3,
+    sun: 0,
+    points: [
+      [0, 0, 0], [0, 200, 0], [20, 320, 2], [110, 390, 6], [240, 380, 8], [320, 300, 8], [300, 190, 6], [230, 150, 4],
+      [230, 70, 2], [320, 10, 4], [350, -120, 8], [270, -230, 6], [120, -250, 2], [20, -150, 0],
+    ],
+    features: (P) => ({
+      branches: [{ from: P(5, 0.2), to: P(9, 0.1), mask: M.B, side: 1, lift: 7, label: 'BLUE SHORTCUT' }],
+      gaps: [{ at: P(10, 0.3), len: 46, mask: M.R, noRails: true }],
+      obstacles: [wall(P(1, 0.45), M.B), wall(P(3, 0.3), M.R), ...field(P(11, 0.1), 0.05, 6, 3), wall(P(13, 0.4), M.B)],
+      boosts: [{ at: P(0, 0.5), lat: 0 }, { at: P(7, 0.6), lat: -0.4 }, { at: P(12, 0.2), lat: 0.4, mask: M.R }],
+      shards: [{ at: P(1, 0.15), lat: 0, n: 3 }, { at: P(6, 0.3), lat: -0.4, n: 3 }, { at: P(12, 0.6), lat: 0, n: 3, mask: M.B }],
+      tips: [
+        { at: P(1, 0.25), text: 'BLUE WALL AHEAD: SHIFT TO RED', key: 'red' },
+        { at: P(3, 0.05), text: 'RED WALL: SHIFT TO BLUE', key: 'blue' },
+        { at: P(5, 0.0), text: 'BLUE SHORTCUT ON THE RIGHT', key: 'blue' },
+        { at: P(10, 0.1), text: 'RED BRIDGE: DON’T BE IN BLUE', key: 'both' },
+      ],
+    }),
+  }),
+
+  // ------------------------------------------------------------------ 02
+  make({
+    id: 'layered',
+    num: '02',
+    name: 'LAYERED GRID',
+    blurb: 'Multi-level tracks with overlapping routes and hidden cuts.',
+    decor: 'layered',
+    seed: 22,
+    laps: 3,
+    sun: 1,
+    points: [
+      [0, 0, 0], [0, 180, 6], [60, 300, 16], [180, 330, 22], [300, 280, 22], [330, 160, 16], [260, 60, 8], [140, 40, 2],
+      [60, -40, 0], [80, -170, 6], [200, -230, 14], [330, -200, 18], [380, -80, 12], [300, -20, 6], [160, -100, 2], [40, -120, 0],
+    ],
+    features: (P) => ({
+      branches: [
+        { from: P(1, 0.6), to: P(5, 0.3), mask: M.R, side: 1, lift: 18, label: 'RED OVERPASS' },
+        { from: P(9, 0.2), to: P(13, 0.2), mask: M.BO, side: -1, lift: 10, label: 'BLUE-ONLY CUT' },
+      ],
+      gaps: [{ at: P(6, 0.2), len: 40, mask: M.B, noRails: true }],
+      obstacles: [...chicane(P(3, 0.1), 0.012, 4), wall(P(7, 0.5), M.R), ...field(P(10, 0.2), 0.06, 8, 7), wall(P(14, 0.3), M.B)],
+      boosts: [{ at: P(0, 0.4) }, { at: P(8, 0.5), lat: 0.5, mask: M.B }, { at: P(12, 0.3), mask: M.R, lat: -0.4 }],
+      shards: [{ at: P(2, 0.2), n: 3 }, { at: P(8, 0.2), lat: -0.4, n: 3 }, { at: P(15, 0.2), n: 3, mask: M.R }],
+    }),
+  }),
+
+  // ------------------------------------------------------------------ 03
+  make({
+    id: 'tunnels',
+    num: '03',
+    name: 'SHIFT TUNNELS',
+    blurb: 'Geometric tunnels that reconfigure between worlds.',
+    decor: 'tunnels',
+    seed: 33,
+    laps: 3,
+    sun: 2,
+    points: [
+      [0, 0, 0], [30, 220, 0], [-20, 420, 4], [80, 560, 10], [240, 580, 12], [360, 470, 8], [330, 300, 4], [400, 160, 2],
+      [380, -40, 6], [260, -140, 8], [100, -170, 4], [20, -100, 0],
+    ],
+    features: (P) => ({
+      branches: [{ from: P(5, 0.4), to: P(8, 0.3), mask: M.R, side: -1, lift: 4, bulge: -20, label: 'RED BORE' }],
+      gaps: [
+        { at: P(2, 0.3), len: 34, mask: M.R, noRails: true },
+        { at: P(3, 0.5), len: 34, mask: M.B, noRails: true },
+        { at: P(9, 0.4), len: 30, mask: M.X, noRails: true },
+      ],
+      obstacles: [...chicane(P(0, 0.4), 0.01, 6), wall(P(6, 0.2), M.B), wall(P(6, 0.7), M.R), ...field(P(10, 0.1), 0.05, 6, 11)],
+      boosts: [{ at: P(1, 0.6) }, { at: P(7, 0.2), mask: M.B }, { at: P(11, 0.3) }],
+      shards: [{ at: P(1, 0.1), n: 4 }, { at: P(5, 0.1), n: 3, lat: 0.4 }, { at: P(8, 0.6), n: 3, mask: M.B }],
+    }),
+  }),
+
+  // ------------------------------------------------------------------ 04
+  make({
+    id: 'orbital',
+    num: '04',
+    name: 'ORBITAL LOOPS',
+    blurb: 'Large, open spaces with intertwined loops.',
+    decor: 'orbital',
+    seed: 44,
+    laps: 3,
+    sun: 1,
+    points: [
+      [0, 0, 10], [0, 220, 18], [-120, 360, 30], [-260, 300, 38], [-280, 140, 30], [-160, 80, 22], [-60, 160, 30], [-80, 300, 44],
+      [60, 420, 50], [260, 380, 40], [330, 220, 28], [260, 60, 20], [300, -120, 16], [160, -240, 12], [20, -160, 10],
+    ],
+    features: (P) => ({
+      branches: [
+        { from: P(1, 0.5), to: P(8, 0.2), mask: M.B, side: 1, lift: 14, label: 'BLUE SKYWAY' },
+        { from: P(10, 0.5), to: P(13, 0.3), mask: M.RO, side: 1, lift: 6, bulge: 30, label: 'RED-ONLY ORBIT' },
+      ],
+      gaps: [{ at: P(5, 0.0), len: 50, mask: M.R, noRails: true }, { at: P(11, 0.3), len: 40, mask: M.B, noRails: true }],
+      obstacles: [wall(P(3, 0.3), M.B), ...field(P(8, 0.4), 0.06, 7, 19), wall(P(12, 0.5), M.R), block(P(14, 0.3), -0.5, M.R, 4), block(P(14, 0.35), 0.5, M.B, 4)],
+      boosts: [{ at: P(0, 0.3) }, { at: P(6, 0.5) }, { at: P(9, 0.5), mask: M.R }],
+      shards: [{ at: P(2, 0.2), n: 3 }, { at: P(7, 0.3), n: 3 }, { at: P(13, 0.5), n: 3, mask: M.B }],
+    }),
+  }),
+
+  // ------------------------------------------------------------------ 05
+  make({
+    id: 'city',
+    num: '05',
+    name: 'GRID CITY',
+    blurb: 'A dense neon metropolis with shifting infrastructure.',
+    decor: 'city',
+    seed: 55,
+    laps: 3,
+    sun: 0,
+    halfWidth: 9,
+    points: [
+      [0, 0, 0], [0, 160, 0], [10, 200, 0], [120, 210, 4], [160, 220, 4], [170, 340, 8], [180, 380, 8], [300, 390, 8],
+      [340, 380, 6], [350, 240, 4], [360, 200, 4], [470, 190, 2], [500, 170, 2], [500, 20, 0], [480, -20, 0], [340, -30, 4],
+      [300, -40, 4], [290, -160, 8], [270, -200, 8], [120, -200, 4], [80, -190, 2], [20, -140, 0],
+    ],
+    features: (P) => ({
+      branches: [
+        { from: P(1, 0.4), to: P(7, 0.4), mask: M.R, side: 1, lift: 16, label: 'RED SKYBRIDGE' },
+        { from: P(12, 0.2), to: P(17, 0.2), mask: M.B, side: 1, lift: 12, label: 'BLUE FLYOVER' },
+      ],
+      gaps: [{ at: P(9, 0.2), len: 36, mask: M.R, noRails: true }, { at: P(19, 0.1), len: 36, mask: M.B, noRails: true }],
+      obstacles: [
+        ...field(P(3, 0.1), 0.03, 6, 23), wall(P(5, 0.4), M.B), ...chicane(P(13, 0.2), 0.012, 4),
+        { type: 'block', at: P(15, 0.5), lat: 0, mask: M.R, size: 4, sweep: 0.6 },
+        { type: 'block', at: P(16, 0.5), lat: 0, mask: M.B, size: 4, sweep: 0.6, phase: 2 }, wall(P(20, 0.5), M.R),
+      ],
+      boosts: [{ at: P(0, 0.4) }, { at: P(10, 0.5), lat: 0.4 }, { at: P(18, 0.6), mask: M.B }],
+      shards: [{ at: P(2, 0.4), n: 3 }, { at: P(11, 0.4), n: 3 }, { at: P(16, 0.1), n: 3, mask: M.R }],
+    }),
+  }),
+
+  // ------------------------------------------------------------------ 06
+  make({
+    id: 'void',
+    num: '06',
+    name: 'VOID FIELD',
+    blurb: 'A surreal, open track through shifting geometric fields.',
+    decor: 'void',
+    seed: 66,
+    laps: 3,
+    sun: 2,
+    halfWidth: 12,
+    points: [
+      [0, 0, 20], [-60, 220, 26], [40, 420, 34], [240, 480, 30], [400, 380, 22], [380, 200, 30], [460, 40, 40], [380, -140, 30],
+      [200, -200, 22], [100, -100, 18],
+    ],
+    features: (P) => ({
+      branches: [{ from: P(3, 0.6), to: P(6, 0.5), mask: M.X, side: -1, lift: 0, bulge: -40, label: 'OVERLAP RIDGE' }],
+      gaps: [
+        { at: P(1, 0.1), len: 40, mask: M.R, noRails: true },
+        { at: P(1, 0.6), len: 40, mask: M.B, noRails: true },
+        { at: P(7, 0.3), len: 60, mask: M.RO, noRails: true },
+      ],
+      noRails: [{ at: P(0, 0), len: 2000 }],
+      obstacles: [...field(P(2, 0.2), 0.1, 12, 31), ...field(P(5, 0.1), 0.09, 10, 37), ...field(P(8, 0.4), 0.05, 6, 41)],
+      boosts: [{ at: P(0, 0.4) }, { at: P(4, 0.3), mask: M.B }, { at: P(6, 0.2), mask: M.R }],
+      shards: [{ at: P(0, 0.7), n: 3 }, { at: P(4, 0.6), n: 4 }, { at: P(6, 0.9), n: 3, mask: M.R }],
+    }),
+  }),
+
+  // ------------------------------------------------------------------ 07
+  make({
+    id: 'helix',
+    num: '07',
+    name: 'HELIX ASCENT',
+    blurb: 'A vertical race through intertwining spirals of the two worlds.',
+    decor: 'helix',
+    seed: 77,
+    laps: 2,
+    sun: 1,
+    helixCenter: [0, 0],
+    points: (() => {
+      const pts = [];
+      // climb: two turns around the column, radius 80
+      const turns = 2;
+      const n = 16;
+      for (let k = 0; k <= turns * n; k++) {
+        const a = Math.PI - (k / n) * Math.PI * 2;
+        pts.push([Math.cos(a) * 80, Math.sin(a) * 80, 2 + (k / (turns * n)) * 60]);
+      }
+      // drop: a long sweeping descent out and back around
+      pts.push([-160, 60, 56], [-300, 120, 44], [-420, 20, 30], [-380, -180, 16], [-220, -220, 6], [-120, -120, 2]);
+      return pts.map(([x, z, y]) => [x, z, y]);
+    })(),
+    features: (P) => ({
+      branches: [{ from: P(30, 0.5), to: P(36, 0.2), mask: M.B, side: -1, lift: -6, label: 'BLUE DROP' }],
+      gaps: [
+        { at: P(6, 0), len: 30, mask: M.R, noRails: false },
+        { at: P(14, 0), len: 30, mask: M.B, noRails: false },
+        { at: P(22, 0), len: 30, mask: M.R, noRails: false },
+        { at: P(37, 0.3), len: 40, mask: M.B, noRails: true },
+      ],
+      obstacles: [
+        block(P(3, 0.5), 0.5, M.R), block(P(4, 0.5), -0.5, M.B), wall(P(10, 0.5), M.B), wall(P(18, 0.5), M.R),
+        block(P(26, 0.2), 0.5, M.B), block(P(27, 0.2), -0.5, M.R), wall(P(35, 0.5), M.R),
+      ],
+      boosts: [{ at: P(1, 0.5) }, { at: P(12, 0.5) }, { at: P(24, 0.5) }, { at: P(34, 0.4), mask: M.R }],
+      shards: [{ at: P(8, 0.2), n: 3 }, { at: P(20, 0.2), n: 3 }, { at: P(36, 0.6), n: 3, mask: M.R }],
+    }),
+  }),
+
+  // ------------------------------------------------------------------ 08
+  make({
+    id: 'fractal',
+    num: '08',
+    name: 'FRACTAL ROUTE',
+    blurb: 'A mind-bending track of repeating, shifting structures.',
+    decor: 'fractal',
+    seed: 88,
+    laps: 3,
+    sun: 0,
+    points: [
+      [0, 0, 0], [0, 150, 0], [80, 230, 4], [200, 230, 8], [280, 150, 8], [280, 30, 6], [360, -50, 4], [480, -50, 6],
+      [560, 30, 10], [560, 160, 12], [480, 240, 10], [440, 330, 8], [480, 420, 10], [380, 480, 12], [240, 440, 10], [140, 380, 6],
+      [-60, 360, 4], [-160, 240, 2], [-140, 80, 0], [-80, -40, 0],
+    ],
+    features: (P) => ({
+      branches: [
+        { from: P(1, 0.3), to: P(5, 0.7), mask: M.R, side: 1, lift: 8, label: 'RED FOLD' },
+        { from: P(9, 0.2), to: P(14, 0.4), mask: M.B, side: -1, lift: 10, label: 'BLUE FOLD' },
+      ],
+      gaps: [{ at: P(6, 0.4), len: 30, mask: M.B, noRails: true }, { at: P(16, 0.3), len: 30, mask: M.R, noRails: true }],
+      obstacles: [
+        ...chicane(P(3, 0.0), 0.008, 5), wall(P(7, 0.3), M.R), wall(P(7, 0.7), M.B), ...chicane(P(11, 0.2), 0.008, 5, M.B, M.R),
+        ...field(P(17, 0.1), 0.04, 6, 51),
+      ],
+      boosts: [{ at: P(0, 0.5) }, { at: P(8, 0.4) }, { at: P(15, 0.5), mask: M.B }, { at: P(18, 0.5) }],
+      shards: [{ at: P(2, 0.3), n: 3 }, { at: P(10, 0.2), n: 3 }, { at: P(16, 0.8), n: 3 }],
+    }),
+  }),
+
+  // ------------------------------------------------------------------ 09
+  make({
+    id: 'lattice',
+    num: '09',
+    name: 'SHIFT LATTICE',
+    blurb: 'A complex web of split paths that reward smart world switching.',
+    decor: 'lattice',
+    seed: 99,
+    laps: 3,
+    sun: 2,
+    points: [
+      [0, 0, 4], [0, 200, 8], [100, 320, 14], [260, 340, 18], [380, 260, 14], [400, 100, 10], [320, -20, 8], [400, -160, 12],
+      [300, -300, 16], [120, -300, 10], [20, -180, 6],
+    ],
+    features: (P) => ({
+      branches: [
+        { from: P(0, 0.5), to: P(3, 0.2), mask: M.R, side: -1, lift: 10, bulge: 10, label: 'RED STRAND' },
+        { from: P(1, 0.1), to: P(4, 0.0), mask: M.B, side: 1, lift: 20, bulge: -30, label: 'BLUE STRAND' },
+        { from: P(5, 0.2), to: P(8, 0.3), mask: M.BO, side: 1, lift: 6, label: 'BLUE-ONLY WIRE' },
+        { from: P(7, 0.6), to: P(10, 0.4), mask: M.RO, side: -1, lift: 12, label: 'RED-ONLY WIRE' },
+      ],
+      gaps: [{ at: P(2, 0.4), len: 40, mask: M.X, noRails: true }, { at: P(6, 0.2), len: 40, mask: M.R, noRails: true }, { at: P(9, 0.2), len: 40, mask: M.B, noRails: true }],
+      obstacles: [...field(P(3, 0.4), 0.04, 6, 61), wall(P(5, 0.6), M.B), wall(P(8, 0.6), M.R), ...chicane(P(10, 0.2), 0.01, 3)],
+      boosts: [{ at: P(0, 0.2) }, { at: P(4, 0.4), mask: M.R }, { at: P(7, 0.3), mask: M.B }],
+      shards: [{ at: P(1, 0.6), n: 3 }, { at: P(5, 0.0), n: 3 }, { at: P(9, 0.6), n: 3 }],
+    }),
+  }),
+
+  // ------------------------------------------------------------------ 10
+  make({
+    id: 'ruins',
+    num: '10',
+    name: 'ECHO RUINS',
+    blurb: 'The remnants of a larger structure, with alternate paths across worlds.',
+    decor: 'ruins',
+    seed: 1010,
+    laps: 3,
+    sun: 1,
+    points: [
+      [0, 0, 6], [-20, 200, 10], [60, 380, 18], [220, 460, 24], [400, 420, 20], [480, 260, 14], [420, 100, 10], [500, -60, 14],
+      [420, -240, 20], [240, -320, 16], [80, -260, 10], [40, -120, 6],
+    ],
+    features: (P) => ({
+      branches: [
+        { from: P(1, 0.3), to: P(4, 0.3), mask: M.B, side: 1, lift: 0, bulge: -60, label: 'BLUE ECHO' },
+        { from: P(6, 0.5), to: P(9, 0.4), mask: M.R, side: 1, lift: 14, bulge: -40, label: 'RED ECHO' },
+      ],
+      gaps: [
+        { at: P(2, 0.6), len: 40, mask: M.R, noRails: true },
+        { at: P(5, 0.3), len: 40, mask: M.B, noRails: true },
+        { at: P(8, 0.4), len: 40, mask: M.R, noRails: true },
+        { at: P(10, 0.5), len: 34, mask: M.X, noRails: true },
+      ],
+      obstacles: [wall(P(1, 0.1), M.R), ...field(P(3, 0.3), 0.05, 8, 71), wall(P(6, 0.2), M.B), ...chicane(P(7, 0.5), 0.01, 4), wall(P(11, 0.3), M.B)],
+      boosts: [{ at: P(0, 0.5) }, { at: P(4, 0.6), mask: M.R }, { at: P(9, 0.7), mask: M.B }],
+      shards: [{ at: P(1, 0.6), n: 3 }, { at: P(5, 0.7), n: 3 }, { at: P(10, 0.1), n: 3 }],
+    }),
+  }),
+];
+
+export const trackById = (id) => TRACKS.find((t) => t.id === id) || TRACKS[0];
