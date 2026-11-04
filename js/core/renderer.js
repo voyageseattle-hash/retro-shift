@@ -4,7 +4,7 @@ import * as THREE from '../../vendor/three.js';
 // Final colour grade, per stage: saturation, contrast, a highlight tint and a shadow lift colour,
 // plus vignette and film grain. Hits add chromatic aberration; lightning adds a flash.
 export const GRADES = {
-  neon: { sat: 1.2, contrast: 1.12, tint: [1, 1, 1], lift: [0.1, 0.0, 0.2], vignette: 0.45 },
+  neon: { sat: 1.18, contrast: 1.1, tint: [1, 1, 1], lift: [0, 0, 0], vignette: 0.42 },
   default: { sat: 1.08, contrast: 1.05, tint: [1, 1, 1], lift: [0.2, 0.1, 0.3], vignette: 0.32 },
   mesa: { sat: 1.1, contrast: 1.06, tint: [1.04, 0.99, 0.94], lift: [0.45, 0.12, 0.5], vignette: 0.34 },
   city: { sat: 1.12, contrast: 1.08, tint: [0.97, 0.98, 1.06], lift: [0.1, 0.15, 0.55], vignette: 0.4 },

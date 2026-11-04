@@ -65,7 +65,9 @@ export const SHIFT = {
 
 // The 3 lens tints (UI, fog, ground grid).
 export const MODE_TINT = {
-  [BOTH]: { fog: 0x0b0418, grid: 0x8a3cff, sun: [0xff3a7a, 0x3a6aff], css: '#b04cff' },
-  [RED]: { fog: 0x170309, grid: 0xff2a4a, sun: [0xff2a4a, 0xff8a3a], css: '#ff2a4a' },
-  [BLUE]: { fog: 0x020a1a, grid: 0x1e8cff, sun: [0x1e8cff, 0x6ae0ff], css: '#1e8cff' },
+  // The sky is black in every lens (the concept sheets): only the lines carry colour. grid/gridB are the two
+  // directions of the floor grid, red one way and blue the other when both worlds overlap.
+  [BOTH]: { fog: 0x020103, grid: 0xff2a4a, gridB: 0x1e8cff, sun: [0xff3a7a, 0x3a6aff], css: '#b04cff' },
+  [RED]: { fog: 0x050001, grid: 0xff2a4a, gridB: 0xff2a4a, sun: [0xff2a4a, 0xff8a3a], css: '#ff2a4a' },
+  [BLUE]: { fog: 0x000205, grid: 0x1e8cff, gridB: 0x1e8cff, sun: [0x1e8cff, 0x6ae0ff], css: '#1e8cff' },
 };

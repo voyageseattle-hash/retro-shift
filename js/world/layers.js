@@ -42,7 +42,8 @@ export class Layers {
       base,
       line: new THREE.LineBasicMaterial({ color: 0xffffff, vertexColors: true, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending }),
       ribbon: new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, transparent: true, opacity: 1, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }),
-      fill: new THREE.MeshBasicMaterial({ color: _c.set(base).multiplyScalar(0.07).getHex(), transparent: true, opacity: 0.82, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
+      // (colours are linear here, so 0.004 is about 8% brightness on screen: glossy black with a hint of the lens)
+      fill: new THREE.MeshBasicMaterial({ color: _c.set(base).multiplyScalar(0.004).getHex(), transparent: true, opacity: 0.9, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
       solid: new THREE.MeshBasicMaterial({ color: base, transparent: true, opacity: 1 }),
       wire: new THREE.LineBasicMaterial({ color: base, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending }),
     };
@@ -222,7 +223,7 @@ export class Layers {
       m.line.opacity = a * shimmer;
       m.ribbon.opacity = (0.05 + 0.95 * lv) * shimmer;
       m.wire.opacity = a * shimmer;
-      m.fill.opacity = 0.82 * lv;
+      m.fill.opacity = 0.9 * lv;
       m.fill.visible = lv > 0.02;
       m.solid.opacity = 0.1 + 0.9 * lv;
     }

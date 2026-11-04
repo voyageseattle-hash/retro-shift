@@ -1,5 +1,5 @@
-// The space around the course: an endless floor grid, a striped synthwave sun, wireframe mountains and stars. All of
-// it takes the colour of the player's lens.
+// The space around the course: black sky, an endless floor grid, wireframe ridges and a few stars. With both worlds
+// open the grid and ridges are printed twice, red one way and blue the other; a single lens makes them all its colour.
 
 import * as THREE from '../../vendor/three.js';
 import { MODE_TINT, BOTH } from '../world/shift.js';
@@ -42,32 +42,41 @@ export class Environment {
     // floor grid
     const size = 4000;
     const step = 24;
-    const pos = [];
+    const posA = [];
+    const posB = [];
     for (let k = -size / 2; k <= size / 2; k += step) {
-      pos.push(k, 0, -size / 2, k, 0, size / 2);
-      pos.push(-size / 2, 0, k, size / 2, 0, k);
+      posA.push(k, 0, -size / 2, k, 0, size / 2);
+      posB.push(-size / 2, 0, k, size / 2, 0, k);
     }
-    const gg = new THREE.BufferGeometry();
-    gg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    this.gridMat = new THREE.LineBasicMaterial({ color: 0x8a3cff, transparent: true, opacity: 0.55 });
-    this.grid = new THREE.LineSegments(gg, this.gridMat);
-    this.grid.position.set(Math.round(cx / step) * step, y, Math.round(cz / step) * step);
-    this.group.add(this.grid);
+    const lines = (pos, mat) => {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      return new THREE.LineSegments(g, mat);
+    };
+    this.gridMat = new THREE.LineBasicMaterial({ color: 0xff2a4a, transparent: true, opacity: 0.32 });
+    this.gridMatB = new THREE.LineBasicMaterial({ color: 0x1e8cff, transparent: true, opacity: 0.32 });
+    for (const [pos, mat] of [[posA, this.gridMat], [posB, this.gridMatB]]) {
+      const g = lines(pos, mat);
+      g.position.set(Math.round(cx / step) * step, y, Math.round(cz / step) * step);
+      this.group.add(g);
+    }
     // dark floor under the grid so the void reads as ground
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ color: 0x030108 }));
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(cx, y - 0.2, cz);
     this.group.add(floor);
-    // sun
+    // sun (kept for tracks that ask for one with def.sunVisible; the concept look is a black sky)
     this.sunMat = new THREE.ShaderMaterial({ ...SUN_SHADER, uniforms: THREE.UniformsUtils.clone(SUN_SHADER.uniforms), fog: false, depthWrite: false });
     this.sun = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.sunMat);
     this.sun.scale.setScalar(700);
     this.sun.renderOrder = -2;
+    this.sun.visible = !!world.def.sunVisible;
     this.group.add(this.sun);
     const sunDirs = [new THREE.Vector3(0, 0.14, 1), new THREE.Vector3(1, 0.14, 0.2), new THREE.Vector3(-0.6, 0.14, -1)];
     this.sunDir = sunDirs[(world.def.sun ?? 0) % 3].normalize();
     // mountains: a ring of jagged wire ridges
     const mp = [];
+    const mpB = [];
     const R = 1700;
     const n = 96;
     let s = world.def.seed || 1;
@@ -79,16 +88,19 @@ export class Environment {
       const a1 = ((k + 1) / n) * Math.PI * 2;
       const p0 = [Math.cos(a0) * R, peaks[k], Math.sin(a0) * R];
       const p1 = [Math.cos(a1) * R, peaks[(k + 1) % n], Math.sin(a1) * R];
-      mp.push(...p0, ...p1);
-      mp.push(...p0, Math.cos(a0) * R * 0.94, 0, Math.sin(a0) * R * 0.94);
-      mp.push(...p0, Math.cos(a0 + 0.03) * R * 1.05, 0, Math.sin(a0 + 0.03) * R * 1.05);
+      // alternate ridges belong to the red and the blue world
+      const o = k % 2 ? mpB : mp;
+      o.push(...p0, ...p1);
+      o.push(...p0, Math.cos(a0) * R * 0.94, 0, Math.sin(a0) * R * 0.94);
+      o.push(...p0, Math.cos(a0 + 0.03) * R * 1.05, 0, Math.sin(a0 + 0.03) * R * 1.05);
     }
-    const mg = new THREE.BufferGeometry();
-    mg.setAttribute('position', new THREE.Float32BufferAttribute(mp, 3));
-    this.mtnMat = new THREE.LineBasicMaterial({ color: 0x6a2cff, fog: false, transparent: true, opacity: 0.8 });
-    this.mountains = new THREE.LineSegments(mg, this.mtnMat);
-    this.mountains.position.set(cx, y, cz);
-    this.group.add(this.mountains);
+    this.mtnMat = new THREE.LineBasicMaterial({ color: 0xff2a4a, fog: false, transparent: true, opacity: 0.45 });
+    this.mtnMatB = new THREE.LineBasicMaterial({ color: 0x1e8cff, fog: false, transparent: true, opacity: 0.45 });
+    for (const [pos, mat] of [[mp, this.mtnMat], [mpB, this.mtnMatB]]) {
+      const g = lines(pos, mat);
+      g.position.set(cx, y, cz);
+      this.group.add(g);
+    }
     // stars
     const sp = [];
     for (let k = 0; k < 1400; k++) {
@@ -100,11 +112,11 @@ export class Environment {
     }
     const sg = new THREE.BufferGeometry();
     sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
-    this.stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xd8c8ff, size: 2, sizeAttenuation: false, fog: false }));
+    this.stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0x8a8aa0, size: 1.5, sizeAttenuation: false, fog: false }));
     this.group.add(this.stars);
-    this.fog = new THREE.Fog(0x0b0418, 180, 1100);
-    this.bg = new THREE.Color(0x05020c);
-    this.tint = { grid: new THREE.Color(0x8a3cff), fog: new THREE.Color(0x0b0418), top: new THREE.Color(0xff3a7a), bot: new THREE.Color(0x3a6aff) };
+    this.fog = new THREE.Fog(0x020103, 180, 1100);
+    this.bg = new THREE.Color(0x000000);
+    this.tint = { grid: new THREE.Color(0xff2a4a), gridB: new THREE.Color(0x1e8cff), fog: new THREE.Color(0x020103), top: new THREE.Color(0xff3a7a), bot: new THREE.Color(0x3a6aff) };
     this.mode = BOTH;
     this.pulse = 0;
   }
@@ -129,14 +141,17 @@ export class Environment {
     const T = MODE_TINT[this.mode];
     const k = 1 - Math.exp(-6 * dt);
     this.tint.grid.lerp(_c.set(T.grid), k);
+    this.tint.gridB.lerp(_c.set(T.gridB), k);
     this.tint.fog.lerp(_c.set(T.fog), k);
     this.tint.top.lerp(_c.set(T.sun[0]), k);
     this.tint.bot.lerp(_c.set(T.sun[1]), k);
     this.pulse = damp(this.pulse, 0, 3, dt);
     this.gridMat.color.copy(this.tint.grid).multiplyScalar(0.7 + this.pulse * 1.5);
+    this.gridMatB.color.copy(this.tint.gridB).multiplyScalar(0.7 + this.pulse * 1.5);
     this.mtnMat.color.copy(this.tint.grid);
+    this.mtnMatB.color.copy(this.tint.gridB);
     this.fog.color.copy(this.tint.fog);
-    this.bg.copy(this.tint.fog).multiplyScalar(0.5);
+    this.bg.copy(this.tint.fog).multiplyScalar(0.3);
     this.sunMat.uniforms.uTop.value.copy(this.tint.top);
     this.sunMat.uniforms.uBot.value.copy(this.tint.bot);
     this.sunMat.uniforms.uTime.value = t;

@@ -373,7 +373,10 @@ export class TrackWorld {
         const neutral = mask === M.ALL;
         const lc = neutral ? COLORS.red : colorForMask(mask);
         const rc = neutral ? COLORS.blue : colorForMask(mask);
-        const mid = neutral ? 0x9a6aff : colorForMask(mask);
+        // neutral road: red lines on the left half, blue on the right, the two worlds printed over each other
+        const mid = neutral ? null : colorForMask(mask);
+        const ml = mid ?? COLORS.red;
+        const mr = mid ?? COLORS.blue;
         // fill
         L.fillQuad(mask, path.point(i, -hw, -0.02, v[0]), path.point(j, -hw, -0.02, v[1]), path.point(j, hw, -0.02, v[2]), path.point(i, hw, -0.02, v[3]));
         // glowing edges (ribbons a little in from the edge, lying on the road)
@@ -395,9 +398,9 @@ export class TrackWorld {
           }
         }
         // grid: cross ribs and lane lines
-        if (i % 2 === 0) L.line(mask, path.point(i, -hw, 0.03, _a), path.point(i, hw, 0.03, _b), mid);
-        for (const f of [-1 / 3, 1 / 3]) L.line(mask, path.point(i, f * hw * 2 * 0.75, 0.03, _a), path.point(j, f * hw * 2 * 0.75, 0.03, _b), mid);
-        for (const f of [-2 / 3, 0, 2 / 3]) if (i % 3 !== 2) L.line(mask, path.point(i, f * hw, 0.03, _a), path.point(j, f * hw, 0.03, _b), mid);
+        if (i % 2 === 0) L.line(mask, path.point(i, -hw, 0.03, _a), path.point(i, hw, 0.03, _b), (i >> 1) % 2 ? ml : mr);
+        for (const f of [-1 / 3, 1 / 3]) L.line(mask, path.point(i, f * hw * 2 * 0.75, 0.03, _a), path.point(j, f * hw * 2 * 0.75, 0.03, _b), f < 0 ? ml : mr);
+        for (const f of [-2 / 3, 0, 2 / 3]) if (i % 3 !== 2 && f !== 0) L.line(mask, path.point(i, f * hw, 0.03, _a), path.point(j, f * hw, 0.03, _b), f < 0 ? ml : mr);
         // underside and supports for raised road
         if (i % 2 === 0) {
           L.line(mask, path.point(i, -hw, -0.6, _a), path.point(j, -hw, -0.6, _b), lc);
@@ -405,8 +408,9 @@ export class TrackWorld {
         }
         const p = path.point(i, 0, 0, _c);
         if (i % 18 === 0 && p.y - this.floorY > 6 && !this.def.noPylons) {
-          L.lineXYZ(M.ALL, p.x, p.y - 0.6, p.z, p.x, this.floorY, p.z, 0x4a2a8a);
-          L.lineXYZ(M.ALL, p.x - 1.5, this.floorY, p.z, p.x + 1.5, this.floorY, p.z, 0x4a2a8a);
+          const pc = (i / 18) % 2 ? 0x6a1020 : 0x0c3a6a;
+          L.lineXYZ(M.ALL, p.x, p.y - 0.6, p.z, p.x, this.floorY, p.z, pc);
+          L.lineXYZ(M.ALL, p.x - 1.5, this.floorY, p.z, p.x + 1.5, this.floorY, p.z, pc);
         }
       }
     }
