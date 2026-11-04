@@ -1,0 +1,95 @@
+<!doctype html>
+<!-- Offline renderer for the soundtrack (ported from WEDGEWRECK RALLY). Driven by tools/render-audio.mjs. -->
+<meta charset="utf-8" />
+<title>RETRO SHIFT audio render</title>
+<script type="module">
+  import { Audio } from '../js/core/engine.js';
+  import { SONGS, STINGERS } from '../js/core/songs.js';
+  import { formSeconds } from '../js/core/sequencer.js';
+
+  const SR = 44100;
+  function toWav(buf) {
+    const ch = buf.numberOfChannels;
+    const n = buf.length;
+    const out = new DataView(new ArrayBuffer(44 + n * ch * 2));
+    const w = (o, s) => [...s].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
+    w(0, 'RIFF');
+    out.setUint32(4, 36 + n * ch * 2, true);
+    w(8, 'WAVEfmt ');
+    out.setUint32(16, 16, true);
+    out.setUint16(20, 1, true);
+    out.setUint16(22, ch, true);
+    out.setUint32(24, SR, true);
+    out.setUint32(28, SR * ch * 2, true);
+    out.setUint16(32, ch * 2, true);
+    out.setUint16(34, 16, true);
+    w(36, 'data');
+    out.setUint32(40, n * ch * 2, true);
+    const data = [...Array(ch)].map((_, c) => buf.getChannelData(c));
+    let o = 44;
+    let peak = 0;
+    let sum = 0;
+    for (let i = 0; i < n; i++) {
+      for (let c = 0; c < ch; c++) {
+        const x = Math.max(-1, Math.min(1, data[c][i]));
+        peak = Math.max(peak, Math.abs(x));
+        sum += x * x;
+        out.setInt16(o, x * 32767, true);
+        o += 2;
+      }
+    }
+    const bytes = new Uint8Array(out.buffer);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return { wav: btoa(bin), peak, rms: Math.sqrt(sum / (n * ch)) };
+  }
+  function setup(seconds) {
+    const ctx = new OfflineAudioContext(2, Math.ceil(SR * seconds), SR);
+    const a = new Audio();
+    a.musicVolume = 1;
+    a.sfxVolume = 1;
+    a.build(ctx);
+    a.clock = 0;
+    return { ctx, a };
+  }
+  function fadeOut(a, seconds, len = 2) {
+    a.master.gain.setValueAtTime(a.master.gain.value, seconds - len);
+    a.master.gain.linearRampToValueAtTime(0, seconds - 0.05);
+  }
+
+  // events: [[time, 'hot'|'danger'|'calm'|'cool']] switch intensity mid-song.
+  // Scheduling runs in short chunks with suspend/resume, like the live lookahead, so the graph
+  // never holds the whole song's nodes at once.
+  window.renderSong = async (id, seconds, events = [], opts = {}) => {
+    const { ctx, a } = setup(seconds);
+    const def = SONGS[id];
+    if (opts.solo) {
+      for (const [k, m] of Object.entries(def.mix)) m._vol ??= m.vol ?? 1;
+      for (const [k, m] of Object.entries(def.mix)) m.vol = k === opts.solo ? m._vol : 0;
+    }
+    a.playSong(def);
+    const chunk = 0.5;
+    const pending = [...events].sort((x, y) => x[0] - y[0]);
+    a.schedule(a.song, chunk + 0.2);
+    for (let t = chunk; t < seconds; t += chunk) {
+      ctx.suspend(t).then(() => {
+        a.clock = t;
+        while (pending.length && pending[0][0] <= t + 1e-6) {
+          const what = pending.shift()[1];
+          if (what === 'hot') a.setFinalLap(true);
+          if (what === 'danger') a.setHealth(0.1);
+          if (what === 'calm') a.setHealth(1);
+          if (what === 'cool') a.setFinalLap(false);
+          if (what === 'red' || what === 'blue' || what === 'both') a.setWorld(what);
+        }
+        a.schedule(a.song, t + chunk + 0.2);
+        ctx.resume();
+      });
+    }
+    fadeOut(a, seconds);
+    const buf = await ctx.startRendering();
+    if (opts.solo) for (const m of Object.values(def.mix)) m.vol = m._vol;
+    return toWav(buf);
+  };
+  window.ready = true;
+</script>

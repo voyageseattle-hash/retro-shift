@@ -27,8 +27,13 @@ class App {
     this.renderer.onResize.push(() => this.onResize());
     this.last = performance.now();
     this.setupTouch();
-    window.addEventListener('pointerdown', () => this.audio.init(), { once: false });
-    window.addEventListener('keydown', () => this.audio.init());
+    const wake = () => {
+      const first = !this.audio.ctx;
+      this.audio.init();
+      if (first && !this.race) this.audio.playTitle();
+    };
+    window.addEventListener('pointerdown', wake);
+    window.addEventListener('keydown', wake);
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.race && !this.paused && this.race.state !== 'finished') this.pause();
     });
@@ -107,6 +112,8 @@ class App {
     const c = this.ui.choice;
     const def = trackById(c.track);
     if (this.race) this.race.dispose();
+    this.audio.stopEngines();
+    this.audio.duckMusic(false);
     this.showAttract(false);
     this.ui.clear();
     const trial = c.mode === 'trial';
@@ -120,20 +127,23 @@ class App {
   pause() {
     if (!this.race || this.paused) return;
     this.paused = true;
-    this.audio.updateEngine(0, 0, false, false);
+    this.audio.stopEngines();
+    this.audio.duckMusic(true);
     this.ui.pause();
   }
   resume() {
     this.paused = false;
+    this.audio.duckMusic(false);
     this.ui.clear();
   }
   quit() {
     if (this.race) this.race.dispose();
     this.race = null;
     this.paused = false;
-    this.audio.stopSong();
-    this.audio.updateEngine(0, 0, false, false);
-    this.audio.setMode(BOTH);
+    this.audio.stopEngines();
+    this.audio.duckMusic(false);
+    this.audio.setMode(BOTH, true);
+    this.audio.playTitle();
     document.body.classList.remove('racing');
     delete document.body.dataset.mode;
     this.ui.title();

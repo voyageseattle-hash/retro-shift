@@ -170,8 +170,8 @@ export const TRACKS = [
     ],
     features: (P) => ({
       branches: [
-        { from: P(1, 0.4), to: P(7, 0.4), mask: M.R, side: 1, lift: 16, label: 'RED SKYBRIDGE' },
-        { from: P(12, 0.2), to: P(17, 0.2), mask: M.B, side: 1, lift: 12, label: 'BLUE FLYOVER' },
+        { from: P(1, 0.4), to: P(8, 0.45), mask: M.R, side: 1, lift: 16, label: 'RED SKYBRIDGE' },
+        { from: P(12, 0.25), to: P(16, 0.5), mask: M.B, side: 1, lift: 12, label: 'BLUE FLYOVER' },
       ],
       gaps: [{ at: P(9, 0.2), len: 36, mask: M.R, noRails: true }, { at: P(19, 0.1), len: 36, mask: M.B, noRails: true }],
       obstacles: [

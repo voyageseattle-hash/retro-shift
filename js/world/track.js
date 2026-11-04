@@ -103,10 +103,10 @@ export class Path {
   // Right-hand direction: with heading h = atan2(tx, tz), right is (-tz, tx)... we use the convention that
   // positive lat is to the driver's RIGHT when facing along the path.
   rightX(i) {
-    return -this.thz[i];
+    return -this.thz[this.wrap(i)];
   }
   rightZ(i) {
-    return this.thx[i];
+    return this.thx[this.wrap(i)];
   }
 
   // Point on the road surface at sample i, lateral offset lat (+ = right), height h above it.
@@ -318,11 +318,14 @@ export class TrackWorld {
       path.mask.fill(b.mask ?? M.ALL);
       path.def = b;
       path.side = side;
-      // No rails where it leaves and rejoins the main road.
-      const open = Math.ceil((lead * 1.1) / path.ds);
-      for (let i = 0; i < open; i++) {
-        path.railL[i] = path.railR[i] = 0;
-        path.railL[path.N - 1 - i] = path.railR[path.N - 1 - i] = 0;
+      // No rails where it overlaps the main road (where it leaves and rejoins it); rails everywhere else.
+      const fr = {};
+      let hint = iA;
+      for (let i = 0; i < path.N; i++) {
+        if (!main.frame(path.px[i], path.pz[i], hint, fr)) continue;
+        hint = fr.i;
+        const near = Math.abs(fr.lat) < this.halfWidth + hw * 0.6 && Math.abs(fr.y - path.py[i]) < 1.5;
+        if (near) path.railL[i] = path.railR[i] = 0;
       }
       // And no main rail on that side at the junctions.
       const w = Math.ceil((lead * 1.3) / main.ds);

@@ -69,7 +69,7 @@ export class Race {
     this.events = [];
     this.lastMode = BOTH;
     this.ghostLap = storage.get(`rs.best.${def.id}`, null);
-    app.audio.playSong(Math.max(0, parseInt(def.num, 10) - 1));
+    app.audio.playCourse(def.id);
     app.audio.setMode(BOTH, true);
     this.world.update(0, 0, BOTH);
   }
@@ -219,7 +219,17 @@ export class Race {
     this.env.update(dt, this.t, this.cam.camera);
     this.aberr = Math.max(0, (this.aberr || 0) - dt * 3);
     this.app.renderer.setGrade('neon', this.aberr * 1.6 + (p.boostTime > 0 ? 0.3 : 0), 0);
-    this.app.audio.updateEngine(p.speed, p.ctl.throttle, p.boostTime > 0, this.state !== 'finished' || true);
+    const A = this.app.audio;
+    A.playerEngine(p.speed, p.phys.topSpeed, p.ctl.throttle, p.boostTime > 0, p.slip || 0, p.respawnT <= 0);
+    const cam = this.cam.camera;
+    cam.getWorldDirection(_v);
+    const fl = Math.hypot(_v.x, _v.z) || 1;
+    this._listener ||= { pos: new THREE.Vector3(), fwd: { x: 0, z: 1 }, vel: p.vel };
+    this._listener.pos.copy(cam.position);
+    this._listener.fwd.x = _v.x / fl;
+    this._listener.fwd.z = _v.z / fl;
+    this._listener.vel = p.vel;
+    A.rivalEngines(this._listener, this.racers);
 
     // tips (tutorial track)
     for (const tip of this.def.tips || []) {
@@ -433,7 +443,10 @@ export class Race {
       else if (r.isPlayer) {
         this.emit('lap', { lap: r.lap + 1, time: lt });
         this.app.audio.play('lap');
-        if (r.lap === this.laps - 1) this.emit('popup', { text: 'FINAL LAP', color: '#ff4fd8' });
+        if (r.lap === this.laps - 1) {
+          this.emit('popup', { text: 'FINAL LAP', color: '#ff4fd8' });
+          this.app.audio.play('finalLap');
+        }
       }
     }
   }
@@ -444,7 +457,7 @@ export class Race {
     this.finishOrder.push(r);
     if (r.isPlayer) {
       this.state = 'finished';
-      this.app.audio.play('finish');
+      this.app.audio.play('finish', this.opts.rivals === 0 || this.finishOrder.length <= 3 ? 1 : 0);
       const key = `rs.best.${this.def.id}`;
       const best = storage.get(key, null);
       this.newRecord = !best || r.finishTime < best.time;
