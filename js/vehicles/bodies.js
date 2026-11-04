@@ -216,10 +216,10 @@ export const BODIES = {
     K.canopy(-0.4, 1.2, 0.55, 1.05, 0.32);
     // stub wings with hover pods on their tips
     for (const s of [-1, 1]) {
-      K.loft([trap(-1.2, 0.1, 0.06, 0.62, 1, s * 1.45), trap(0.2, 0.1, 0.06, 0.62, 1, s * 1.45)]);
-      K.seg(K.A, [s * 1.0, 0.68, -1.2], [s * 1.55, 0.68, -1.2]);
+      K.loft([trap(-1.2, 0.08, 0.06, 0.62, 1, s * 1.22), trap(0.2, 0.08, 0.06, 0.62, 1, s * 1.22)]);
+      K.seg(K.A, [s * 1.0, 0.68, -1.2], [s * 1.3, 0.68, -1.2]);
     }
-    K.pods([[-1.65, -0.5], [1.65, -0.5]], [0.4, 0.42, 1.3]);
+    K.pods([[-1.32, -0.5], [1.32, -0.5]], [0.34, 0.4, 1.3]);
     return { thrusters: [[-0.42, 0.7, -1.75], [0.42, 0.7, -1.75]], tails: [[0, 1.02, -1.7]], tailW: 0.95, glow: [3.2, 4.0] };
   },
   // Twin pontoons with a cockpit slung between them.
@@ -248,7 +248,7 @@ export const BODIES = {
     // a stepped pixel spoiler and pixel pods up front
     K.box(2.3, 0.14, 0.42, 0, 1.42, -1.75, true);
     for (const s of [-1, 1]) K.box(0.16, 0.36, 0.2, s * 0.8, 1.2, -1.75);
-    for (const s of [-1, 1]) K.box(0.4, 0.3, 0.7, s * 1.35, 0.33, 1.4);
+    for (const s of [-1, 1]) K.box(0.36, 0.3, 0.7, s * 1.12, 0.33, 1.4);
     return { thrusters: [[-0.5, 0.48, -2.0], [0.5, 0.48, -2.0]], tails: [[-0.78, 0.8, -1.86], [0.78, 0.8, -1.86]], tailW: 0.6, glow: [3.0, 4.6] };
   },
   // A wedge sliced into three, its slices slipping out of register.
@@ -261,7 +261,7 @@ export const BODIES = {
       slices.push(k);
     }
     parts.slices = slices;
-    for (const [x, y, z, s] of [[1.7, 0.9, 0.2, 0.3], [-1.6, 1.1, -0.9, 0.24], [0.4, 1.4, -1.5, 0.2]]) {
+    for (const [x, y, z, s] of [[1.3, 0.95, 0.2, 0.26], [-1.25, 1.1, -0.9, 0.22], [0.4, 1.4, -1.5, 0.2]]) {
       const tri = [[x - s, y, z], [x + s, y + s * 0.4, z + s], [x, y + s * 1.2, z - s * 0.5]];
       parts.shards ||= [];
       parts.shards.push(tri);
