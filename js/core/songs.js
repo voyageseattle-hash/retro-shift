@@ -55,40 +55,48 @@ function song(def) {
 export const SONGS = {
   // ------------------------------------------------------------------ title
   title: song({
+    // Its own key, tempo and changes (E minor with a harmonic-minor B7 turnaround), and an intro that opens on the
+    // shift call itself: a red stab answered by a blue bell, back and forth, before the band drops in.
     name: 'Retro Shift (Main Theme)',
-    bpm: 112,
-    tonic: 57,
+    bpm: 104,
+    tonic: 64,
     kit: { kick: 'punch', snare: 'fat' },
-    mix: BAND(),
+    mix: BAND({ lead: 'brass', arp: 'pluck' }),
     parts: {
       intro: {
         bars: 4,
-        chords: 'Am F C G',
-        tracks: { pad: 'x---------------', arp: '0.2.4.2.5.4.2.1.', hat: G.off, fx: G.rise },
+        chords: 'Em9 Em9 Cmaj7 B7',
+        tracks: {
+          stab: 'x.......x.......|x.......x.......|x.......x.......|x...x...x.x.x.x.',
+          bells: bars('. . . . b5 - - - . . . . e6 - - -', '. . . . d6 - - - . . . . b5 - - -', '. . . . g5 - - - . . . . e6 - - -', 'f#6 - - - d#6 - - - b5 - - - . . . .'),
+          choir: 'x---------------',
+          tom: R(3) + '|....h...m...lll.',
+          fx: G.rise,
+        },
       },
       A: {
         bars: 8,
-        chords: 'Am F C G',
+        chords: 'Em Cmaj7 Am7 B7',
         crash: true,
         tracks: {
           lead: bars(
-            'a4 - - . e5 - - . a5 - g5 - e5 - - .', 'f5 - - - e5 - c5 - - - . . c5 . d5 .',
-            'e5 - - . g5 - - . c6 - b5 - g5 - - .', 'b5 - - - a5 - g5 - - - . . g5 . a5 .',
-            'a4 - - . e5 - - . a5 - g5 - e5 - - .', 'f5 - - - a5 - c6 - - - . . c6 . d6 .',
-            'e6 - - - d6 - - - c6 - - - b5 - g5 -', 'a5 - - - - - - - . . . . . . . .',
+            'e5 - - . g5 - b5 - - . a5 - g5 - f#5 -', 'e5 - - - - - . . b4 . c5 . e5 . g5 .',
+            'a5 - - . g5 - e5 - - . c5 - e5 - g5 -', 'f#5 - - - d#5 - - - b4 - - - . . . .',
+            'e5 - - . g5 - b5 - - . e6 - d6 - b5 -', 'c6 - - - b5 - g5 - - . e5 . g5 . b5 .',
+            'a5 - c6 - e6 - d6 - c6 - b5 - a5 - f#5 -', 'b5 - - - - - - - d#6 - - - f#6 - - -',
           ),
-          bass: G.octBass,
-          kick: G.four,
+          bass: 'x..ox..ox..ox.o.',
+          kick: 'x.....x...x.....',
           snare: G.back,
-          hat: G.eights,
+          hat: G.sixteen,
           pad: 'x---------------',
-          arp: '0.2.4.2.0.2.4.2.',
+          arp: '0.1.2.3.2.1.0.1.',
         },
       },
       B: {
         bars: 4,
-        chords: 'Am F C G',
-        tracks: { bells: bars('e5 . a5 . c6 . e6 - - . d6 . c6 . b5 .', 'a5 - - - c6 - - - f5 - - - . . . .', 'g5 . c6 . e6 . g6 - - . f6 . e6 . d6 .', 'b5 - - - d6 - - - g5 - - - . . . .'), pad: 'x---------------', kick: 'x.......x.......', hat: G.off, fx: G.rise },
+        chords: 'Cmaj7 D Bm Em',
+        tracks: { bells: bars('g5 . b5 . e6 - - . d6 . b5 . g5 . e5 .', 'f#5 - - - a5 - - - d6 - - - . . . .', 'f#5 . b5 . d6 - - . c#6 . b5 . a5 . f#5 .', 'e5 - - - g5 - - - b5 - - - . . . .'), pad: 'x---------------', choir: 'x---------------', kick: 'x.......x.......', hat: G.off, fx: G.rise },
       },
     },
     form: ['intro', 'A', 'B'],

@@ -86,40 +86,147 @@ export class Audio extends Engine {
       if (this.roomIn) this.tone('sine', f * 2, t + k * 0.035, 1.4, 0.03, this.roomIn);
     });
   }
-  // The title shout: an engine winding up, a whoosh, and the announcer over the top.
+  // The title shout: a V8 cranked, caught, idling with a lumpy cam, blipped twice and wound all the way out,
+  // with the announcer landing on top of the scream.
   titleShout(delay = 0.15) {
     if (!this.ctx) return;
-    const t = this.ctx.currentTime + delay;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + delay;
     const out = this.sfxDry || this.sfx;
-    // engine rev: two detuned saws through a sweeping low-pass, pitch climbing then dropping off
-    const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.32, t + 0.12);
-    g.gain.setValueAtTime(0.32, t + 0.9);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 1.7);
-    const f = this.ctx.createBiquadFilter();
-    f.type = 'lowpass';
-    f.Q.value = 6;
-    f.frequency.setValueAtTime(300, t);
-    f.frequency.exponentialRampToValueAtTime(3200, t + 0.85);
-    f.frequency.exponentialRampToValueAtTime(500, t + 1.6);
-    for (const det of [0, 7]) {
-      const o = this.ctx.createOscillator();
-      o.type = 'sawtooth';
-      o.detune.value = det * 3;
-      o.frequency.setValueAtTime(38, t);
-      o.frequency.exponentialRampToValueAtTime(140, t + 0.8);
-      o.frequency.exponentialRampToValueAtTime(95, t + 0.95);
-      o.frequency.exponentialRampToValueAtTime(150, t + 1.25);
-      o.frequency.exponentialRampToValueAtTime(60, t + 1.7);
-      o.connect(f);
-      o.start(t);
-      o.stop(t + 1.8);
+    // rpm script: [time, rpm]
+    const RPM = [[0, 0], [0.75, 0], [0.82, 1400], [1.0, 1100], [1.2, 850], [1.7, 900], [1.85, 4200], [2.15, 1500], [2.4, 950],
+      [2.55, 5600], [2.85, 1800], [3.0, 1300], [3.75, 8200], [3.95, 6100], [4.6, 8800], [5.0, 8600], [5.8, 1600], [6.6, 900]];
+    const fire = (r) => (r / 60) * 4; // V8 firing frequency
+    const end = t + 6.8;
+    // --- starter motor: a whining whirr and the engine's compression chugging against it
+    const sw = ctx.createOscillator();
+    sw.type = 'sawtooth';
+    sw.frequency.setValueAtTime(260, t);
+    sw.frequency.linearRampToValueAtTime(330, t + 0.7);
+    const swg = ctx.createGain();
+    swg.gain.setValueAtTime(0, t);
+    swg.gain.linearRampToValueAtTime(0.05, t + 0.05);
+    swg.gain.setValueAtTime(0.05, t + 0.75);
+    swg.gain.linearRampToValueAtTime(0, t + 0.85);
+    const chug = ctx.createOscillator();
+    chug.type = 'square';
+    chug.frequency.setValueAtTime(7, t);
+    chug.frequency.linearRampToValueAtTime(10, t + 0.75);
+    const chugAmt = ctx.createGain();
+    chugAmt.gain.value = 0.04;
+    chug.connect(chugAmt).connect(swg.gain);
+    const swf = ctx.createBiquadFilter();
+    swf.type = 'bandpass';
+    swf.frequency.value = 900;
+    swf.Q.value = 1.2;
+    sw.connect(swf).connect(swg).connect(out);
+    // --- the engine: a narrow pulse train at the firing rate (rich in harmonics), a half-rate lope, cycle jitter
+    const N = 24;
+    const re = new Float32Array(N);
+    const im = new Float32Array(N);
+    for (let k = 1; k < N; k++) im[k] = (Math.sin(k * 0.35) / k) * (k % 2 ? 1 : 0.7);
+    const wave = ctx.createPeriodicWave(re, im);
+    const body = ctx.createOscillator();
+    body.setPeriodicWave(wave);
+    const lope = ctx.createOscillator();
+    lope.type = 'triangle';
+    const jit = ctx.createBufferSource();
+    const jb = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const jd = jb.getChannelData(0);
+    let v = 0;
+    for (let i = 0; i < jd.length; i++) jd[i] = v = v * 0.995 + (Math.random() - 0.5) * 0.1;
+    jit.buffer = jb;
+    jit.loop = true;
+    const jitAmt = ctx.createGain();
+    jitAmt.gain.value = 120;
+    jit.connect(jitAmt).connect(body.detune);
+    jit.connect(jitAmt).connect(lope.detune);
+    const prev = { r: 0 };
+    for (const [dt, r] of RPM) {
+      const at = t + dt;
+      const f = Math.max(1, fire(r));
+      if (dt === 0) {
+        body.frequency.setValueAtTime(f, at);
+        lope.frequency.setValueAtTime(f / 2, at);
+      } else {
+        body.frequency.linearRampToValueAtTime(f, at);
+        lope.frequency.linearRampToValueAtTime(f / 2, at);
+      }
+      prev.r = r;
     }
-    f.connect(g).connect(out);
-    // whoosh as the logo lands
-    this.swell?.(t + 0.6, 0.5, 0.35, out, 'bandpass', 400, 5000, 1.2);
-    this.announce('title', delay + 0.55, 1.2);
+    const mixG = ctx.createGain();
+    const bodyG = ctx.createGain();
+    bodyG.gain.value = 0.9;
+    const lopeG = ctx.createGain();
+    lopeG.gain.value = 0.45;
+    body.connect(bodyG).connect(mixG);
+    lope.connect(lopeG).connect(mixG);
+    // intake/exhaust roar: noise that opens up with the revs
+    const nz = ctx.createBufferSource();
+    const nb = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const nd = nb.getChannelData(0);
+    for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    nz.buffer = nb;
+    nz.loop = true;
+    const nf = ctx.createBiquadFilter();
+    nf.type = 'bandpass';
+    nf.Q.value = 0.9;
+    const ng = ctx.createGain();
+    nz.connect(nf).connect(ng).connect(mixG);
+    // grit, then the exhaust's resonances and a low-pass that follows the revs
+    const shaper = ctx.createWaveShaper();
+    const curve = new Float32Array(1024);
+    for (let i = 0; i < 1024; i++) {
+      const x = (i / 1023) * 2 - 1;
+      curve[i] = Math.tanh(x * 3.2) * 0.9;
+    }
+    shaper.curve = curve;
+    const res1 = ctx.createBiquadFilter();
+    res1.type = 'peaking';
+    res1.frequency.value = 110;
+    res1.Q.value = 1.4;
+    res1.gain.value = 7;
+    const res2 = ctx.createBiquadFilter();
+    res2.type = 'peaking';
+    res2.frequency.value = 520;
+    res2.Q.value = 2;
+    res2.gain.value = 5;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.Q.value = 2.2;
+    const eg = ctx.createGain();
+    // throttle: how hard it's working sets level, brightness and roar
+    eg.gain.setValueAtTime(0, t);
+    lp.frequency.setValueAtTime(400, t);
+    nf.frequency.setValueAtTime(600, t);
+    ng.gain.setValueAtTime(0, t);
+    let lastR = 0;
+    for (const [dt, r] of RPM) {
+      const at = t + dt;
+      const on = r > lastR + 200; // revving up = throttle open
+      const lvl = r <= 0 ? 0 : 0.16 + Math.min(1, r / 8800) * 0.22 + (on ? 0.06 : 0);
+      eg.gain.linearRampToValueAtTime(lvl, at);
+      lp.frequency.linearRampToValueAtTime(500 + r * (on ? 0.85 : 0.45), at);
+      nf.frequency.linearRampToValueAtTime(700 + r * 0.5, at);
+      ng.gain.linearRampToValueAtTime(r <= 0 ? 0 : 0.03 + (on ? 0.12 : 0.03) * (r / 8800), at);
+      lastR = r;
+    }
+    eg.gain.linearRampToValueAtTime(0, end);
+    mixG.connect(shaper).connect(res1).connect(res2).connect(lp).connect(eg).connect(out);
+    if (this.roomIn) {
+      const w = ctx.createGain();
+      w.gain.value = 0.25;
+      eg.connect(w).connect(this.roomIn);
+    }
+    for (const n of [sw, chug, body, lope, jit, nz]) {
+      n.start(t);
+      n.stop(end + 0.1);
+    }
+    // a backfire pop as it drops off the first blip
+    this.swell?.(t + 2.2, 0.08, 0.3, out, 'lowpass', 900, 200, 0.8);
+    // the whoosh as the logo slams in, and the announcer on top of the scream
+    this.swell?.(t + 3.3, 0.6, 0.3, out, 'bandpass', 300, 5000, 1.2);
+    this.announce('title', delay + 3.55, 1.25);
   }
   get ready() {
     return !!this.ctx && this.ctx.state === 'running';
