@@ -386,6 +386,10 @@ export class TrackWorld {
           const c = path.point(j, side * (hw - 0.45), 0.04, new THREE.Vector3());
           const d = path.point(i, side * (hw - 0.45), 0.04, new THREE.Vector3());
           L.quad(mask, a, b, c, d, col);
+          // the edge light spilling across the wet-black road, like the key art's reflections
+          const e = path.point(j, side * (hw - 3.2), 0.035, new THREE.Vector3());
+          const f = path.point(i, side * (hw - 3.2), 0.035, new THREE.Vector3());
+          L.quadFade(mask, d, c, e, f, col, 0.07, 0);
           // rails
           const rail = side < 0 ? path.railL[i] : path.railR[i];
           if (rail) {

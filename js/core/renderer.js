@@ -4,7 +4,7 @@ import * as THREE from '../../vendor/three.js';
 // Final colour grade, per stage: saturation, contrast, a highlight tint and a shadow lift colour,
 // plus vignette and film grain. Hits add chromatic aberration; lightning adds a flash.
 export const GRADES = {
-  neon: { sat: 1.18, contrast: 1.1, tint: [1, 1, 1], lift: [0, 0, 0], vignette: 0.42 },
+  neon: { sat: 1.22, contrast: 1.08, tint: [1, 1, 1], lift: [0.12, 0.02, 0.18], vignette: 0.38, wet: 0.55 },
   default: { sat: 1.08, contrast: 1.05, tint: [1, 1, 1], lift: [0.2, 0.1, 0.3], vignette: 0.32 },
   mesa: { sat: 1.1, contrast: 1.06, tint: [1.04, 0.99, 0.94], lift: [0.45, 0.12, 0.5], vignette: 0.34 },
   city: { sat: 1.12, contrast: 1.08, tint: [0.97, 0.98, 1.06], lift: [0.1, 0.15, 0.55], vignette: 0.4 },
@@ -28,11 +28,13 @@ const GRADE_SHADER = {
     uFlash: { value: 0 },
     uTime: { value: 0 },
     uGrain: { value: 0.025 },
+    uWet: { value: 0.0 },
+    uStep: { value: 0.012 },
   },
   vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: `
     uniform sampler2D tDiffuse;
-    uniform float uSat, uContrast, uVignette, uAberr, uFlash, uTime, uGrain;
+    uniform float uSat, uContrast, uVignette, uAberr, uFlash, uTime, uGrain, uWet, uStep;
     uniform vec3 uTint, uLift;
     varying vec2 vUv;
     void main() {
@@ -43,6 +45,19 @@ const GRADE_SHADER = {
         vec2 off = d * uAberr * 0.025;
         c = vec3(texture2D(tDiffuse, vUv + off).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - off).b);
       } else c = texture2D(tDiffuse, vUv).rgb;
+      // Wet road: dark pixels in the lower part of the frame pick up light smeared down from whatever bright thing
+      // is above them, so every neon line drips a reflection onto the black asphalt.
+      if (uWet > 0.0 && vUv.y < 0.62) {
+        float base = dot(c, vec3(0.299, 0.587, 0.114));
+        vec3 acc = vec3(0.0);
+        for (int i = 1; i <= 9; i++) {
+          vec2 o = vec2(sin(float(i) * 7.1 + uTime * 3.0) * 0.0015, float(i) * uStep);
+          vec3 s = texture2D(tDiffuse, vUv + o).rgb;
+          float b = max(0.0, max(s.r, max(s.g, s.b)) - 0.35);
+          acc += s * b * exp(-float(i) * 0.28);
+        }
+        c += acc * uWet * (1.0 - smoothstep(0.05, 0.3, base)) * smoothstep(0.62, 0.4, vUv.y);
+      }
       c = (c - 0.5) * uContrast + 0.5;
       float l = dot(c, vec3(0.299, 0.587, 0.114));
       c = mix(vec3(l), c, uSat);
@@ -184,6 +199,7 @@ export class Renderer {
     u.uTime.value = (performance.now() * 0.001) % 100;
     // Grain only where there are enough pixels for it to read as texture.
     u.uGrain.value = this.quality === 'high' ? 0.022 : 0.012;
+    u.uWet.value = this.preset.fx * (G.wet ?? 0) * (this.mirror ? 0 : 1);
   }
 
   // Runs draw() with the camera flipped left-right when mirror mode is on.
@@ -211,7 +227,7 @@ export class Renderer {
       this.renderPass.scene = scene;
       this.renderPass.camera = views[0].camera;
       // Kept a little under each stage's nominal strength: neon reads better without the haze.
-      this.bloom.strength = bloomStrength;
+      this.bloom.strength = bloomStrength * 1.15;
       this.applyGrade();
       this.composer.render();
       return;
@@ -223,7 +239,7 @@ export class Renderer {
       const vw = views[0].w * W;
       const vh = views[0].h * H;
       const C = this.splitComposer(vw, vh);
-      this.bloom2.strength = bloomStrength;
+      this.bloom2.strength = bloomStrength * 1.15;
       r.setScissorTest(true);
       for (const v of views) {
         v.before?.();

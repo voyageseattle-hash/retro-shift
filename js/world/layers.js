@@ -42,8 +42,9 @@ export class Layers {
       base,
       line: new THREE.LineBasicMaterial({ color: 0xffffff, vertexColors: true, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending }),
       ribbon: new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, transparent: true, opacity: 1, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }),
-      // (colours are linear here, so 0.004 is about 8% brightness on screen: glossy black with a hint of the lens)
-      fill: new THREE.MeshBasicMaterial({ color: _c.set(base).multiplyScalar(0.004).getHex(), transparent: true, opacity: 0.9, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
+      // Tinted glass: coloured pieces get a rich see-through tint, neutral ones (mostly road) stay wet black.
+      // (colours are linear here: 0.05 reads as about a quarter brightness on screen, 0.006 as near black)
+      fill: new THREE.MeshBasicMaterial({ color: _c.set(base).multiplyScalar(mask === 7 ? 0.006 : 0.05).getHex(), transparent: true, opacity: 0.9, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
       solid: new THREE.MeshBasicMaterial({ color: base, transparent: true, opacity: 1 }),
       wire: new THREE.LineBasicMaterial({ color: base, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending }),
     };
@@ -71,6 +72,14 @@ export class Layers {
     B.rp.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
     _c.set(color ?? colorForMask(mask)).multiplyScalar(k);
     for (let i = 0; i < 6; i++) B.rc.push(_c.r, _c.g, _c.b);
+  }
+  // Ribbon quad that fades across: colour k0 along edge a-b, k1 along d-c (a spill of light onto the road).
+  quadFade(mask, a, b, c, d, color, k0, k1) {
+    const B = this.b(mask);
+    B.rp.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
+    _c.set(color);
+    const r = _c.r, g = _c.g, bl = _c.b;
+    for (const k of [k0, k0, k1, k0, k1, k1]) B.rc.push(r * k, g * k, bl * k);
   }
   fillQuad(mask, a, b, c, d) {
     const B = this.b(mask);

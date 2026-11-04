@@ -387,7 +387,7 @@ export class Trail {
     const P = this.pos, C = this.col, c = this.color;
     for (let k = 0; k < this.n; k++) {
       const q = this.pts[Math.min(k, this.pts.length - 1)];
-      const f = (1 - k / (this.n - 1)) ** 1.6 * (q.on ? 0.75 : 0) * Math.min(1, power * 1.4);
+      const f = (1 - k / (this.n - 1)) ** 1.6 * (q.on ? 0.5 : 0) * Math.min(1, power * 1.4);
       const w = q.w * (1 - k / this.n);
       for (let s = 0; s < 2; s++) {
         const o = (k * 2 + s) * 3;

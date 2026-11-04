@@ -4,6 +4,7 @@
 import * as THREE from '../../vendor/three.js';
 import { MODE_TINT, BOTH } from '../world/shift.js';
 import { damp } from '../core/util.js';
+import { SkyPiece, SKY_PIECE } from './skypieces.js';
 
 const SUN_SHADER = {
   uniforms: { uTop: { value: new THREE.Color(0xff3a7a) }, uBot: { value: new THREE.Color(0x3a6aff) }, uTime: { value: 0 } },
@@ -21,6 +22,25 @@ const SUN_SHADER = {
       vec3 c = mix(uBot, uTop, smoothstep(0.0, 1.0, y));
       float glow = smoothstep(0.5, 0.3, r);
       gl_FragColor = vec4(c * (0.6 + 0.8 * glow), 1.0);
+    }`,
+};
+
+// Sky: black overhead, a band of light on the horizon that is red round one side of the sky and blue round the other,
+// meeting in magenta, like the two worlds' glow bleeding into the dark.
+const SKY_SHADER = {
+  uniforms: { uA: { value: new THREE.Color(0xff2a4a) }, uB: { value: new THREE.Color(0x1e8cff) }, uI: { value: 1 }, uY: { value: 0 } },
+  vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: `
+    uniform vec3 uA, uB; uniform float uI, uY; varying vec3 vDir;
+    void main(){
+      vec3 d = normalize(vDir);
+      float e = d.y - uY;
+      float az = atan(d.z, d.x);
+      float m = 0.5 + 0.5 * sin(az * 2.0);
+      vec3 col = mix(uA, uB, smoothstep(0.15, 0.85, m));
+      float band = exp(-max(e, 0.0) * 16.0) * smoothstep(-0.2, 0.0, e);
+      float wide = exp(-max(e, 0.0) * 4.0);
+      gl_FragColor = vec4(col * (band * 0.22 + wide * 0.035) * uI, 1.0);
     }`,
 };
 
@@ -53,8 +73,8 @@ export class Environment {
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
       return new THREE.LineSegments(g, mat);
     };
-    this.gridMat = new THREE.LineBasicMaterial({ color: 0xff2a4a, transparent: true, opacity: 0.32 });
-    this.gridMatB = new THREE.LineBasicMaterial({ color: 0x1e8cff, transparent: true, opacity: 0.32 });
+    this.gridMat = new THREE.LineBasicMaterial({ color: 0xff2a4a, transparent: true, opacity: 0.5 });
+    this.gridMatB = new THREE.LineBasicMaterial({ color: 0x1e8cff, transparent: true, opacity: 0.5 });
     for (const [pos, mat] of [[posA, this.gridMat], [posB, this.gridMatB]]) {
       const g = lines(pos, mat);
       g.position.set(Math.round(cx / step) * step, y, Math.round(cz / step) * step);
@@ -65,15 +85,27 @@ export class Environment {
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(cx, y - 0.2, cz);
     this.group.add(floor);
+    // horizon glow
+    this.skyMat = new THREE.ShaderMaterial({ ...SKY_SHADER, uniforms: THREE.UniformsUtils.clone(SKY_SHADER.uniforms), side: THREE.BackSide, fog: false, depthWrite: false });
+    this.sky = new THREE.Mesh(new THREE.SphereGeometry(2600, 48, 24), this.skyMat);
+    this.sky.renderOrder = -3;
+    this.sky.frustumCulled = false;
+    this.group.add(this.sky);
     // sun (kept for tracks that ask for one with def.sunVisible; the concept look is a black sky)
     this.sunMat = new THREE.ShaderMaterial({ ...SUN_SHADER, uniforms: THREE.UniformsUtils.clone(SUN_SHADER.uniforms), fog: false, depthWrite: false });
     this.sun = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.sunMat);
     this.sun.scale.setScalar(700);
     this.sun.renderOrder = -2;
-    this.sun.visible = !!world.def.sunVisible;
+    const piece = world.def.skyPiece ?? SKY_PIECE[world.def.id] ?? 'sun';
+    this.sun.visible = piece === 'sun';
     this.group.add(this.sun);
-    const sunDirs = [new THREE.Vector3(0, 0.14, 1), new THREE.Vector3(1, 0.14, 0.2), new THREE.Vector3(-0.6, 0.14, -1)];
-    this.sunDir = sunDirs[(world.def.sun ?? 0) % 3].normalize();
+    // The set piece hangs over the start straight, so it fills the view at the start and every time you cross the line.
+    const yaw0 = Math.atan2(m.thx[0], m.thz[0]) + [0, 0.35, -0.35][(world.def.sun ?? 0) % 3];
+    this.sunDir = new THREE.Vector3(Math.sin(yaw0), 0.13, Math.cos(yaw0)).normalize();
+    if (piece !== 'sun' && piece !== 'none') {
+      this.piece = new SkyPiece(piece, this.sunDir);
+      this.group.add(this.piece.group);
+    }
     // mountains: a ring of jagged wire ridges
     const mp = [];
     const mpB = [];
@@ -94,8 +126,8 @@ export class Environment {
       o.push(...p0, Math.cos(a0) * R * 0.94, 0, Math.sin(a0) * R * 0.94);
       o.push(...p0, Math.cos(a0 + 0.03) * R * 1.05, 0, Math.sin(a0 + 0.03) * R * 1.05);
     }
-    this.mtnMat = new THREE.LineBasicMaterial({ color: 0xff2a4a, fog: false, transparent: true, opacity: 0.45 });
-    this.mtnMatB = new THREE.LineBasicMaterial({ color: 0x1e8cff, fog: false, transparent: true, opacity: 0.45 });
+    this.mtnMat = new THREE.LineBasicMaterial({ color: 0xff2a4a, fog: false, transparent: true, opacity: 0.8 });
+    this.mtnMatB = new THREE.LineBasicMaterial({ color: 0x1e8cff, fog: false, transparent: true, opacity: 0.8 });
     for (const [pos, mat] of [[mp, this.mtnMat], [mpB, this.mtnMatB]]) {
       const g = lines(pos, mat);
       g.position.set(cx, y, cz);
@@ -114,7 +146,7 @@ export class Environment {
     sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
     this.stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0x8a8aa0, size: 1.5, sizeAttenuation: false, fog: false }));
     this.group.add(this.stars);
-    this.fog = new THREE.Fog(0x020103, 180, 1100);
+    this.fog = new THREE.Fog(0x0a0310, 180, 1100);
     this.bg = new THREE.Color(0x000000);
     this.tint = { grid: new THREE.Color(0xff2a4a), gridB: new THREE.Color(0x1e8cff), fog: new THREE.Color(0x020103), top: new THREE.Color(0xff3a7a), bot: new THREE.Color(0x3a6aff) };
     this.mode = BOTH;
@@ -151,7 +183,7 @@ export class Environment {
     this.mtnMat.color.copy(this.tint.grid);
     this.mtnMatB.color.copy(this.tint.gridB);
     this.fog.color.copy(this.tint.fog);
-    this.bg.copy(this.tint.fog).multiplyScalar(0.3);
+    this.bg.copy(this.tint.fog).multiplyScalar(0.15);
     this.sunMat.uniforms.uTop.value.copy(this.tint.top);
     this.sunMat.uniforms.uBot.value.copy(this.tint.bot);
     this.sunMat.uniforms.uTime.value = t;
@@ -161,6 +193,13 @@ export class Environment {
     this.sun.position.y = this.center.y + 2000 * this.sunDir.y + 120;
     this.sun.lookAt(cp.x, this.sun.position.y, cp.z);
     this.stars.position.copy(cp);
+    this.sky.position.copy(cp);
+    this.piece?.update(dt, t, cp, this.center.y, this.tint, this.pulse);
+    this.skyMat.uniforms.uA.value.copy(this.tint.grid);
+    this.skyMat.uniforms.uB.value.copy(this.tint.gridB);
+    this.skyMat.uniforms.uI.value = 1 + this.pulse * 0.8;
+    // keep the band on the course's horizon, not the camera's: high on Helix it sinks below you
+    this.skyMat.uniforms.uY.value = Math.max(-0.3, Math.min(0.05, (this.center.y - cp.y) / 900));
   }
 }
 
