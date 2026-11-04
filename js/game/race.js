@@ -44,9 +44,9 @@ export class Race {
     this.racers = [];
     this.finishOrder = [];
     this.tipShown = new Set();
-    // Wall coaching: until a player has phased through a few walls, a wall that's solid in their lens is called out
-    // (with the button that gets them through) and stays called out until they shift or pass it.
-    this.coachLeft = this.tutorial ? 99 : 6 - storage.get('rs.coach.phased', 0);
+    // Wall coaching on the first run: a wall that's solid in your lens is called out (with the button that gets you
+    // through) until you shift or pass it. Everywhere else the roadside signs do that job.
+    this.coachLeft = this.tutorial ? 99 : 0;
     this.lesson = 0;
     this.stats = { phased: 0, crashes: 0, shifts: 0 };
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
@@ -355,8 +355,8 @@ export class Race {
     // wall coaching
     if (this.state === 'race' && this.coachLeft > 0) for (const pl of this.players) this.coachWalls(pl);
     if (this.tutorial && this.state === 'race') this.coachLessons(p, dt);
-    // tips (tutorial track)
-    for (const tip of this.def.tips || []) {
+    // tips (first run only)
+    for (const tip of (this.tutorial && this.def.tips) || []) {
       const key = tip.at;
       if (this.tipShown.has(key) || p.lap > 1) continue;
       let d = tip.at - p.lastU;
@@ -522,10 +522,6 @@ export class Race {
             this.app.audio.play('phase');
             this.emitP(r, 'popup', { text: 'PHASED', color: r.mode === RED ? '#ff4a6a' : r.mode === BLUE ? '#4ab0ff' : '#d8c8ff', small: true });
             this.stats.phased++;
-            if (o.type === 'wall' && this.coachLeft > 0) {
-              this.coachLeft--;
-              storage.set('rs.coach.phased', 6 - this.coachLeft);
-            }
           }
         }
         continue;
