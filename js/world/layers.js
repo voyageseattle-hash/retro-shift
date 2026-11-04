@@ -5,6 +5,7 @@
 import * as THREE from '../../vendor/three.js';
 import { colorForMask, solidIn, RED, BLUE, M } from './shift.js';
 import { damp } from '../core/util.js';
+import { WAVE, patchWave, patchWet } from './fx.js';
 
 const _c = new THREE.Color();
 const NEUTRAL = M.ALL;
@@ -19,6 +20,7 @@ class Builder {
     this.rp = []; // ribbon (glow strip) triangles
     this.rc = [];
     this.fp = []; // dark fill triangles
+    this.gp = []; // road surface triangles (wet glass)
   }
 }
 
@@ -29,6 +31,8 @@ export class Layers {
     this.group = new THREE.Group();
     this.level = new Map(); // mask -> current solidity 0..1
     this.signs = []; // { mat, hideIn }: a board that goes with its colour's world
+    this.waveAt = null; // where a shift wave starts (the viewer's car); no wave without it
+    this.wave = null;
   }
 
   b(mask) {
@@ -53,6 +57,13 @@ export class Layers {
       solid: new THREE.MeshBasicMaterial({ color: base, transparent: true, opacity: 1 }),
       wire: new THREE.LineBasicMaterial({ color: base, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending }),
     };
+    // the road's own glass: the fill, plus the wet reflection
+    m.road = patchWet(m.fill.clone());
+    // every world but the neutral one redraws behind the shift wave
+    if (mask !== NEUTRAL) {
+      m.per = { uFrom: { value: 1 }, uTo: { value: 1 } };
+      for (const k of ['line', 'ribbon', 'wire', 'fill', 'solid', 'road']) patchWave(m[k], m.per, k === 'line' || k === 'wire');
+    }
     this.mats.set(mask, m);
     this.level.set(mask, 1);
     return m;
@@ -89,6 +100,11 @@ export class Layers {
   fillQuad(mask, a, b, c, d) {
     const B = this.b(mask);
     B.fp.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
+  }
+  // A piece of road surface: dark glass that shows the wet reflection.
+  roadQuad(mask, a, b, c, d) {
+    const B = this.b(mask);
+    B.gp.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
   }
 
   // Wire box, rotated by yaw about its centre.
@@ -219,6 +235,14 @@ export class Layers {
         o.renderOrder = 1;
         this.group.add(o);
       }
+      if (B.gp.length) {
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(B.gp, 3));
+        g.computeBoundingSphere();
+        const o = new THREE.Mesh(g, m.road);
+        o.renderOrder = 1;
+        this.group.add(o);
+      }
     }
     this.builders.clear();
     return this.group;
@@ -253,9 +277,41 @@ export class Layers {
       const want = lens ? N.grey : N.colour;
       if (N.g.getAttribute('color') !== want) N.g.setAttribute('color', want);
     }
+    // A lens change starts a wave from the car (one view only: split-screen views fade as before).
+    const waving = !this.views && this.waveAt && !instant;
+    if (waving && this.lastMode !== undefined && mode !== this.lastMode) {
+      if (this.wave) this.endWave();
+      this.wave = { R: 0, mode };
+      WAVE.uWaveC.value.copy(this.waveAt);
+      WAVE.uWaveEdge.value.copy(T).multiplyScalar(0.7);
+      for (const [mask, m] of this.mats) {
+        if (!m.per) continue;
+        m.per.uFrom.value = this.level.get(mask) ?? 1;
+        m.per.uTo.value = solidIn(mask, mode) ? 1 : 0;
+        this.level.set(mask, m.per.uTo.value);
+      }
+    }
+    this.lastMode = mode;
+    if (this.wave) {
+      // fast at first, faster as it goes: the near world turns over at once, the horizon a beat later
+      this.wave.R += dt * (160 + this.wave.R * 2.6);
+      WAVE.uWaveR.value = this.wave.R;
+      WAVE.uWaveEdge.value.multiplyScalar(Math.exp(-1.4 * dt));
+      if (this.wave.R > 2500) this.endWave();
+    }
     for (const [mask, m] of this.mats) {
       const want = solidIn(mask, mode) ? 1 : 0;
       let lv = this.level.get(mask);
+      if (this.wave && m.per) {
+        // the shader does the fading either side of the ring; keep both sides drawn while it passes
+        const shimmer = mask === RED || mask === BLUE ? 0.85 + 0.15 * Math.sin(time * 9) : 1;
+        const on = m.per.uFrom.value > 0 || m.per.uTo.value > 0;
+        m.line.opacity = m.ribbon.opacity = m.wire.opacity = shimmer;
+        m.fill.opacity = m.road.opacity = 0.9;
+        m.solid.opacity = 1;
+        m.line.visible = m.ribbon.visible = m.wire.visible = m.solid.visible = m.fill.visible = m.road.visible = on;
+        continue;
+      }
       lv = instant ? want : damp(lv, want, want ? 14 : 12, dt);
       if (lv < 0.003) lv = 0;
       this.level.set(mask, lv);
@@ -265,10 +321,10 @@ export class Layers {
       m.line.opacity = lv * shimmer;
       m.ribbon.opacity = lv * shimmer;
       m.wire.opacity = lv * shimmer;
-      m.fill.opacity = 0.9 * lv;
+      m.fill.opacity = m.road.opacity = 0.9 * lv;
       m.solid.opacity = lv;
       m.line.visible = m.ribbon.visible = m.wire.visible = m.solid.visible = on;
-      m.fill.visible = lv > 0.02;
+      m.fill.visible = m.road.visible = lv > 0.02;
       if (mask === NEUTRAL) {
         m.line.color.copy(tint);
         m.ribbon.color.copy(tint);
@@ -277,6 +333,16 @@ export class Layers {
       }
     }
     for (const S of this.signs) {
+      // (boards go with their world; under a wave they flip as the ring reaches them)
+      if (this.wave && S.at) {
+        const want = mode === S.hideIn ? 0 : 1;
+        if (S.at.distanceTo(WAVE.uWaveC.value) < this.wave.R) {
+          S.mat.opacity = want;
+          S.mat.visible = want > 0;
+          this.level.set(`sign${S.hideIn}`, want);
+        }
+        continue;
+      }
       const key = `sign${S.hideIn}`;
       const want = mode === S.hideIn ? 0 : 1;
       let lv = this.level.get(key) ?? 1;
@@ -285,5 +351,12 @@ export class Layers {
       S.mat.opacity = lv;
       S.mat.visible = lv > 0.01;
     }
+  }
+
+  // The ring has passed the horizon: everything is the new lens.
+  endWave() {
+    for (const m of this.mats.values()) if (m.per) m.per.uFrom.value = m.per.uTo.value = 1;
+    WAVE.uWaveR.value = 1e7;
+    this.wave = null;
   }
 }

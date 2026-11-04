@@ -320,7 +320,10 @@ class App {
         }
       }
       // (a menu press above can have quit the race this frame)
-      if (this.race) this.renderer.render(this.race.scene, this.race.views(), 0.85);
+      if (this.race) {
+        this.race.beforeRender(this.renderer);
+        this.renderer.render(this.race.scene, this.race.views(), 0.85);
+      }
     } else {
       this.ui.update();
       if (this.showroom) {

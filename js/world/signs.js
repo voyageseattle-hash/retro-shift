@@ -87,7 +87,7 @@ function addSign(world, path, i, side, title, sub, mask, arrow = 0) {
   // a red board goes with the red world (gone through the blue lens), a blue one with the blue world
   const red = solidIn(mask, RED) && !solidIn(mask, BLUE);
   const blue = solidIn(mask, BLUE) && !solidIn(mask, RED);
-  if (red || blue) world.layers.signs.push({ mat, hideIn: red ? BLUE : RED });
+  if (red || blue) world.layers.signs.push({ mat, hideIn: red ? BLUE : RED, at: board.position });
   // the gantry: a post at each edge of the road and a beam across under the board
   const L = world.layers;
   const top = lift + H * 0.15;

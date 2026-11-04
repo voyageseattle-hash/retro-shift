@@ -401,7 +401,7 @@ export class TrackWorld {
         const ml = mid ?? COLORS.red;
         const mr = mid ?? COLORS.blue;
         // fill
-        L.fillQuad(mask, path.point(i, -hw, -0.02, v[0]), path.point(j, -hw, -0.02, v[1]), path.point(j, hw, -0.02, v[2]), path.point(i, hw, -0.02, v[3]));
+        L.roadQuad(mask, path.point(i, -hw, -0.02, v[0]), path.point(j, -hw, -0.02, v[1]), path.point(j, hw, -0.02, v[2]), path.point(i, hw, -0.02, v[3]));
         // glowing edges (ribbons a little in from the edge, lying on the road)
         for (const [side, col] of [[-1, lc], [1, rc]]) {
           const a = path.point(i, side * hw, 0.04, new THREE.Vector3());

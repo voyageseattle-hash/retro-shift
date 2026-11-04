@@ -15,10 +15,12 @@ import { driverOf, pick } from './story.js';
 import { Debris } from './wreck.js';
 import { SpeedLines } from './speedlines.js';
 import { Storms } from './storms.js';
+import { Reflection } from './reflect.js';
 
 const _v = new THREE.Vector3();
 const _a = new THREE.Vector3();
 const _c = new THREE.Color();
+const _s = new THREE.Vector2();
 // closing speeds (m/s) that wreck a car: into a wall or block, and a car rammed by another
 const WRECK_SPEED = 30;
 const TAKEDOWN_SPEED = 14;
@@ -62,6 +64,7 @@ export class Race {
     this.speedLines = new SpeedLines();
     this.scene.add(this.speedLines.mesh);
     this.storms = new Storms(this);
+    this.reflection = new Reflection();
     this.scene.add(this.storms.group);
     this.slowT = 0;
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
@@ -129,6 +132,8 @@ export class Race {
       this.cams.push(c2);
     }
     this.players.forEach((p, k) => this.cams[k].snap(p));
+    // the lens-shift wave starts from the player's car (split-screen fades each view instead)
+    this.world.layers.waveAt = this.split ? null : this.player.pos;
     this.events = [];
     this.lastMode = BOTH;
     // ghosts: your best run and the staff run
@@ -537,6 +542,15 @@ export class Race {
       r.coachWall = null;
       this.emitP(r, 'tipoff');
     }
+  }
+
+  // Before each frame is drawn: the wet-road reflection (one view, high quality only).
+  beforeRender(renderer) {
+    const gl = renderer.renderer;
+    const on = !this.split && renderer.quality === 'high';
+    const size = gl.getDrawingBufferSize(_s);
+    const p = this.player;
+    this.reflection.render(gl, this.scene, this.cam.camera, p.gnd?.y ?? p.pos.y, on ? 0.2 : 0, size.x, size.y, this.t);
   }
 
   // What to draw: one full-screen view, or two stacked views (player 1 on top), each prepared for its own lens.

@@ -57,7 +57,7 @@ export function buildCovers(world) {
     board.rotation.y = yaw + Math.PI;
     board.renderOrder = 10;
     world.group.add(board);
-    L.signs.push({ mat, hideIn: lens });
+    L.signs.push({ mat, hideIn: lens, at: board.position });
     L.box(cover, c.x, c.y + 1.2 + H / 2, c.z, W, H, 0.6, yaw, null, true);
     const ux = Math.cos(yaw);
     const uz = -Math.sin(yaw);
@@ -130,6 +130,6 @@ function gantry(world, b, on, cover, lens, seed) {
   board.rotation.y = yaw + Math.PI;
   board.renderOrder = 10;
   world.group.add(board);
-  L.signs.push({ mat, hideIn: lens });
+  L.signs.push({ mat, hideIn: lens, at: board.position });
   L.box(cover, mid.x, top - 1.2 - H / 2, mid.z, W + 0.4, H + 0.4, 0.3, yaw, null, false);
 }
