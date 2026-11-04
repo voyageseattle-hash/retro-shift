@@ -69,10 +69,24 @@ kbd { font-family: 'Chakra Petch', monospace; font-weight: 700; font-size: 0.8em
 .tcard .tbest { color: #6ae0ff; font-size: 12px; }
 
 /* car select */
-.cars-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 240px)); gap: 14px; }
+.cars-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 220px)); gap: 10px; }
+.screen.cars, .screen.garage { justify-content: flex-start; background: linear-gradient(180deg, rgba(5, 2, 12, 0.55), transparent 22%, transparent 55%, rgba(5, 2, 12, 0.85)); }
+.stage-gap { flex: 1; min-height: 34vh; }
+.ccard { padding: 10px 14px; font-size: 14px; }
+.ccard .cfrom { font-size: 11px; color: #c8b8ff; letter-spacing: 0.16em; margin-top: -4px; }
+.ccard .chint { font-size: 11px; color: var(--dim); letter-spacing: 0.06em; line-height: 1.3; }
+.ccard.locked { opacity: 0.55; }
+.ccard.locked.focus { opacity: 0.85; }
+.ccard.secret { border-style: dashed; }
+.ccard.secret:not(.locked) .cname { background: linear-gradient(90deg, var(--red), var(--pink), var(--blue)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.garage-list .item { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.garage-list .item span { color: var(--dim); font-size: 12px; letter-spacing: 0.2em; min-width: 110px; text-align: left; }
+.sw { display: inline-block; width: 16px; height: 16px; border: 1px solid #fff; box-shadow: 0 0 8px currentColor; }
+.sw.off { background: repeating-linear-gradient(45deg, #333 0 3px, #111 3px 6px); }
+.sw.spectrum { background: linear-gradient(90deg, #ff2a4a, #ffd04a, #7dff4a, #6ae0ff, #1e8cff, #b04cff); }
+.foot2 { color: var(--dim); font-size: 12px; letter-spacing: 0.1em; }
 .ccard { transform: none; display: flex; flex-direction: column; gap: 6px; align-items: stretch; letter-spacing: 0.1em; }
 .ccard.focus { transform: scale(1.04); }
-.ccard .wedge { height: 70px; }
 .ccard .wedge polygon, .ccard .wedge polyline { fill: none; stroke: var(--c); stroke-width: 1.4; filter: drop-shadow(0 0 3px var(--c)); }
 .ccard .cname { font-size: 20px; color: var(--c); text-shadow: 0 0 10px var(--c); }
 .stat { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--dim); }
@@ -89,6 +103,35 @@ kbd { font-family: 'Chakra Petch', monospace; font-weight: 700; font-size: 0.8em
 .rstats div { display: flex; justify-content: space-between; gap: 20px; }
 .rstats span { color: var(--dim); }
 .rstats .record { color: var(--pink); justify-content: center; text-shadow: 0 0 10px var(--pink); }
+
+/* modes: medals, cups, trophies, unlocks */
+.screen .sub { max-width: 720px; text-align: center; color: #c8b8ff; line-height: 1.4; margin-top: -8px; }
+.medal { display: inline-block; padding: 0 6px; margin-left: 4px; border: 1px solid var(--mc); color: var(--mc); font-size: 10px; letter-spacing: 0.14em; transform: skewX(-12deg); box-shadow: 0 0 6px var(--mc); }
+.medalbox { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; min-width: 260px; padding: 16px; background: var(--panel); }
+.bigmedal { font-family: 'Russo One'; font-style: italic; font-size: 44px; color: var(--mc); text-shadow: 0 0 18px var(--mc), 0 0 40px var(--mc); }
+.bigmedal.none { color: var(--dim); font-size: 26px; text-shadow: none; }
+.targets { display: flex; flex-direction: column; gap: 4px; font-size: 14px; letter-spacing: 0.1em; }
+.targets div { display: flex; justify-content: space-between; gap: 24px; }
+.cups-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 320px)); gap: 18px; }
+.cupcard { transform: none; text-align: left; display: flex; flex-direction: column; gap: 10px; border-color: var(--c); }
+.cupcard.focus { transform: scale(1.04); }
+.cupcard .cupname { font-family: 'Russo One'; font-style: italic; font-size: 26px; color: var(--c); text-shadow: 0 0 12px var(--c); }
+.cupcard ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 14px; letter-spacing: 0.1em; }
+.cupcard ol span { color: var(--pink); margin-right: 10px; font-family: 'Russo One'; }
+.trophy { font-size: 13px; color: var(--dim); letter-spacing: 0.16em; }
+.trophy.t1, .cuptrophy.t1 { color: #ffd04a; text-shadow: 0 0 10px #ffd04a; }
+.trophy.t2, .cuptrophy.t2 { color: #d8e0f0; text-shadow: 0 0 10px #d8e0f0; }
+.trophy.t3, .cuptrophy.t3 { color: #e08a4a; text-shadow: 0 0 10px #e08a4a; }
+.cuptrophy { font-family: 'Russo One'; font-style: italic; font-size: clamp(34px, 6vw, 64px); }
+.cuptrophy.none { color: var(--dim); }
+.standings.gp tr.hd td { color: var(--dim); font-size: 11px; letter-spacing: 0.2em; }
+.standings.gp td.add { color: #6ae0ff; }
+.standings.wide { min-width: min(420px, 92vw); }
+.unlocks { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; padding: 10px 16px; border: 1.5px solid var(--pink); background: rgba(255, 79, 216, 0.12); box-shadow: 0 0 20px rgba(255, 79, 216, 0.4); animation: appear 0.5s ease-out; }
+@keyframes appear { 0% { transform: scale(1.3); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+.unlocks b { color: var(--pink); letter-spacing: 0.3em; margin-right: 6px; }
+.unlocks span { padding: 2px 10px; border: 1px solid rgba(255, 255, 255, 0.4); letter-spacing: 0.12em; }
+.h-chips .chip.swap { color: #fff; border-style: dashed; }
 
 /* ---------------------------------------------------------------- HUD */
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; font-weight: 700; text-shadow: 0 0 8px rgba(0, 0, 0, 0.9); }
@@ -168,6 +211,7 @@ body:not(.racing) #touch { display: none; }
 @media (max-width: 900px) {
   .tracks .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cars-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cups-grid { grid-template-columns: 1fr; }
   .howto .cols { grid-template-columns: 1fr; }
   .h-map { width: 120px; height: 120px; }
   .h-place { font-size: 40px; }

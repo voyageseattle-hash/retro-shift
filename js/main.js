@@ -12,6 +12,8 @@ import { TrackWorld } from './world/track.js';
 import { Environment } from './game/env.js';
 import { trackById, TRACKS } from './world/tracks.js';
 import { BOTH, RED, BLUE } from './world/shift.js';
+import { CUPS, POINTS, loadStaff, recordCup, checkUnlocks, liveryFor } from './game/modes.js';
+import { Showroom } from './game/showroom.js';
 
 class App {
   constructor() {
@@ -40,7 +42,9 @@ class App {
     const params = new URLSearchParams(location.search);
     if (params.get('track')) {
       this.ui.choice.track = params.get('track');
-      this.ui.choice.mode = params.get('trial') ? 'trial' : 'race';
+      this.ui.choice.mode = params.get('mode') || (params.get('trial') ? 'trial' : 'race');
+      if (params.get('car')) this.ui.choice.car = params.get('car');
+      this.autopilot = params.has('staff');
       this.startRace();
     } else this.ui.title();
     document.getElementById('loader')?.remove();
@@ -59,6 +63,7 @@ class App {
   onResize() {
     const a = this.renderer.width / this.renderer.height;
     if (this.race) this.race.cam.setAspect(a);
+    this.showroom?.setAspect(a);
     if (this.attract) {
       this.attract.camera.aspect = a;
       this.attract.camera.updateProjectionMatrix();
@@ -66,7 +71,25 @@ class App {
   }
 
   // ------------------------------------------------------------------ title backdrop: a slow orbit over a course
+  // car select and garage: the turntable replaces the course orbit
+  showCar(car, livery) {
+    if (!this.showroom) {
+      this.showroom = new Showroom();
+      this.showroom.setAspect(this.renderer.width / this.renderer.height);
+    }
+    this.showroom.setCar(car, livery);
+  }
+  hideCar() {
+    this.showroom = null;
+  }
+  // Unlocks earned since this race started (kept so a rebuilt results screen still shows them).
+  checkUnlocks() {
+    this.recentUnlocks = [...(this.recentUnlocks || []), ...checkUnlocks()];
+    return this.recentUnlocks;
+  }
+
   showAttract(on) {
+    this.showroom = null;
     if (!on) {
       this.attract = null;
       return;
@@ -107,23 +130,71 @@ class App {
   }
 
   // ------------------------------------------------------------------ race flow
-  startRace() {
+  async startRace() {
     this.audio.init();
     const c = this.ui.choice;
+    if (c.mode !== 'gp') this.gp = null;
+    if (this.gp) c.track = this.gp.cup.tracks[this.gp.round];
     const def = trackById(c.track);
+    const solo = c.mode === 'trial' || c.mode === 'mono';
+    const staff = solo && !this.autopilot ? await loadStaff(def.id, c.mode === 'mono') : null;
     if (this.race) this.race.dispose();
     this.audio.stopEngines();
     this.audio.duckMusic(false);
     this.showAttract(false);
+    this.hideCar();
+    this.recentUnlocks = [];
     this.ui.clear();
-    const trial = c.mode === 'trial';
-    this.race = new Race(this, def, { car: c.car, rivals: trial ? 0 : 5, difficulty: this.ui.settings.difficulty });
+    this.race = new Race(this, def, {
+      kind: c.mode,
+      car: c.car,
+      livery: liveryFor(c.car),
+      rivals: solo ? 0 : 5,
+      difficulty: this.ui.settings.difficulty,
+      staff,
+      autopilot: this.autopilot,
+    });
     this.race.cam.setAspect(this.renderer.width / this.renderer.height);
     this.ui.buildHud(this.race);
     this.paused = false;
     this.resultsShown = false;
     document.body.classList.add('racing');
   }
+  // ------------------------------------------------------------------ Grand Prix: five races, points carried over
+  startGP(cupId) {
+    const cup = CUPS.find((c) => c.id === cupId) || CUPS[0];
+    this.gp = { cup, round: 0, points: {}, colors: {}, awarded: -1 };
+    this.ui.choice.mode = 'gp';
+    this.startRace();
+  }
+  gpAward(race) {
+    const gp = this.gp;
+    const added = new Map();
+    race.standings().forEach((r, k) => {
+      const pts = POINTS[k] || 0;
+      added.set(r.name, pts);
+      gp.colors[r.name] = r.color;
+      if (gp.awarded !== gp.round) gp.points[r.name] = (gp.points[r.name] || 0) + pts;
+    });
+    gp.awarded = gp.round;
+    return added;
+  }
+  nextGP() {
+    this.gp.round++;
+    this.startRace();
+  }
+  // Final place in the cup (ties go to the player), saved to the trophy case.
+  finishGP() {
+    const gp = this.gp;
+    const me = gp.points.YOU || 0;
+    const rank = 1 + Object.entries(gp.points).filter(([n, p]) => n !== 'YOU' && p > me).length;
+    if (!gp.recorded) {
+      gp.recorded = true;
+      recordCup(gp.cup.id, rank);
+    }
+    return rank;
+  }
+
   pause() {
     if (!this.race || this.paused) return;
     this.paused = true;
@@ -137,6 +208,7 @@ class App {
     this.ui.clear();
   }
   quit() {
+    this.gp = null;
     if (this.race) this.race.dispose();
     this.race = null;
     this.paused = false;
@@ -172,7 +244,11 @@ class App {
       this.renderer.render(this.race.scene, [{ camera: this.race.cam.camera, x: 0, y: 0, w: 1, h: 1 }], 0.85);
     } else {
       this.ui.update();
-      if (this.attract) this.updateAttract(dt);
+      if (this.showroom) {
+        this.showroom.update(dt);
+        this.renderer.setGrade('neon', 0, 0);
+        this.renderer.render(this.showroom.scene, [{ camera: this.showroom.camera, x: 0, y: 0, w: 1, h: 1 }], 0.85);
+      } else if (this.attract) this.updateAttract(dt);
     }
     this.input.endFrame();
     requestAnimationFrame((t) => this.frame(t));

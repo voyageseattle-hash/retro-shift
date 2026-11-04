@@ -59,6 +59,8 @@ export const SHIFT = {
   recharge: 1 / 9,
   shard: 0.3,
   minToShift: 0.12,
+  // Mono Run: no BOTH, no drain or recharge; each swap between RED and BLUE costs this much.
+  monoCost: 0.16,
 };
 
 // The 3 lens tints (UI, fog, ground grid).

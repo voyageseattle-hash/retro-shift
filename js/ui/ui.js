@@ -6,6 +6,8 @@ import { CARS } from '../vehicles/racer.js';
 import { drawPaths, MiniMap } from './minimap.js';
 import { BOTH, RED, BLUE, MODE_NAME } from '../world/shift.js';
 import { formatTime, ordinal, storage } from '../core/util.js';
+import { CUPS, POINTS, TROPHY, getProgress, medalInfo, isUnlocked, unlockFor, COLORWAYS, getGarage, setLivery, liveryFor } from '../game/modes.js';
+import { loadGhost } from '../game/ghost.js';
 
 const el = (tag, cls, html) => {
   const e = document.createElement(tag);
@@ -15,6 +17,7 @@ const el = (tag, cls, html) => {
 };
 const hex = (c) => `#${c.toString(16).padStart(6, '0')}`;
 
+export const MODE_TITLE = { race: 'SINGLE RACE', trial: 'TIME TRIAL', mono: 'MONO RUN', gp: 'GRAND PRIX' };
 export const LOGO = `<div class="logo"><span class="retro">RETRO</span><span class="shift">SHIFT</span></div>`;
 
 // ------------------------------------------------------------------ generic focusable list
@@ -71,7 +74,7 @@ export class UI {
     this.hudRoot = document.getElementById('hud');
     this.menu = null;
     this.settings = storage.get('rs.settings', { music: 0.55, sfx: 0.8, difficulty: 1, laps: 0, quality: 'auto' });
-    this.choice = { track: storage.get('rs.lastTrack', 'core'), car: storage.get('rs.lastCar', 'vector'), mode: 'race' };
+    this.choice = { track: storage.get('rs.lastTrack', 'core'), car: storage.get('rs.lastCar', 'vector'), mode: 'race', cup: 'signal' };
     this.previews = new Map();
   }
 
@@ -94,8 +97,11 @@ export class UI {
       <div class="lens-row"><span class="chip both">BOTH WORLDS</span><span class="chip red">RED ONLY</span><span class="chip blue">BLUE ONLY</span></div>`;
     const list = el('div', 'list');
     const items = [
-      { label: 'RACE', action: () => ((this.choice.mode = 'race'), this.trackSelect()) },
+      { label: 'GRAND PRIX', action: () => ((this.choice.mode = 'gp'), this.cupSelect()) },
+      { label: 'SINGLE RACE', action: () => ((this.choice.mode = 'race'), this.trackSelect()) },
       { label: 'TIME TRIAL', action: () => ((this.choice.mode = 'trial'), this.trackSelect()) },
+      { label: 'MONO RUN', action: () => ((this.choice.mode = 'mono'), this.trackSelect()) },
+      { label: 'GARAGE', action: () => this.garage() },
       { label: 'HOW TO PLAY', action: () => this.howTo() },
       { label: 'SETTINGS', action: () => this.settingsScreen() },
     ];
@@ -117,6 +123,7 @@ export class UI {
         <div class="card blue"><h3>BLUE ONLY</h3><p>Red things vanish instead. Look for blue-only cuts. Drains SHIFT.</p></div>
       </div>
       <p class="rule">Watch the road: if the strip under you is the colour you shifted away from, it's gone. Grab white shards for SHIFT, phase through walls for a little more.</p>
+      <p class="rule"><b>MONO RUN</b> takes BOTH away: your BOTH button swaps RED and BLUE, each swap costs SHIFT, and nothing refills it but shards and phasing.</p>
       <table class="keys">
         <tr><td>Drive</td><td>${g('W')} ${g('A')} ${g('S')} ${g('D')} / arrows</td><td>RT · LT · stick</td></tr>
         <tr><td>Drift (hold, release for turbo)</td><td>${g('SPACE')} / ${g('SHIFT')}</td><td>X / □</td></tr>
@@ -175,10 +182,13 @@ export class UI {
     this.clear();
     this.app.showAttract(true);
     const s = el('div', 'screen tracks');
-    s.innerHTML = `<h2>${this.choice.mode === 'trial' ? 'TIME TRIAL' : 'RACE'} · SELECT A COURSE</h2>`;
+    const mode = this.choice.mode;
+    const prog = getProgress();
+    s.innerHTML = `<h2>${MODE_TITLE[mode]} · SELECT A COURSE</h2>${mode === 'mono' ? '<div class="sub">Never both worlds. Your BOTH button swaps RED and BLUE, every swap costs SHIFT, and only shards and phasing refill it.</div>' : ''}`;
     const grid = el('div', 'grid');
     const items = TRACKS.map((def) => {
-      const best = storage.get(`rs.best.${def.id}`, null);
+      const best = mode === 'mono' ? loadGhost(def.id, true) : storage.get(`rs.best.${def.id}`, null);
+      const medal = medalInfo((mode === 'mono' ? prog.mono : prog.trial)[def.id] || 0);
       const card = el('button', 'item tcard');
       const cv = el('canvas', 'tmap');
       cv.width = 220;
@@ -187,7 +197,8 @@ export class UI {
       card.appendChild(cv);
       card.appendChild(el('div', 'tname', def.name));
       card.appendChild(el('div', 'tblurb', def.blurb));
-      card.appendChild(el('div', 'tbest', best ? `BEST ${formatTime(best.time)}` : '&nbsp;'));
+      const medalTag = medal && mode !== 'race' ? ` <span class="medal" style="--mc:${medal.color}">${medal.name}</span>` : '';
+      card.appendChild(el('div', 'tbest', best ? `BEST ${formatTime(best.time)}${medalTag}` : '&nbsp;'));
       requestAnimationFrame(() => {
         const ctx = cv.getContext('2d');
         drawPaths(ctx, this.preview(def).paths, cv.width, cv.height, 7, 10, null, 2.5);
@@ -209,34 +220,100 @@ export class UI {
   }
 
   // ------------------------------------------------------------------ car select
+  carCard(car) {
+    const open = isUnlocked(`car:${car.id}`);
+    const n = el('button', `item ccard ${open ? '' : 'locked'} ${car.secret ? 'secret' : ''}`);
+    n.style.setProperty('--c', hex(car.color));
+    const bars = (v) => '<i class="on"></i>'.repeat(v) + '<i></i>'.repeat(5 - v);
+    const u = unlockFor(`car:${car.id}`);
+    if (!open && car.secret) {
+      n.innerHTML = `<div class="cname">???</div><div class="cfrom">SECRET DRIVER</div><div class="chint">${u?.hint || ''}</div>`;
+    } else {
+      n.innerHTML = `<div class="cname">${car.name}</div>${car.from ? `<div class="cfrom">from ${car.from}</div>` : ''}
+        <div class="stat"><span>SPEED</span><b>${bars(car.stats.speed)}</b></div>
+        <div class="stat"><span>ACCEL</span><b>${bars(car.stats.accel)}</b></div>
+        <div class="stat"><span>HANDLING</span><b>${bars(car.stats.handling)}</b></div>
+        ${open ? '' : `<div class="chint">LOCKED · ${u?.hint || ''}</div>`}`;
+    }
+    return { n, open };
+  }
+
   carSelect() {
     this.clear();
     const s = el('div', 'screen cars');
-    s.innerHTML = '<h2>SELECT A WEDGE</h2>';
+    s.innerHTML = '<h2>SELECT A WEDGE</h2><div class="stage-gap"></div>';
     const grid = el('div', 'grid cars-grid');
-    const bars = (v) => '<i class="on"></i>'.repeat(v) + '<i></i>'.repeat(5 - v);
     const items = CARS.map((car) => {
-      const n = el('button', 'item ccard');
-      n.style.setProperty('--c', hex(car.color));
-      n.innerHTML = `<svg viewBox="-30 -20 60 40" class="wedge"><polygon points="-14,10 14,10 17,-2 7,-12 -7,-12 -17,-2" /><polyline points="-10,6 10,6 9,-4 -9,-4 -10,6" /></svg>
-        <div class="cname">${car.name}</div>
-        <div class="stat"><span>SPEED</span><b>${bars(car.stats.speed)}</b></div>
-        <div class="stat"><span>ACCEL</span><b>${bars(car.stats.accel)}</b></div>
-        <div class="stat"><span>HANDLING</span><b>${bars(car.stats.handling)}</b></div>`;
+      const { n, open } = this.carCard(car);
       return {
         node: n,
+        onFocus: () => (open || !car.secret ? this.app.showCar(car, liveryFor(car.id)) : this.app.hideCar()),
         action: () => {
+          if (!open) return this.app.audio.play('denied');
           this.choice.car = car.id;
           storage.set('rs.lastCar', car.id);
-          this.app.startRace();
+          if (this.choice.mode === 'gp') this.app.startGP(this.choice.cup);
+          else this.app.startRace();
         },
       };
     });
     s.appendChild(grid);
     this.root.appendChild(s);
     const focus = Math.max(0, CARS.findIndex((c) => c.id === this.choice.car));
-    this.menu = new Menu(this.app, grid, items, { cols: 3, focus, onBack: () => this.trackSelect() });
+    this.menu = new Menu(this.app, grid, items, { cols: 4, focus, onBack: () => (this.choice.mode === 'gp' ? this.cupSelect() : this.trackSelect()) });
     this.menu.nodes.forEach((n) => grid.appendChild(n));
+  }
+
+  // ------------------------------------------------------------------ garage: paint, trail, underglow per car
+  garage() {
+    this.clear();
+    const s = el('div', 'screen garage');
+    s.innerHTML = '<h2>GARAGE</h2><div class="stage-gap"></div>';
+    const list = el('div', 'list garage-list');
+    const cars = CARS.filter((c) => isUnlocked(`car:${c.id}`));
+    let ci = Math.max(0, cars.findIndex((c) => c.id === this.choice.car));
+    const opts = (withOff) => COLORWAYS.filter((c) => isUnlocked(c.unlock)).map((c) => c.id).concat(withOff ? ['off'] : []);
+    const locked = COLORWAYS.filter((c) => !isUnlocked(c.unlock)).length;
+    const name = (id) => (id === 'off' ? 'OFF' : COLORWAYS.find((c) => c.id === id)?.name || 'STOCK');
+    const swatch = (id, car) => {
+      const c = id === 'off' ? null : COLORWAYS.find((x) => x.id === id)?.c ?? car.color;
+      return c === 'spectrum' ? '<i class="sw spectrum"></i>' : c == null ? '<i class="sw off"></i>' : `<i class="sw" style="background:${hex(c)}"></i>`;
+    };
+    const cur = () => ({ paint: 'stock', trail: 'stock', glow: 'stock', ...(getGarage()[cars[ci].id] || {}) });
+    const show = () => this.app.showCar(cars[ci], liveryFor(cars[ci].id));
+    const change = (key, d, withOff) => {
+      const L = cur();
+      const o = opts(withOff);
+      L[key] = o[(o.indexOf(L[key]) + d + o.length) % o.length];
+      setLivery(cars[ci].id, L);
+      show();
+      refresh();
+    };
+    const items = [
+      { label: '', cycle: (d) => ((ci = (ci + d + cars.length) % cars.length), show(), refresh()), action: () => items[0].cycle(1) },
+      { label: '', cycle: (d) => change('paint', d, false), action: () => change('paint', 1, false) },
+      { label: '', cycle: (d) => change('trail', d, true), action: () => change('trail', 1, true) },
+      { label: '', cycle: (d) => change('glow', d, true), action: () => change('glow', 1, true) },
+      { label: 'DONE', action: () => ((this.choice.car = cars[ci].id), storage.set('rs.lastCar', cars[ci].id), this.title()) },
+    ];
+    s.appendChild(list);
+    s.appendChild(el('div', 'foot2', locked ? `${locked} more colours to unlock in the Grand Prix, Time Trial and Mono Run` : 'Every colour unlocked'));
+    this.root.appendChild(s);
+    this.menu = new Menu(this.app, list, items, { onBack: () => items[4].action() });
+    const refresh = () => {
+      const L = cur();
+      const car = cars[ci];
+      const labels = [
+        `<span>WEDGE</span> ◀ ${car.name} ▶`,
+        `<span>PAINT</span> ◀ ${swatch(L.paint, car)} ${name(L.paint)} ▶`,
+        `<span>TRAIL</span> ◀ ${swatch(L.trail, car)} ${name(L.trail)} ▶`,
+        `<span>UNDERGLOW</span> ◀ ${swatch(L.glow, car)} ${name(L.glow)} ▶`,
+      ];
+      labels.forEach((l, k) => (this.menu.nodes[k].innerHTML = l));
+    };
+    refresh();
+    show();
+    this.menu.nodes.forEach((n) => list.appendChild(n));
   }
 
   // ------------------------------------------------------------------ pause & results
@@ -247,15 +324,18 @@ export class UI {
     const list = el('div', 'list');
     s.appendChild(list);
     this.root.appendChild(s);
+    const gp = this.app.race?.kind === 'gp';
     this.menu = new Menu(this.app, list, [
       { label: 'RESUME', action: () => this.app.resume() },
-      { label: 'RESTART', action: () => this.app.startRace() },
-      { label: 'QUIT TO MENU', action: () => this.app.quit() },
+      ...(gp ? [] : [{ label: 'RESTART', action: () => this.app.startRace() }]),
+      { label: gp ? 'QUIT GRAND PRIX' : 'QUIT TO MENU', action: () => this.app.quit() },
     ], { onBack: () => this.app.resume() });
     this.menu.nodes.forEach((n) => list.appendChild(n));
   }
 
   results(race) {
+    this.hudRoot.hidden = true;
+    if (race.kind === 'gp') return this.gpResults(race);
     this.clear();
     const p = race.player;
     const place = race.placeOf(p);
@@ -264,24 +344,31 @@ export class UI {
       .standings()
       .map((r, k) => `<tr class="${r.isPlayer ? 'me' : ''}"><td>${ordinal(k + 1)}</td><td style="color:${hex(r.color)}">${r.name}</td><td>${r.finished ? formatTime(r.finishTime) : '--'}</td></tr>`)
       .join('');
-    const trial = race.opts.rivals === 0;
-    s.innerHTML = `<h2>${trial ? 'TIME TRIAL' : place === 1 ? 'YOU WIN' : `${ordinal(place)} PLACE`}</h2>
+    const solo = race.solo;
+    const medal = medalInfo(race.medal || 0);
+    const left = solo
+      ? `<div class="medalbox">${medal ? `<div class="bigmedal" style="--mc:${medal.color}">${medal.name}</div>` : '<div class="bigmedal none">NO MEDAL</div>'}
+          ${race.staffTime ? `<div class="targets">${[3, 2, 1].map((id) => { const m = medalInfo(id); return `<div style="color:${m.color}">${m.name} <b>${formatTime(race.staffTime * m.factor)}</b></div>`; }).join('')}</div>` : ''}</div>`
+      : `<table class="standings">${rows}</table>`;
+    s.innerHTML = `<h2>${solo ? MODE_TITLE[race.kind] : place === 1 ? 'YOU WIN' : `${ordinal(place)} PLACE`}</h2>
       <div class="rgrid">
-        <table class="standings">${rows}</table>
+        ${left}
         <div class="rstats">
           <div><span>TIME</span><b>${formatTime(p.finishTime)}</b></div>
           <div><span>BEST LAP</span><b>${formatTime(p.bestLap)}</b></div>
           <div><span>SHIFTS</span><b>${race.stats.shifts}</b></div>
           <div><span>PHASED</span><b>${race.stats.phased}</b></div>
           <div><span>CRASHES</span><b>${race.stats.crashes}</b></div>
-          ${race.newRecord ? '<div class="record">NEW COURSE RECORD</div>' : ''}
+          ${race.newRecord ? `<div class="record">${solo ? 'NEW BEST · GHOST SAVED' : 'NEW COURSE RECORD'}</div>` : ''}
         </div>
       </div>`;
+    this.unlockBanner(s);
     const list = el('div', 'list row');
     s.appendChild(list);
     this.root.appendChild(s);
     const idx = TRACKS.findIndex((t) => t.id === race.def.id);
     const items = [
+      { label: 'RETRY', action: () => this.app.startRace() },
       {
         label: 'NEXT COURSE',
         action: () => {
@@ -290,11 +377,96 @@ export class UI {
           this.app.startRace();
         },
       },
-      { label: 'RETRY', action: () => this.app.startRace() },
       { label: 'MENU', action: () => this.app.quit() },
     ];
     this.menu = new Menu(this.app, list, items, { cols: 3 });
     this.menu.nodes.forEach((n) => list.appendChild(n));
+  }
+
+  // ------------------------------------------------------------------ Grand Prix
+  cupSelect() {
+    this.clear();
+    this.app.showAttract(true);
+    const prog = getProgress();
+    const s = el('div', 'screen cups');
+    s.innerHTML = `<h2>GRAND PRIX · SELECT A CUP</h2><div class="sub">Five courses, six racers. Points for every place: ${POINTS.join(' · ')}.</div>`;
+    const grid = el('div', 'grid cups-grid');
+    const items = CUPS.map((cup) => {
+      const n = el('button', 'item cupcard');
+      n.style.setProperty('--c', cup.color);
+      const best = prog.cups[cup.id];
+      n.innerHTML = `<div class="cupname">${cup.name}</div>
+        <ol>${cup.tracks.map((id) => { const d = TRACKS.find((t) => t.id === id); return `<li><span>${d.num}</span>${d.name}</li>`; }).join('')}</ol>
+        <div class="trophy ${best && best <= 3 ? `t${best}` : ''}">${best && best <= 3 ? `${TROPHY[best]} TROPHY` : best ? `BEST ${ordinal(best)}` : 'NOT WON YET'}</div>`;
+      return { node: n, action: () => ((this.choice.cup = cup.id), this.carSelect()) };
+    });
+    s.appendChild(grid);
+    this.root.appendChild(s);
+    const focus = Math.max(0, CUPS.findIndex((c) => c.id === this.choice.cup));
+    this.menu = new Menu(this.app, grid, items, { cols: 2, focus, onBack: () => this.title() });
+    this.menu.nodes.forEach((n) => grid.appendChild(n));
+  }
+
+  gpTable(gp, raceRows) {
+    const tot = Object.entries(gp.points).sort((a, b) => b[1] - a[1]);
+    return tot
+      .map(([name, pts], k) => {
+        const add = raceRows?.get(name);
+        return `<tr class="${name === 'YOU' ? 'me' : ''}"><td>${ordinal(k + 1)}</td><td style="color:${hex(gp.colors[name])}">${name}</td><td class="add">${add != null ? `+${add}` : ''}</td><td><b>${pts}</b></td></tr>`;
+      })
+      .join('');
+  }
+
+  gpResults(race) {
+    this.clear();
+    const gp = this.app.gp;
+    const added = this.app.gpAward(race);
+    const place = race.placeOf(race.player);
+    const last = gp.round >= gp.cup.tracks.length - 1;
+    const s = el('div', 'screen results');
+    const rows = race
+      .standings()
+      .map((r, k) => `<tr class="${r.isPlayer ? 'me' : ''}"><td>${ordinal(k + 1)}</td><td style="color:${hex(r.color)}">${r.name}</td><td>${r.finished ? formatTime(r.finishTime) : '--'}</td></tr>`)
+      .join('');
+    s.innerHTML = `<h2>${gp.cup.name} · RACE ${gp.round + 1}/${gp.cup.tracks.length} · ${ordinal(place)}</h2>
+      <div class="rgrid">
+        <table class="standings">${rows}</table>
+        <table class="standings gp"><tr class="hd"><td></td><td>CUP</td><td>RACE</td><td>PTS</td></tr>${this.gpTable(gp, added)}</table>
+      </div>`;
+    const list = el('div', 'list row');
+    s.appendChild(list);
+    this.root.appendChild(s);
+    const items = [
+      last ? { label: 'CUP RESULTS', action: () => this.cupResults() } : { label: 'NEXT RACE', action: () => this.app.nextGP() },
+      { label: 'QUIT GRAND PRIX', action: () => this.app.quit() },
+    ];
+    this.menu = new Menu(this.app, list, items, { cols: 2 });
+    this.menu.nodes.forEach((n) => list.appendChild(n));
+  }
+
+  cupResults() {
+    this.clear();
+    const gp = this.app.gp;
+    const rank = this.app.finishGP();
+    const s = el('div', 'screen results cupresults');
+    const tr = rank <= 3 ? TROPHY[rank] : '';
+    s.innerHTML = `<h2>${gp.cup.name}</h2>
+      <div class="cuptrophy ${tr ? `t${rank}` : 'none'}">${tr ? `${tr} TROPHY` : `${ordinal(rank)} OVERALL`}</div>
+      <table class="standings gp wide">${this.gpTable(gp)}</table>`;
+    this.unlockBanner(s);
+    const list = el('div', 'list row');
+    s.appendChild(list);
+    this.root.appendChild(s);
+    this.menu = new Menu(this.app, list, [{ label: 'CONTINUE', action: () => this.app.quit() }]);
+    this.menu.nodes.forEach((n) => list.appendChild(n));
+  }
+
+  // Anything a result just unlocked (filled in by the garage's unlock check).
+  unlockBanner(s) {
+    const fresh = this.app.checkUnlocks?.() || [];
+    if (!fresh.length) return;
+    s.appendChild(el('div', 'unlocks', `<b>UNLOCKED</b> ${fresh.map((u) => `<span>${u}</span>`).join('')}`));
+    this.app.audio.play('shard');
   }
 
   // ------------------------------------------------------------------ HUD
@@ -343,8 +515,17 @@ export class UI {
     q('.h-pause').addEventListener('click', () => this.app.pause());
     this.map = new MiniMap(q('.h-map'));
     this.h.course.textContent = `${race.def.num} ${race.def.name}`;
-    const best = storage.get(`rs.best.${race.def.id}`, null);
-    this.h.best.textContent = best ? `RECORD ${formatTime(best.time)}` : '';
+    const best = race.mono ? loadGhost(race.def.id, true) : storage.get(`rs.best.${race.def.id}`, null);
+    const bits = [];
+    if (race.kind === 'gp') bits.push(`${this.app.gp.cup.name} · RACE ${this.app.gp.round + 1}/5`);
+    if (best) bits.push(`RECORD ${formatTime(best.time)}`);
+    if (race.staffTime) bits.push(`<span style="color:#ffd04a">STAFF ${formatTime(race.staffTime)}</span>`);
+    this.h.best.innerHTML = bits.join('<br>');
+    if (race.mono) {
+      const both = H.querySelector('.chip.both');
+      both.lastChild.textContent = 'SWAP';
+      both.classList.add('swap');
+    }
     this.mapT = 0;
     this.lastPlace = 0;
     this.lastTipT = 0;
@@ -403,7 +584,7 @@ export class UI {
           break;
         }
         case 'finish':
-          this.popup(race.opts.rivals === 0 ? 'FINISH' : `${ordinal(e.place)} PLACE`, '#ff4fd8');
+          this.popup(race.solo ? 'FINISH' : `${ordinal(e.place)} PLACE`, '#ff4fd8');
           break;
       }
     }

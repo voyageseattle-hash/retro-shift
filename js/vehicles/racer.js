@@ -6,6 +6,7 @@
 import * as THREE from '../../vendor/three.js';
 import { clamp, damp, sign } from '../core/util.js';
 import { BOTH, RED, BLUE, SHIFT, solidIn, COLORS } from '../world/shift.js';
+import { buildBody, Trail } from './bodies.js';
 
 const G_AIR = 27;
 const G_SLOPE = 14;
@@ -25,6 +26,9 @@ export const CARS = [
   { id: 'chroma', name: 'CHROMA', color: 0xb04cff, stats: { speed: 4, accel: 5, handling: 3 } },
   { id: 'raster', name: 'RASTER', color: 0x6ae0ff, stats: { speed: 5, accel: 4, handling: 2 } },
   { id: 'glitch', name: 'GLITCH', color: 0xffd04a, stats: { speed: 3, accel: 4, handling: 5 } },
+  // secret drivers from the studio's other games
+  { id: 'dash', name: 'DASH', color: 0xf4f0ff, stats: { speed: 4, accel: 5, handling: 5 }, secret: true, from: 'LAST LINE', mass: 0.8 },
+  { id: 'greatwedge', name: 'GREAT WEDGE', color: 0xcfd6dd, stats: { speed: 5, accel: 4, handling: 3 }, secret: true, from: 'WEDGEWRECK RALLY', driver: 'Captain Finn Razorback', mass: 1.8 },
 ];
 
 // WEDGEWRECK's star-stats-to-physics, nudged faster: these are hover wedges, not trucks.
@@ -37,63 +41,18 @@ export function physicsFor(stats) {
   };
 }
 
-// The concept-sheet car: a low wireframe wedge with two tail lights and twin thrusters.
-function buildModel(color) {
-  const root = new THREE.Group();
-  const body = new THREE.Group();
-  root.add(body);
-  const shape = [
-    // x, y, z  (z forward)
-    [-1.15, 0.25, -1.9], [1.15, 0.25, -1.9], [1.3, 0.25, 0.6], [0.55, 0.25, 2.2], [-0.55, 0.25, 2.2], [-1.3, 0.25, 0.6],
-    [-0.8, 0.85, -1.6], [0.8, 0.85, -1.6], [0.7, 0.75, 0.2], [-0.7, 0.75, 0.2],
-  ].map(([x, y, z]) => new THREE.Vector3(x, y, z));
-  const E = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [6, 7], [7, 8], [8, 9], [9, 6], [0, 6], [1, 7], [2, 8], [5, 9], [3, 8], [4, 9]];
-  const pos = [];
-  for (const [a, b] of E) pos.push(shape[a].x, shape[a].y, shape[a].z, shape[b].x, shape[b].y, shape[b].z);
-  const lg = new THREE.BufferGeometry();
-  lg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
-  const lines = new THREE.LineSegments(lg, lineMat);
-  body.add(lines);
-  // dark solid hull so the car occludes the road
-  const tris = [0, 1, 7, 0, 7, 6, 1, 2, 8, 1, 8, 7, 5, 0, 6, 5, 6, 9, 6, 7, 8, 6, 8, 9, 9, 8, 3, 9, 3, 4, 5, 9, 4, 2, 3, 8, 0, 5, 2, 0, 2, 1, 5, 4, 3, 5, 3, 2];
-  const hp = [];
-  for (const k of tris) hp.push(shape[k].x, shape[k].y, shape[k].z);
-  const hg = new THREE.BufferGeometry();
-  hg.setAttribute('position', new THREE.Float32BufferAttribute(hp, 3));
-  const hullMat = new THREE.MeshBasicMaterial({ color: 0x07030e, side: THREE.DoubleSide });
-  body.add(new THREE.Mesh(hg, hullMat));
-  // accent ribbon along the nose
-  const accentMat = new THREE.MeshBasicMaterial({ color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-  const ag = new THREE.BufferGeometry();
-  ag.setAttribute('position', new THREE.Float32BufferAttribute([-1.3, 0.27, 0.6, 1.3, 0.27, 0.6, 0.55, 0.27, 2.2, -1.3, 0.27, 0.6, 0.55, 0.27, 2.2, -0.55, 0.27, 2.2], 3));
-  const accent = new THREE.Mesh(ag, accentMat);
-  accent.scale.set(1, 1, 1);
-  body.add(accent);
-  // tail lights + thrusters
-  const tailMat = new THREE.MeshBasicMaterial({ color: 0xff2a4a });
-  for (const s of [-1, 1]) {
-    const t = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.14, 0.06), tailMat);
-    t.position.set(s * 0.72, 0.55, -1.93);
-    body.add(t);
-  }
-  const flameMat = new THREE.MeshBasicMaterial({ color: 0x8ac8ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
-  const flames = [];
-  for (const s of [-1, 1]) {
-    const f = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.6, 8), flameMat);
-    f.rotation.x = -Math.PI / 2;
-    f.position.set(s * 0.45, 0.4, -2.6);
-    body.add(f);
-    flames.push(f);
-  }
-  // underglow
-  const glowMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
-  const glow = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 4.4), glowMat);
-  glow.rotation.x = -Math.PI / 2;
-  glow.position.y = 0.06;
-  root.add(glow);
-  return { root, body, lineMat, accentMat, flameMat, glowMat, flames, tailMat };
+// The models live in bodies.js; buildModel keeps the old call shape for ghosts and previews.
+export function buildModel(color, bodyId = 'vector', glow) {
+  return buildBody(bodyId, color, glow);
 }
+
+// Paint, trail and underglow colours (the garage). 'spectrum' cycles through the hues.
+export function resolveLivery(car, livery) {
+  livery ||= {};
+  const paint = livery.paint ?? car.color;
+  return { paint, trail: livery.trail ?? (paint === 'spectrum' ? 0xff4fd8 : paint), glow: livery.glow ?? paint };
+}
+const hexOf = (c) => (c === 'spectrum' ? 0xff4fd8 : c === 'off' ? 0x000000 : c);
 
 export class Racer {
   constructor(car, opts = {}) {
@@ -103,8 +62,13 @@ export class Racer {
     this.color = car.color;
     this.isPlayer = !!opts.isPlayer;
     this.index = opts.index ?? 0;
-    this.model = buildModel(car.color);
+    this.livery = resolveLivery(car, opts.livery);
+    this.model = buildBody(car.body || car.id, hexOf(this.livery.paint), hexOf(this.livery.glow));
     this.root = this.model.root;
+    this.mass = car.mass || 1;
+    this.trail = new Trail(hexOf(this.livery.trail));
+    this.trailOn = this.livery.trail !== 'off';
+    if (this.livery.glow === 'off') this.model.glow.visible = false;
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
     this.up = new THREE.Vector3(0, 1, 0);
@@ -156,11 +120,15 @@ export class Racer {
 
   // ------------------------------------------------------------ the lens
   canShift(mode) {
+    if (this.mono) return mode !== BOTH && this.energy >= SHIFT.monoCost;
     return mode === BOTH || this.energy >= SHIFT.minToShift;
   }
-  // Player input: pressing the lens you're already in goes back to BOTH.
+  // Player input: pressing the lens you're already in goes back to BOTH. In Mono Run the BOTH button swaps lenses.
   setMode(mode, session) {
-    if (mode === this.mode) mode = BOTH;
+    if (this.mono) {
+      if (mode === BOTH) mode = this.mode === RED ? BLUE : RED;
+      if (mode === this.mode) return false;
+    } else if (mode === this.mode) mode = BOTH;
     return this.shiftTo(mode, session);
   }
   shiftTo(mode, session) {
@@ -172,11 +140,13 @@ export class Racer {
     const prev = this.mode;
     this.mode = mode;
     this.shiftT = 0.35;
+    if (this.mono) this.energy -= SHIFT.monoCost;
     session?.onShift?.(this, prev, mode);
     return true;
   }
   updateEnergy(dt, session) {
     this.shiftT = Math.max(0, this.shiftT - dt);
+    if (this.mono) return;
     if (this.mode === BOTH) this.energy = Math.min(1, this.energy + SHIFT.recharge * dt);
     else {
       this.energy -= SHIFT.drain * dt;
@@ -397,16 +367,30 @@ export class Racer {
     const m = this.model;
     const col = this.mode === RED ? COLORS.red : this.mode === BLUE ? COLORS.blue : 0xffffff;
     m.lineMat.color.set(col);
-    m.glowMat.color.set(this.mode === BOTH ? this.color : col);
     const flash = this.shiftT > 0 ? 1 + this.shiftT * 4 : 1;
     m.lineMat.color.multiplyScalar(flash);
     const thrust = clamp(Math.abs(this.speed) / this.phys.topSpeed, 0, 1.4) + (this.boostTime > 0 ? 0.8 : 0);
     for (const f of m.flames) {
       f.scale.set(1, 0.3 + thrust * (0.8 + Math.random() * 0.4), 1);
-      f.position.z = -2.0 - f.scale.y * 0.8;
+      f.position.z = f.userData.z0 - f.scale.y * 0.8;
     }
-    m.flameMat.color.set(this.boostTime > 0 ? 0xff4fd8 : this.drift.level >= 2 ? 0xff8a3a : 0x8ac8ff);
-    m.glowMat.opacity = 0.25 + (this.drift.active ? 0.25 : 0);
+    this.animT = (this.animT || 0) + dt;
+    for (const fn of m.anim) fn(dt, this.animT, this);
+    const L = this.livery;
+    if (L.paint === 'spectrum') {
+      m.accentMat.color.setHSL((this.animT * 0.15) % 1, 1, 0.6);
+      m.accentLineMat.color.copy(m.accentMat.color);
+      if (L.glow === 'spectrum') m.glowMat.color.copy(m.accentMat.color);
+    }
+    const base = L.trail === 'spectrum' || (L.trail === undefined && L.paint === 'spectrum') ? m.accentMat.color.getHex() : hexOf(L.trail);
+    m.flameMat.color.set(this.boostTime > 0 ? 0xff4fd8 : this.drift.level >= 2 ? 0xff8a3a : L.trail === 'off' ? 0x8ac8ff : base);
+    if (this.trailOn) {
+      this.trail.setColor(this.boostTime > 0 ? 0xff4fd8 : base);
+      const yaw = this.yaw;
+      _v.set(this.pos.x - Math.sin(yaw) * 2.1, this.pos.y + 0.45, this.pos.z - Math.cos(yaw) * 2.1);
+      this.trail.update(dt, _v, -Math.cos(yaw), Math.sin(yaw), clamp(Math.abs(this.speed) / this.phys.topSpeed, 0, 1) + (this.boostTime > 0 ? 0.4 : 0), this.grounded || this.airTime < 0.5);
+    }
+    m.glowMat.opacity = 0.5 + (this.drift.active ? 0.35 : 0);
     // spinning out after a hit
     if (this.invuln > 0) root.visible = Math.floor(this.invuln * 14) % 2 === 0 || this.invuln < 0.2;
     else root.visible = true;

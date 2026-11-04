@@ -9,13 +9,18 @@ import { ChaseCamera } from './camera.js';
 import { Environment } from './env.js';
 import { BOTH, RED, BLUE, SHIFT, solidIn, MODE_NAME } from '../world/shift.js';
 import { clamp, rand, storage } from '../core/util.js';
+import { GhostRecorder, GhostCar, loadGhost, saveGhost } from './ghost.js';
+import { monoDef, medalFor, recordMedal } from './modes.js';
 
-const RIVAL_NAMES = ['NEON', 'SCANLINE', 'POLYGON', 'CHROMA', 'RASTER', 'GLITCH', 'VECTOR'];
 const _v = new THREE.Vector3();
 
 export class Race {
   constructor(app, def, opts = {}) {
     this.app = app;
+    this.kind = opts.kind || (opts.rivals === 0 ? 'trial' : 'race');
+    this.mono = this.kind === 'mono';
+    this.solo = this.kind === 'trial' || this.mono;
+    if (this.mono) def = monoDef(def);
     this.def = def;
     this.opts = opts;
     this.laps = opts.laps ?? def.laps ?? 3;
@@ -40,13 +45,17 @@ export class Race {
     // player + rivals
     const playerCar = CARS.find((c) => c.id === opts.car) || CARS[0];
     const field = opts.rivals ?? 5;
-    const others = CARS.filter((c) => c !== playerCar);
+    const others = CARS.filter((c) => c !== playerCar && !c.secret);
     const diff = opts.difficulty ?? 1; // 0 easy, 1 normal, 2 hard
     for (let k = 0; k <= field; k++) {
       const isPlayer = k === field; // player starts at the back of the grid
       const car = isPlayer ? playerCar : others[k % others.length];
-      const r = new Racer(car, { isPlayer, index: k, name: isPlayer ? 'YOU' : RIVAL_NAMES[k % RIVAL_NAMES.length] });
+      const r = new Racer(car, { isPlayer, index: k, name: isPlayer ? 'YOU' : car.name, livery: isPlayer ? opts.livery : null });
       r.session = this;
+      if (this.mono) {
+        r.mono = true;
+        r.mode = RED;
+      }
       const slot = this.world.gridSlot(field - k);
       r.reset(slot.pos, slot.yaw);
       r.grounded = true;
@@ -61,17 +70,39 @@ export class Race {
         const skill = clamp([0.55, 0.75, 0.92][diff] + (k / field) * 0.1 + rand(-0.05, 0.05), 0.3, 1);
         r.ai = new RaceAI(r, this.world, skill);
         r.speedMul = [0.9, 0.97, 1.02][diff] + (k / field) * 0.03;
-      } else this.player = r;
-      this.scene.add(r.root);
+      } else {
+        this.player = r;
+        // headless staff runs: the AI drives the player's car flat out
+        if (opts.autopilot) r.ai = new RaceAI(r, this.world, 1);
+      }
+      this.scene.add(r.root, r.trail.mesh);
       this.racers.push(r);
     }
     this.cam.snap(this.player);
     this.events = [];
     this.lastMode = BOTH;
-    this.ghostLap = storage.get(`rs.best.${def.id}`, null);
+    // ghosts: your best run and the staff run
+    this.ghosts = [];
+    if (this.solo) {
+      this.recorder = new GhostRecorder();
+      const mine = loadGhost(def.id, this.mono);
+      if (mine && opts.showGhost !== false) this.addGhost(mine, 0xffffff, 'BEST');
+      if (opts.staff) this.addGhost(opts.staff, 0xffd04a, 'STAFF');
+    }
+    this.staffTime = opts.staff?.time || 0;
+    const m0 = this.player.mode;
     app.audio.playCourse(def.id);
-    app.audio.setMode(BOTH, true);
-    this.world.update(0, 0, BOTH);
+    app.audio.setMode(m0, true);
+    this.env.setMode(m0);
+    this.world.update(0, 0, m0);
+  }
+
+  addGhost(data, color, label) {
+    const g = new GhostCar(data, color, label);
+    if (!g.ok) return;
+    g.update(0, this.player.mode);
+    this.scene.add(g.root);
+    this.ghosts.push(g);
   }
 
   emit(type, data = {}) {
@@ -132,16 +163,17 @@ export class Race {
 
   respawn(r) {
     const u = r.lastU;
-    const sp = this.world.respawnPoint(u);
+    const sp = this.world.respawnPoint(u, r.mono ? r.mode : BOTH);
     r.reset(sp.pos, sp.yaw);
-    r.mode = BOTH;
+    if (r.mono) r.energy = Math.max(r.energy, SHIFT.monoCost);
+    else r.mode = BOTH;
     r.grounded = true;
     r.invuln = 1.5;
     r.vel.set(Math.sin(sp.yaw), 0, Math.cos(sp.yaw)).multiplyScalar(12);
     if (r.ai) r.ai.path = this.world.main;
     if (r.isPlayer) {
-      this.app.audio.setMode(BOTH);
-      this.env.setMode(BOTH);
+      this.app.audio.setMode(r.mode);
+      this.env.setMode(r.mode);
       this.cam.snap(r);
     }
   }
@@ -160,7 +192,10 @@ export class Race {
     if (this.state === 'race' && !p.finished) {
       if (c.item) p.setMode(RED, this);
       if (c.special) p.setMode(BLUE, this);
-      if (c.jump && p.mode !== BOTH) p.shiftTo(BOTH, this);
+      if (c.jump) {
+        if (p.mono) p.setMode(BOTH, this);
+        else if (p.mode !== BOTH) p.shiftTo(BOTH, this);
+      }
       if (c.reset && p.respawnT <= 0 && !this.resetHeld) {
         this.resetHeld = true;
         this.onFell(p);
@@ -198,6 +233,9 @@ export class Race {
       left -= h;
       this.step(h);
     }
+
+    if (this.recorder && this.state === 'race' && !p.finished) this.recorder.sample(this.raceTime, p);
+    for (const g of this.ghosts) g.update(this.raceTime, p.mode);
 
     // visuals
     for (const r of this.racers) if (r.respawnT <= 0) r.syncVisual(dt);
@@ -397,13 +435,16 @@ export class Race {
         const min = A.radius + B.radius;
         if (d > min || d < 1e-4) continue;
         _v.multiplyScalar(1 / d);
-        const pen = (min - d) / 2;
-        A.pos.addScaledVector(_v, -pen);
-        B.pos.addScaledVector(_v, pen);
+        // heavier cars shove lighter ones (GREAT WEDGE weighs as much as two wedges)
+        const wa = B.mass / (A.mass + B.mass);
+        const wb = 1 - wa;
+        const pen = min - d;
+        A.pos.addScaledVector(_v, -pen * wa);
+        B.pos.addScaledVector(_v, pen * wb);
         const rel = (B.vel.x - A.vel.x) * _v.x + (B.vel.z - A.vel.z) * _v.z;
         if (rel < 0) {
-          A.vel.addScaledVector(_v, rel * 0.6);
-          B.vel.addScaledVector(_v, -rel * 0.6);
+          A.vel.addScaledVector(_v, rel * 1.2 * wa);
+          B.vel.addScaledVector(_v, -rel * 1.2 * wb);
           if ((A.isPlayer || B.isPlayer) && rel < -4) {
             this.app.audio.play('hit');
             this.cam.addShake(0.2);
@@ -457,14 +498,25 @@ export class Race {
     this.finishOrder.push(r);
     if (r.isPlayer) {
       this.state = 'finished';
-      this.app.audio.play('finish', this.opts.rivals === 0 || this.finishOrder.length <= 3 ? 1 : 0);
-      const key = `rs.best.${this.def.id}`;
-      const best = storage.get(key, null);
-      this.newRecord = !best || r.finishTime < best.time;
-      if (this.newRecord) storage.set(key, { time: r.finishTime, lap: r.bestLap, car: r.car.id });
-      const lkey = `rs.lap.${this.def.id}`;
-      const bl = storage.get(lkey, null);
-      if (!bl || r.bestLap < bl) storage.set(lkey, r.bestLap);
+      this.app.audio.play('finish', this.solo || this.finishOrder.length <= 3 ? 1 : 0);
+      if (this.recorder) {
+        // a ghost is saved only when it beats the one you've got
+        const old = loadGhost(this.def.id, this.mono);
+        this.newGhost = !old || r.finishTime < old.time;
+        this.ghostData = this.recorder.encode({ time: r.finishTime, car: r.car.id, track: this.def.id, mono: this.mono });
+        if (this.newGhost && !this.opts.autopilot) saveGhost(this.def.id, this.mono, this.ghostData);
+        this.medal = medalFor(r.finishTime, this.staffTime);
+        if (!this.opts.autopilot) recordMedal(this.kind, this.def.id, this.medal);
+      }
+      if (!this.mono && !this.opts.autopilot) {
+        const key = `rs.best.${this.def.id}`;
+        const best = storage.get(key, null);
+        this.newRecord = !best || r.finishTime < best.time;
+        if (this.newRecord) storage.set(key, { time: r.finishTime, lap: r.bestLap, car: r.car.id });
+        const lkey = `rs.lap.${this.def.id}`;
+        const bl = storage.get(lkey, null);
+        if (!bl || r.bestLap < bl) storage.set(lkey, r.bestLap);
+      } else if (this.mono) this.newRecord = this.newGhost;
       this.emit('finish', { place: this.finishOrder.length });
     }
   }

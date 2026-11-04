@@ -114,8 +114,12 @@ export class RaceAI {
     for (const m of MODES) blocked[m] = Math.min(...LANES.map((lat) => hits(m, lat)));
     // energy needed to hold a single lens to the end of the look-ahead
     const secs = look / speed;
-    const afford = r.energy - SHIFT.drain * secs * 0.6 > 0.02;
+    const afford = r.mono ? r.energy >= SHIFT.monoCost : r.energy - SHIFT.drain * secs * 0.6 > 0.02;
     const score = (m) => {
+      if (r.mono) {
+        if (m === BOTH || !ok[m]) return 1e6;
+        return blocked[m] * 10 + (m === r.mode ? 0 : afford ? 4 : 1e5);
+      }
       if (!ok[m]) return 1e6;
       let s = blocked[m] * 10;
       if (m !== BOTH) s += afford ? 3 : 200;
@@ -125,8 +129,8 @@ export class RaceAI {
     this.think -= dt;
     if (this.think <= 0) {
       this.think = 0.12 + (1 - this.skill) * 0.35;
-      let best = BOTH;
-      let bs = Infinity;
+      let best = r.mono ? r.mode : BOTH;
+      let bs = score(best);
       for (const m of MODES) {
         const s = score(m);
         if (s < bs) {
@@ -191,7 +195,10 @@ export class RaceAI {
     const r = this.r;
     // Which lenses can drive it?
     const needSingle = !solidIn(b.mask[Math.floor(b.N / 2)], BOTH);
-    if (needSingle) {
+    if (r.mono) {
+      const m = b.mask[Math.floor(b.N / 2)];
+      if (!solidIn(m, r.mode) && r.energy < SHIFT.monoCost * 2) return false;
+    } else if (needSingle) {
       const secs = b.length / Math.max(25, r.phys.topSpeed * 0.85);
       if (r.energy < SHIFT.drain * secs + 0.15) return false;
     }

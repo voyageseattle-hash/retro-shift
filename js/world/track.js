@@ -646,13 +646,13 @@ export class TrackWorld {
   }
 
   // Safe place to put a racer back: on the main road, a little behind where they were, solid in BOTH.
-  respawnPoint(mainU) {
+  respawnPoint(mainU, mode = BOTH) {
     const m = this.main;
     let i = m.index(mainU) - Math.round(18 / m.ds);
     for (let k = 0; k < m.N; k++) {
       const j = m.wrap(i - k);
       let ok = true;
-      for (let q = -3; q <= 12; q++) if (!solidIn(m.mask[m.wrap(j + q)], BOTH)) ok = false;
+      for (let q = -3; q <= 12; q++) if (!solidIn(m.mask[m.wrap(j + q)], mode)) ok = false;
       for (const o of this.obstacles) if (o.path === m && Math.abs(o.i - j) < 10) ok = false;
       if (ok) {
         i = j;

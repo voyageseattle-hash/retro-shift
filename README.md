@@ -36,6 +36,19 @@ Then go to `http://localhost:4173`. `?track=core` (or any course id) jumps strai
 
 Touch controls appear on phones and tablets.
 
+## Modes
+
+- **Grand Prix**: the SIGNAL CUP and the STATIC CUP, five courses each, six racers, points for every place (10, 7, 5, 3, 2, 1). Trophies unlock cars and colours.
+- **Single Race**: any course against five rivals.
+- **Time Trial**: alone against your best ghost and the staff ghost, for bronze, silver and gold medals.
+- **Mono Run**: never both worlds. You start in RED, the BOTH button swaps lenses, every swap costs SHIFT, and only shards and phasing refill it. Road that exists only in the overlap is opened to both lenses.
+
+## Wedges and the garage
+
+Eight wireframe bodies: VECTOR, SCANLINE and POLYGON from the start; CHROMA, RASTER and GLITCH unlocked by trophies and medals; and two secret drivers from the studio's other games: **DASH** from LAST LINE, surfing a pencil, and **GREAT WEDGE** from WEDGEWRECK RALLY, Captain Finn Razorback's shark truck. The garage sets each car's paint, trail and underglow. `?unlockall` unlocks everything for testing.
+
+Staff ghosts live in `data/staff/` and are recorded by `node tools/make-staff.mjs` (the race AI driving each course alone).
+
 ## The ten courses
 
 01 Core Circuit · 02 Layered Grid · 03 Shift Tunnels · 04 Orbital Loops · 05 Grid City · 06 Void Field · 07 Helix Ascent · 08 Fractal Route · 09 Shift Lattice · 10 Echo Ruins
