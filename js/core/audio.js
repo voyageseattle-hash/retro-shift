@@ -20,6 +20,7 @@ const RADIO_VOICES = {
   dash: { f0: 1.02, form: 1.04, rate: 0.9 }, // DASH: plucky
   greatwedge: { f0: 0.6, form: 0.86, rate: 1.15, growl: 0.45 }, // Captain Finn Razorback
 };
+const ANNOUNCER = ['title', 'three', 'two', 'one', 'go', 'lap2', 'final', 'winner', 'second', 'third', 'over', 'record', 'gold', 'champion', 'p1wins', 'p2wins', 'ready', 'grandprix', 'timetrial', 'monorun', 'twoplayer', 'online', 'shift', 'unlocked'];
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
 export class Audio extends Engine {
@@ -31,6 +32,83 @@ export class Audio extends Engine {
 
   init() {
     this.unlock();
+    this.loadVoice();
+  }
+
+  // ------------------------------------------------------------ announcer
+  // One arcade announcer for the whole game: recorded once offline, then aged like a 90s cabinet (pitched down,
+  // band-limited, a little bit-crushed, slapback hall) and kept as small files in audio/voice/.
+  loadVoice() {
+    if (!this.ctx || this.voice) return;
+    this.voice = new Map();
+    for (const id of ANNOUNCER) {
+      fetch(`audio/voice/${id}.mp3`)
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject()))
+        .then((b) => this.ctx.decodeAudioData(b))
+        .then((buf) => this.voice.set(id, buf))
+        .catch(() => {});
+    }
+  }
+  // Play an announcer line; returns its length in seconds (0 if it isn't loaded yet).
+  announce(id, delay = 0, vol = 1) {
+    const buf = this.voice?.get(id);
+    if (!buf || !this.ctx || this.announcerOff) return 0;
+    const t = this.ctx.currentTime + delay;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    const g = this.ctx.createGain();
+    g.gain.value = 1.15 * vol;
+    src.connect(g);
+    g.connect(this.sfxDry || this.sfx);
+    if (this.roomIn) {
+      const w = this.ctx.createGain();
+      w.gain.value = 0.18;
+      g.connect(w).connect(this.roomIn);
+    }
+    src.start(t);
+    // the music ducks under the voice
+    if (this.music) {
+      const mg = this.music.gain;
+      mg.cancelScheduledValues(t);
+      mg.setTargetAtTime(this.musicVolume * 0.4, t, 0.03);
+      mg.setTargetAtTime(this.musicVolume, t + buf.duration - 0.35, 0.3);
+    }
+    return buf.duration;
+  }
+  // The title shout: an engine winding up, a whoosh, and the announcer over the top.
+  titleShout(delay = 0.15) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime + delay;
+    const out = this.sfxDry || this.sfx;
+    // engine rev: two detuned saws through a sweeping low-pass, pitch climbing then dropping off
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.32, t + 0.12);
+    g.gain.setValueAtTime(0.32, t + 0.9);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 1.7);
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.Q.value = 6;
+    f.frequency.setValueAtTime(300, t);
+    f.frequency.exponentialRampToValueAtTime(3200, t + 0.85);
+    f.frequency.exponentialRampToValueAtTime(500, t + 1.6);
+    for (const det of [0, 7]) {
+      const o = this.ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.detune.value = det * 3;
+      o.frequency.setValueAtTime(38, t);
+      o.frequency.exponentialRampToValueAtTime(140, t + 0.8);
+      o.frequency.exponentialRampToValueAtTime(95, t + 0.95);
+      o.frequency.exponentialRampToValueAtTime(150, t + 1.25);
+      o.frequency.exponentialRampToValueAtTime(60, t + 1.7);
+      o.connect(f);
+      o.start(t);
+      o.stop(t + 1.8);
+    }
+    f.connect(g).connect(out);
+    // whoosh as the logo lands
+    this.swell?.(t + 0.6, 0.5, 0.35, out, 'bandpass', 400, 5000, 1.2);
+    this.announce('title', delay + 0.55, 1.2);
   }
   get ready() {
     return !!this.ctx && this.ctx.state === 'running';

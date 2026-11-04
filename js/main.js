@@ -34,7 +34,10 @@ class App {
     const wake = () => {
       const first = !this.audio.ctx;
       this.audio.init();
-      if (first && !this.race) this.audio.playTitle();
+      if (first && !this.race) {
+        this.audio.playTitle();
+        this.audio.titleShout(0.35);
+      }
     };
     window.addEventListener('pointerdown', wake);
     window.addEventListener('keydown', wake);

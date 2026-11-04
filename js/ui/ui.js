@@ -104,18 +104,18 @@ export class UI {
       <div class="lens-row"><span class="chip both">BOTH WORLDS</span><span class="chip red">RED ONLY</span><span class="chip blue">BLUE ONLY</span></div>`;
     const list = el('div', 'list');
     const items = [
-      { label: 'GRAND PRIX', action: () => ((this.choice.mode = 'gp'), this.cupSelect()) },
-      { label: 'SINGLE RACE', action: () => ((this.choice.mode = 'race'), this.trackSelect()) },
-      { label: 'TIME TRIAL', action: () => ((this.choice.mode = 'trial'), this.trackSelect()) },
-      { label: 'MONO RUN', action: () => ((this.choice.mode = 'mono'), this.trackSelect()) },
-      { label: '2 PLAYER', action: () => ((this.choice.mode = 'split'), this.trackSelect()) },
-      { label: 'ONLINE', action: () => this.onlineMenu() },
+      { label: 'GRAND PRIX', action: () => ((this.choice.mode = 'gp'), this.app.audio.announce('grandprix'), this.cupSelect()) },
+      { label: 'SINGLE RACE', action: () => ((this.choice.mode = 'race'), this.app.audio.announce('ready'), this.trackSelect()) },
+      { label: 'TIME TRIAL', action: () => ((this.choice.mode = 'trial'), this.app.audio.announce('timetrial'), this.trackSelect()) },
+      { label: 'MONO RUN', action: () => ((this.choice.mode = 'mono'), this.app.audio.announce('monorun'), this.trackSelect()) },
+      { label: '2 PLAYER', action: () => ((this.choice.mode = 'split'), this.app.audio.announce('twoplayer'), this.trackSelect()) },
+      { label: 'ONLINE', action: () => (this.app.audio.announce('online'), this.onlineMenu()) },
       { label: 'GARAGE', action: () => this.garage() },
       { label: 'HOW TO PLAY', action: () => this.howTo() },
       { label: 'SETTINGS', action: () => this.settingsScreen() },
     ];
     s.appendChild(list);
-    s.appendChild(el('div', 'foot', 'Made for GitHub Game Off 2026 · a Forbidden Fruit Productions game · every line and every sound generated live'));
+    s.appendChild(el('div', 'foot', 'Made for GitHub Game Off 2026 · a Forbidden Fruit Productions game · every line drawn and every note played live'));
     this.root.appendChild(s);
     this.menu = new Menu(this.app, list, items);
     this.menu.nodes.forEach((n) => list.appendChild(n));
@@ -591,6 +591,7 @@ export class UI {
     this.scenesShown.add(id);
     const sc = SECRET_SCENES[id];
     this.app.audio.play('finish', 1);
+    this.app.audio.announce('unlocked', 0.2);
     this.storyCard({ title: sc.title, sub: sc.from, lines: sc.lines, cls: 'secret', car: CARS.find((c) => c.id === id) }, () => this.afterScenes(fn));
     // the guest speaks as their quoted lines appear
     let free = 0;
@@ -693,6 +694,7 @@ export class UI {
     s.innerHTML = `<h2>${gp.cup.name}</h2>
       <div class="cuptrophy ${tr ? `t${rank}` : 'none'}">${tr ? `${tr} TROPHY` : `${ordinal(rank)} OVERALL`}</div>
       <table class="standings gp wide">${this.gpTable(gp)}</table>`;
+    this.app.audio.announce(rank === 1 ? 'champion' : rank <= 3 ? ['', '', 'second', 'third'][rank] : 'over', 0.3);
     this.unlockBanner(s);
     const list = el('div', 'list row');
     s.appendChild(list);

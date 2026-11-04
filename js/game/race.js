@@ -271,6 +271,7 @@ export class Race {
       if (n !== this.lastBeep) {
         this.lastBeep = n;
         this.app.audio.play('beep', n <= 0);
+        this.app.audio.announce(['go', 'one', 'two', 'three'][n] || '');
         this.emit('count', { n });
       }
       if (this.countdown <= 0) {
@@ -590,7 +591,8 @@ export class Race {
         if (r.lap === this.laps - 1) {
           this.emitP(r, 'popup', { text: 'FINAL LAP', color: '#ff4fd8' });
           this.app.audio.play('finalLap');
-        }
+          this.app.audio.announce('final', 0.25);
+        } else if (r.lap === 1) this.app.audio.announce('lap2', 0.25);
       }
     }
   }
@@ -605,14 +607,20 @@ export class Race {
       // split-screen: the race ends when both players are home
       this.emitP(r, 'finish', { place: this.placeOf(r) });
       this.app.audio.play('finish', this.placeOf(r) <= 3 ? 1 : 0);
-      if (this.players.every((pl) => pl.finished)) this.state = 'finished';
+      if (this.players.every((pl) => pl.finished)) {
+        this.state = 'finished';
+        const [a, b] = this.players;
+        this.app.audio.announce(this.placeOf(a) < this.placeOf(b) ? 'p1wins' : 'p2wins', 0.5);
+      }
     } else if (r.isPlayer) {
       this.state = 'finished';
       this.app.audio.play('finish', this.solo || this.placeOf(r) <= 3 ? 1 : 0);
+      if (!this.solo) this.app.audio.announce(['winner', 'second', 'third'][this.placeOf(r) - 1] || 'over', 0.45);
       if (this.recorder) {
         // a ghost is saved only when it beats the one you've got
         const old = loadGhost(this.def.id, this.mono);
         this.newGhost = !old || r.finishTime < old.time;
+        this.app.audio.announce(this.newGhost ? 'record' : 'over', 0.45);
         this.ghostData = this.recorder.encode({ time: r.finishTime, car: r.car.id, track: this.def.id, mono: this.mono });
         if (this.newGhost && !this.opts.autopilot) saveGhost(this.def.id, this.mono, this.ghostData);
         this.medal = medalFor(r.finishTime, this.staffTime);
