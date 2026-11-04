@@ -10,7 +10,7 @@ Race in **BOTH** worlds (red + blue), **RED only**, or **BLUE only**. Every piec
 
 If the strip under you belongs to the world you shifted away from, it's gone. Grab white shards for SHIFT, and phase through walls for a little more.
 
-It runs in any modern browser with WebGL. There is no build step and nothing to download: every line, every sound and all the music is generated live.
+It runs in any modern browser with WebGL. There is no build step: every line on screen, every engine and effect and all the music is generated live in code. The only recorded assets are the announcer's voice (`audio/voice/`, rendered offline with the open Kokoro TTS model) and the studio logo on the splash card (`assets/splash/`).
 
 ## Play
 
@@ -58,9 +58,13 @@ Up to six racers. One player picks ONLINE → HOST A ROOM and shares the four-le
 
 ## Craft and the garage
 
-Eight wireframe bodies: VECTOR, SCANLINE and POLYGON from the start; CHROMA, RASTER and GLITCH unlocked by trophies and medals; and two secret drivers from the studio's other games: **DASH** from LAST LINE, surfing a pencil, and **GREAT WEDGE** from ABSURD COMBAT RACING, Captain Finn Razorback's shark truck. The garage sets each car's paint, trail and underglow. `?unlockall` unlocks everything for testing.
+Eight neon craft, faceted hulls that catch the red world on one flank and the blue on the other: VECTOR, SCANLINE and POLYGON from the start; CHROMA, RASTER and GLITCH unlocked by trophies and medals; and two secret drivers from the studio's other games: **DASH** from LAST LINE, surfing a pencil, and **GREAT WEDGE** from ABSURD COMBAT RACING, Captain Finn Razorback's shark truck. The garage sets each car's paint, trail and underglow. `?unlockall` unlocks everything for testing.
 
 Staff ghosts live in `data/staff/` and are recorded by `node tools/make-staff.mjs` (the race AI driving each course alone).
+
+## Secret routes
+
+Some roads only exist in one world. Grid City's BLUE ROOFTOPS rise out of the road when you look through the blue lens and are a row of buildings through the red. Deep in Shift Tunnels a blue iris hatch seals the SECRET BORE: shift to RED as you pass and it isn't there. Long one-lens roads carry their own shards so you can hold the lens to the end.
 
 ## The ten courses
 
@@ -75,5 +79,11 @@ Staff ghosts live in `data/staff/` and are recorded by `node tools/make-staff.mj
 - `js/core/audio.js`: synthesized synthwave split into a red band and a blue band; shifting drops the other band behind a filter.
 - `js/core/input.js`, `js/core/renderer.js`, `js/game/camera.js`: carried over from Absurd Combat Racing.
 - `vendor/three.js`: three.js r186 (MIT).
+- `tools/`: offline helpers: the announcer and splash audio previews and the trailer's title cards and sound, all rendered from the game's own engine.
+
+## Credits
+
+- Announcer voice: Kokoro-82M (Apache-2.0), voice `am_fenrir`, pitched and processed for the vintage echo.
+- three.js (MIT), PeerJS (MIT).
 
 A Forbidden Fruit Productions game from Guy Stephens Productions.
