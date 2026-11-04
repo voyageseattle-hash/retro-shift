@@ -98,7 +98,7 @@ export const SECRET_SCENES = {
     title: 'THE GREAT WEDGE HAS ARRIVED',
     from: 'from ABSURD COMBAT RACING',
     lines: [
-      'The ground shakes. A shark fin slices through the grid floor, then the rest of it: a stainless-steel monster truck, tyres taller than your wedge.',
+      'The ground shakes. A shark fin slices through the grid floor, then the rest of it: a stainless-steel monster truck, tyres taller than your craft.',
       'Captain Finn Razorback leans out of the cab. “Ahoy, little hover-boats. No missiles here? Pity.”',
       '“Never mind. I’ll just ram you.”',
     ],

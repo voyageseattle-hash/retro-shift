@@ -244,7 +244,7 @@ export class UI {
   carSelect() {
     this.clear();
     const s = el('div', 'screen cars');
-    s.innerHTML = '<h2>SELECT A WEDGE</h2><div class="stage-gap"></div>';
+    s.innerHTML = '<h2>SELECT A CRAFT</h2><div class="stage-gap"></div>';
     const grid = el('div', 'grid cars-grid');
     const items = CARS.map((car) => {
       const { n, open } = this.carCard(car);
@@ -307,7 +307,7 @@ export class UI {
       const L = cur();
       const car = cars[ci];
       const labels = [
-        `<span>WEDGE</span> ◀ ${car.name} ▶`,
+        `<span>CRAFT</span> ◀ ${car.name} ▶`,
         `<span>PAINT</span> ◀ ${swatch(L.paint, car)} ${name(L.paint)} ▶`,
         `<span>TRAIL</span> ◀ ${swatch(L.trail, car)} ${name(L.trail)} ▶`,
         `<span>UNDERGLOW</span> ◀ ${swatch(L.glow, car)} ${name(L.glow)} ▶`,
