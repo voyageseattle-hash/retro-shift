@@ -43,6 +43,15 @@ Touch controls appear on phones and tablets.
 - **Time Trial**: alone against your best ghost and the staff ghost, for bronze, silver and gold medals.
 - **Mono Run**: never both worlds. You start in RED, the BOTH button swaps lenses, every swap costs SHIFT, and only shards and phasing refill it. Road that exists only in the overlap is opened to both lenses.
 
+## 2 Player
+
+Two players, one keyboard, split top and bottom. Each of you has your own lens: the walls and roads that are solid for you depend on your lens, not on your partner's, and each half of the screen draws the world through its own player's lens. The music follows the lens when you're both in the same one, and plays the full mix otherwise.
+
+| | Steer / throttle | Red | Both | Blue | Drift | Reset |
+|---|---|---|---|---|---|---|
+| P1 (top) | WASD | Q | F | E | Space / Left Shift | R |
+| P2 (bottom) | Arrows | , | . | / | Right Shift | Backspace |
+
 ## Online
 
 Up to six racers. One player picks ONLINE → HOST A ROOM and shares the four-letter code; the others pick JOIN A ROOM. Empty grid places go to AI rivals, and anyone who drops out mid-race is handed to the AI. Built on Absurd Combat Racing's transport: WebRTC data channels brokered by [PeerJS](https://peerjs.com) (MIT, vendored in `vendor/peerjs.min.js`), STUN only by default; set `window.RETROSHIFT_ICE` to add a TURN relay. Each browser simulates its own craft and streams its state; the host runs the AI, relays everyone at 30 Hz, and owns the start and the shards. `?net=local` swaps WebRTC for a BroadcastChannel so several tabs of one browser can race each other (add `&netlag=80` to fake latency).

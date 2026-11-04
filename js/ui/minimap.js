@@ -6,7 +6,7 @@ import { colorForMask, solidIn, M } from '../world/shift.js';
 const hex = (c) => `#${c.toString(16).padStart(6, '0')}`;
 
 // Raw path polylines from a track definition, without building the 3D world (for previews).
-export function drawPaths(ctx, paths, w, h, mode = 7, pad = 10, racers = null, lineW = 3) {
+export function drawPaths(ctx, paths, w, h, mode = 7, pad = 10, racers = null, lineW = 3, me = racers?.find((r) => r.isPlayer)) {
   let x0 = Infinity;
   let x1 = -Infinity;
   let z0 = Infinity;
@@ -45,13 +45,13 @@ export function drawPaths(ctx, paths, w, h, mode = 7, pad = 10, racers = null, l
   ctx.globalAlpha = 1;
   if (racers) {
     for (const r of racers) {
-      if (r.isPlayer) continue;
-      ctx.fillStyle = hex(r.color);
+      if (r === me) continue;
+      ctx.fillStyle = r.isPlayer ? '#ffffff' : hex(r.color);
       ctx.beginPath();
       ctx.arc(X(r.pos.x), Z(r.pos.z), 3, 0, Math.PI * 2);
       ctx.fill();
     }
-    const p = racers.find((r) => r.isPlayer);
+    const p = me;
     if (p) {
       ctx.fillStyle = '#ffffff';
       ctx.strokeStyle = '#000';
@@ -70,7 +70,7 @@ export class MiniMap {
     this.c = canvas;
     this.ctx = canvas.getContext('2d');
   }
-  draw(world, racers, mode) {
+  draw(world, racers, mode, me = racers.find((r) => r.isPlayer)) {
     const { c, ctx } = this;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = c.clientWidth || 180;
@@ -81,6 +81,6 @@ export class MiniMap {
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    drawPaths(ctx, world.paths, w, h, mode, 10, racers, 3);
+    drawPaths(ctx, world.paths, w, h, mode, 10, racers, 3, me);
   }
 }

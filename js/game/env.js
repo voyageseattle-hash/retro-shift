@@ -109,6 +109,17 @@ export class Environment {
     this.pulse = 0;
   }
 
+  // Split-screen: the sky and grid tint follow each player's own lens.
+  useView(k) {
+    this.views ||= [];
+    this.views[this.view ?? 0] = { mode: this.mode, pulse: this.pulse, tint: this.tint };
+    const v = this.views[k] || { mode: this.mode, pulse: 0, tint: Object.fromEntries(Object.entries(this.tint).map(([n, c]) => [n, c.clone()])) };
+    this.mode = v.mode;
+    this.pulse = v.pulse;
+    this.tint = v.tint;
+    this.view = k;
+  }
+
   setMode(mode) {
     this.mode = mode;
     this.pulse = 1;

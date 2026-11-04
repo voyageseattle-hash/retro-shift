@@ -149,10 +149,31 @@ export class Renderer {
     g.aberr = aberr;
     g.flash = flash;
   }
-  applyGrade() {
+  splitComposer(w, h) {
+    const pr = this.renderer.getPixelRatio();
+    if (!this.composer2) {
+      const C = (this.composer2 = new THREE.EffectComposer(this.renderer));
+      this.renderPass2 = new THREE.RenderPass(new THREE.Scene(), new THREE.PerspectiveCamera());
+      this.bloom2 = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), 0.8, 0.35, 0.3);
+      this.grade2 = new THREE.ShaderPass(GRADE_SHADER);
+      C.addPass(this.renderPass2);
+      C.addPass(this.bloom2);
+      C.addPass(new THREE.OutputPass());
+      C.addPass(this.grade2);
+    }
+    const key = `${Math.round(w)}x${Math.round(h)}@${pr}`;
+    if (this.composer2Key !== key) {
+      this.composer2Key = key;
+      this.composer2.setPixelRatio(pr);
+      this.composer2.setSize(w, h);
+    }
+    return this.composer2;
+  }
+
+  applyGrade(pass = this.grade) {
     const g = this.gradeState;
     const G = GRADES[g.id] || GRADES.default;
-    const u = this.grade.uniforms;
+    const u = pass.uniforms;
     u.uSat.value = G.sat;
     u.uContrast.value = G.contrast;
     u.uTint.value.set(...G.tint);
@@ -197,8 +218,30 @@ export class Renderer {
     }
     const W = this.width;
     const H = this.height;
+    // split-screen keeps the bloom: a second composer sized to one view draws each half in turn
+    if (views.length > 1 && this.preset.bloom) {
+      const vw = views[0].w * W;
+      const vh = views[0].h * H;
+      const C = this.splitComposer(vw, vh);
+      this.bloom2.strength = bloomStrength;
+      r.setScissorTest(true);
+      for (const v of views) {
+        v.before?.();
+        const x = v.x * W, y = v.y * H, w = v.w * W, h = v.h * H;
+        this.renderPass2.scene = scene;
+        this.renderPass2.camera = v.camera;
+        this.applyGrade(this.grade2);
+        r.setViewport(x, y, w, h);
+        r.setScissor(x, y, w, h);
+        C.render();
+      }
+      r.setScissorTest(false);
+      r.setViewport(0, 0, W, H);
+      return;
+    }
     r.setScissorTest(views.length > 1);
     for (const v of views) {
+      v.before?.();
       const x = v.x * W;
       const y = v.y * H;
       const w = v.w * W;

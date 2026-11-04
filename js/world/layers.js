@@ -200,6 +200,15 @@ export class Layers {
   }
 
   // Fade every mask toward solid or ghost for the viewer's lens. Returns nothing; call every frame.
+  // Split-screen: each player sees their own lens, so each view keeps its own fade levels.
+  useView(k) {
+    this.views ||= [];
+    this.views[this.view ?? 0] = this.level;
+    this.level ||= new Map();
+    this.level = this.views[k] || new Map(this.level);
+    this.view = k;
+  }
+
   update(dt, mode, time = 0, instant = false) {
     for (const [mask, m] of this.mats) {
       const want = solidIn(mask, mode) ? 1 : 0;

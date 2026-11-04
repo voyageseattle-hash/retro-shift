@@ -64,11 +64,12 @@ export class Audio extends Engine {
     this.updateEngine(e, clamp(Math.abs(speed) / topSpeed, 0, 1.3), on ? throttle : 0, boost ? 1 : 0, slip, on ? 1 : 0);
   }
   // listener: { pos, fwd (unit, xz), vel }, racers: Racer[]
-  rivalEngines(listener, racers) {
+  // self: the racer whose engine plays centre (defaults to skipping every player)
+  rivalEngines(listener, racers, self = null) {
     if (!this.ctx) return;
     const seen = new Set();
     for (const r of racers) {
-      if (r.isPlayer) continue;
+      if (self ? r === self : r.isPlayer) continue;
       seen.add(r);
       let e = this.rivals.get(r);
       if (!e) {

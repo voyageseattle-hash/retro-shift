@@ -5,6 +5,7 @@ import { TrackWorld } from '../world/track.js';
 import { CARS } from '../vehicles/racer.js';
 import { drawPaths, MiniMap } from './minimap.js';
 import { BOTH, RED, BLUE, MODE_NAME } from '../world/shift.js';
+import { SPLIT_GLYPHS } from '../core/input.js';
 import { formatTime, ordinal, storage } from '../core/util.js';
 import { CUPS, POINTS, TROPHY, getProgress, saveProgress as saveProgressUI, medalInfo, isUnlocked, unlockFor, COLORWAYS, getGarage, setLivery, liveryFor } from '../game/modes.js';
 import { loadGhost } from '../game/ghost.js';
@@ -19,7 +20,7 @@ const el = (tag, cls, html) => {
 };
 const hex = (c) => `#${c.toString(16).padStart(6, '0')}`;
 
-export const MODE_TITLE = { race: 'SINGLE RACE', trial: 'TIME TRIAL', mono: 'MONO RUN', gp: 'GRAND PRIX' };
+export const MODE_TITLE = { race: 'SINGLE RACE', trial: 'TIME TRIAL', mono: 'MONO RUN', gp: 'GRAND PRIX', split: '2 PLAYER' };
 export const LOGO = `<div class="logo"><span class="retro">RETRO</span><span class="shift">SHIFT</span></div>`;
 
 // ------------------------------------------------------------------ generic focusable list
@@ -107,6 +108,7 @@ export class UI {
       { label: 'SINGLE RACE', action: () => ((this.choice.mode = 'race'), this.trackSelect()) },
       { label: 'TIME TRIAL', action: () => ((this.choice.mode = 'trial'), this.trackSelect()) },
       { label: 'MONO RUN', action: () => ((this.choice.mode = 'mono'), this.trackSelect()) },
+      { label: '2 PLAYER', action: () => ((this.choice.mode = 'split'), this.trackSelect()) },
       { label: 'ONLINE', action: () => this.onlineMenu() },
       { label: 'GARAGE', action: () => this.garage() },
       { label: 'HOW TO PLAY', action: () => this.howTo() },
@@ -245,10 +247,11 @@ export class UI {
     return { n, open };
   }
 
-  carSelect() {
+  carSelect(who = 1) {
     this.clear();
     const s = el('div', 'screen cars');
-    s.innerHTML = '<h2>SELECT A CRAFT</h2><div class="stage-gap"></div>';
+    const split = this.choice.mode === 'split';
+    s.innerHTML = `<h2>${split ? `PLAYER ${who} · ` : ''}SELECT A CRAFT</h2>${split ? `<div class="sub">${who === 1 ? 'Player 1 drives with W A S D, shifts with Q · F · E, drifts with SPACE.' : 'Player 2 drives with the arrows, shifts with , . /, drifts with RIGHT SHIFT. Gamepads work too.'}</div>` : ''}<div class="stage-gap"></div>`;
     const grid = el('div', 'grid cars-grid');
     const items = CARS.map((car) => {
       const { n, open } = this.carCard(car);
@@ -257,8 +260,14 @@ export class UI {
         onFocus: () => (open || !car.secret ? this.app.showCar(car, liveryFor(car.id)) : this.app.hideCar()),
         action: () => {
           if (!open) return this.app.audio.play('denied');
+          if (split && who === 2) {
+            this.choice.car2 = car.id;
+            storage.set('rs.lastCar2', car.id);
+            return this.app.startRace();
+          }
           this.choice.car = car.id;
           storage.set('rs.lastCar', car.id);
+          if (split) return this.carSelect(2);
           if (this.choice.mode === 'online') {
             this.app.net.setCar(car.id, liveryFor(car.id));
             return this.lobby();
@@ -270,8 +279,9 @@ export class UI {
     });
     s.appendChild(grid);
     this.root.appendChild(s);
-    const focus = Math.max(0, CARS.findIndex((c) => c.id === this.choice.car));
-    this.menu = new Menu(this.app, grid, items, { cols: 4, focus, onBack: () => (this.choice.mode === 'online' ? this.lobby() : this.choice.mode === 'gp' ? this.cupSelect() : this.trackSelect()) });
+    const cur = who === 2 ? this.choice.car2 || storage.get('rs.lastCar2', 'scanline') : this.choice.car;
+    const focus = Math.max(0, CARS.findIndex((c) => c.id === cur));
+    this.menu = new Menu(this.app, grid, items, { cols: 4, focus, onBack: () => (who === 2 ? this.carSelect(1) : this.choice.mode === 'online' ? this.lobby() : this.choice.mode === 'gp' ? this.cupSelect() : this.trackSelect()) });
     this.menu.nodes.forEach((n) => grid.appendChild(n));
   }
 
@@ -519,7 +529,8 @@ export class UI {
       ? `<div class="medalbox">${medal ? `<div class="bigmedal" style="--mc:${medal.color}">${medal.name}</div>` : '<div class="bigmedal none">NO MEDAL</div>'}
           ${race.staffTime ? `<div class="targets">${[3, 2, 1].map((id) => { const m = medalInfo(id); return `<div style="color:${m.color}">${m.name} <b>${formatTime(race.staffTime * m.factor)}</b></div>`; }).join('')}</div>` : ''}</div>`
       : `<table class="standings">${rows}</table>`;
-    s.innerHTML = `<h2>${solo ? MODE_TITLE[race.kind] : place === 1 ? 'YOU WIN' : `${ordinal(place)} PLACE`}</h2>${this.quoteHtml(race)}
+    const head = race.split ? race.players.map((pl) => `${pl.name} ${ordinal(race.placeOf(pl))}`).join(' · ') : solo ? MODE_TITLE[race.kind] : place === 1 ? 'YOU WIN' : `${ordinal(place)} PLACE`;
+    s.innerHTML = `<h2>${head}</h2>${this.quoteHtml(race)}
       <div class="rgrid">
         ${left}
         <div class="rstats">
@@ -708,7 +719,8 @@ export class UI {
   // ------------------------------------------------------------------ HUD
   buildHud(race) {
     const H = this.hudRoot;
-    H.innerHTML = `
+    const n = race.split ? 2 : 1;
+    const view = `
       <div class="h-tl"><div class="h-place"><b>1</b><sup>ST</sup><small>/6</small></div><div class="h-lap">LAP <b>1</b>/3</div><div class="h-time">0:00.00</div></div>
       <div class="h-tr"><div class="h-course"></div><div class="h-best"></div></div>
       <canvas class="h-map"></canvas>
@@ -726,44 +738,50 @@ export class UI {
       <div class="h-comms"><b></b><span></span></div>
       <div class="h-count"></div>
       <div class="h-wrong">WRONG WAY</div>
-      <div class="h-flash"></div>
-      <button class="h-pause" aria-label="Pause">❚❚</button>`;
+      <div class="h-flash"></div>`;
+    H.innerHTML = Array.from({ length: n }, (_, k) => `<div class="hud-view v${k}">${n > 1 ? `<div class="h-who">P${k + 1}</div>` : ''}${view}</div>`).join('') + '<button class="h-pause" aria-label="Pause">❚❚</button>';
+    H.classList.toggle('split', n > 1);
     H.hidden = false;
-    const q = (s) => H.querySelector(s);
-    this.h = {
-      place: q('.h-place b'),
-      placeSup: q('.h-place sup'),
-      placeOf: q('.h-place small'),
-      lap: q('.h-lap'),
-      time: q('.h-time'),
-      course: q('.h-course'),
-      best: q('.h-best'),
-      speed: q('.h-speed b'),
-      drift: q('.h-drift'),
-      chips: [...H.querySelectorAll('.h-chips .chip')],
-      energy: q('.h-energy i'),
-      energyBox: q('.h-energy'),
-      center: q('.h-center'),
-      tip: q('.h-tip'),
-      comms: q('.h-comms'),
-      count: q('.h-count'),
-      wrong: q('.h-wrong'),
-      flash: q('.h-flash'),
-    };
-    q('.h-pause').addEventListener('click', () => this.app.pause());
-    this.map = new MiniMap(q('.h-map'));
-    this.h.course.textContent = `${race.def.num} ${race.def.name}`;
+    H.querySelector('.h-pause').addEventListener('click', () => this.app.pause());
     const best = race.mono ? loadGhost(race.def.id, true) : storage.get(`rs.best.${race.def.id}`, null);
     const bits = [];
     if (race.kind === 'gp') bits.push(`${this.app.gp.cup.name} · RACE ${this.app.gp.round + 1}/5`);
     if (best) bits.push(`RECORD ${formatTime(best.time)}`);
     if (race.staffTime) bits.push(`<span style="color:#ffd04a">STAFF ${formatTime(race.staffTime)}</span>`);
-    this.h.best.innerHTML = bits.join('<br>');
-    if (race.mono) {
-      const both = H.querySelector('.chip.both');
-      both.lastChild.textContent = 'SWAP';
-      both.classList.add('swap');
-    }
+    this.hs = [...H.querySelectorAll('.hud-view')].map((V) => {
+      const q = (sel) => V.querySelector(sel);
+      const h = {
+        root: V,
+        place: q('.h-place b'),
+        placeSup: q('.h-place sup'),
+        placeOf: q('.h-place small'),
+        lap: q('.h-lap'),
+        time: q('.h-time'),
+        course: q('.h-course'),
+        best: q('.h-best'),
+        speed: q('.h-speed b'),
+        drift: q('.h-drift'),
+        chips: [...V.querySelectorAll('.h-chips .chip')],
+        energy: q('.h-energy i'),
+        energyBox: q('.h-energy'),
+        center: q('.h-center'),
+        tip: q('.h-tip'),
+        comms: q('.h-comms'),
+        count: q('.h-count'),
+        wrong: q('.h-wrong'),
+        flash: q('.h-flash'),
+        map: new MiniMap(q('.h-map')),
+      };
+      h.course.textContent = `${race.def.num} ${race.def.name}`;
+      h.best.innerHTML = bits.join('<br>');
+      if (race.mono) {
+        const both = V.querySelector('.chip.both');
+        both.lastChild.textContent = 'SWAP';
+        both.classList.add('swap');
+      }
+      return h;
+    });
+    this.h = this.hs[0];
     this.mapT = 0;
     this.lastPlace = 0;
     this.lastTipT = 0;
@@ -771,74 +789,95 @@ export class UI {
   hideHud() {
     this.hudRoot.hidden = true;
     this.hudRoot.innerHTML = '';
+    this.hudRoot.classList.remove('split');
     this.h = null;
+    this.hs = [];
   }
 
-  popup(text, color, small = false) {
-    if (!this.h) return;
+  popup(text, color, small = false, h = this.h) {
+    if (!h) return;
     const n = el('div', `pop ${small ? 'small' : ''}`, text);
     n.style.color = color;
-    this.h.center.appendChild(n);
-    while (this.h.center.children.length > 3) this.h.center.firstChild.remove();
+    h.center.appendChild(n);
+    while (h.center.children.length > 3) h.center.firstChild.remove();
     setTimeout(() => n.remove(), 1300);
   }
 
-  updateHud(race, dt) {
-    const h = this.h;
-    if (!h) return;
-    const p = race.player;
+  // In split-screen each player's keyboard keys differ; with a pad, its own glyphs.
+  lensGlyph(race, k, key) {
     const I = this.app.input;
+    if (race.split && I.lastDevice !== 'gamepad') return SPLIT_GLYPHS[k][key];
+    return I.glyph(key);
+  }
+
+  updateHud(race, dt) {
+    if (!this.h) return;
     for (const e of race.events) {
-      switch (e.type) {
-        case 'shift': {
-          h.flash.className = `h-flash on m${e.mode}`;
-          void h.flash.offsetWidth;
-          h.flash.className = `h-flash go m${e.mode}`;
-          if (e.forced) this.popup('SHIFT EMPTY', '#ffffff', true);
-          break;
-        }
-        case 'denied':
-          h.energyBox.classList.remove('deny');
-          void h.energyBox.offsetWidth;
-          h.energyBox.classList.add('deny');
-          break;
-        case 'popup':
-          this.popup(e.text, e.color, e.small);
-          break;
-        case 'lap':
-          this.popup(`LAP ${e.lap} · ${formatTime(e.time)}`, '#ffffff');
-          break;
-        case 'count':
-          h.count.textContent = e.n > 0 ? e.n : 'GO!';
-          h.count.className = `h-count on n${Math.max(0, e.n)}`;
-          if (e.n <= 0) setTimeout(() => (h.count.className = 'h-count'), 700);
-          break;
-        case 'tip': {
-          const glyph = { red: I.glyph('red'), blue: I.glyph('blue'), both: I.glyph('both') }[e.key] || '';
-          h.tip.innerHTML = `${e.text}${glyph ? ` <kbd>${glyph}</kbd>` : ''}`;
-          h.tip.className = `h-tip on k-${e.key}`;
-          clearTimeout(this.tipTimer);
-          this.tipTimer = setTimeout(() => (h.tip.className = 'h-tip'), 3200);
-          break;
-        }
-        case 'comms': {
-          const c = h.comms;
-          c.querySelector('b').textContent = `${e.name} · ${e.car}`;
-          c.querySelector('b').style.color = hex(e.color);
-          c.querySelector('span').textContent = e.text;
-          c.style.setProperty('--c', hex(e.color));
-          c.classList.add('on');
-          this.app.audio.radio(e.id, e.text, e.kind === 'lose' ? 'lose' : 'talk');
-          clearTimeout(this.commsTimer);
-          this.commsTimer = setTimeout(() => c.classList.remove('on'), 4200);
-          break;
-        }
-        case 'finish':
-          this.popup(race.solo ? 'FINISH' : `${ordinal(e.place)} PLACE`, '#ff4fd8');
-          break;
-      }
+      // events for one player go to that player's view; race-wide ones (countdown, radio) to every view
+      const targets = e.pi != null ? [this.hs[e.pi]].filter(Boolean) : this.hs;
+      for (const h of targets) this.hudEvent(race, h, e, this.hs.indexOf(h), targets.length > 1 && h !== targets[0]);
     }
     race.events.length = 0;
+    this.mapT -= dt;
+    const drawMap = this.mapT <= 0;
+    if (drawMap) this.mapT = 1 / 20;
+    race.players.forEach((p, k) => this.hudView(race, this.hs[k], p, k, drawMap));
+    document.body.dataset.mode = MODE_NAME[race.player.mode];
+  }
+
+  hudEvent(race, h, e, k, echo) {
+    switch (e.type) {
+      case 'shift': {
+        h.flash.className = `h-flash on m${e.mode}`;
+        void h.flash.offsetWidth;
+        h.flash.className = `h-flash go m${e.mode}`;
+        if (e.forced) this.popup('SHIFT EMPTY', '#ffffff', true, h);
+        break;
+      }
+      case 'denied':
+        h.energyBox.classList.remove('deny');
+        void h.energyBox.offsetWidth;
+        h.energyBox.classList.add('deny');
+        break;
+      case 'popup':
+        this.popup(e.text, e.color, e.small, h);
+        break;
+      case 'lap':
+        this.popup(`LAP ${e.lap} · ${formatTime(e.time)}`, '#ffffff', false, h);
+        break;
+      case 'count':
+        h.count.textContent = e.n > 0 ? e.n : 'GO!';
+        h.count.className = `h-count on n${Math.max(0, e.n)}`;
+        if (e.n <= 0) setTimeout(() => (h.count.className = 'h-count'), 700);
+        break;
+      case 'tip': {
+        const glyph = this.lensGlyph(race, k, e.key) || '';
+        h.tip.innerHTML = `${e.text}${glyph ? ` <kbd>${glyph}</kbd>` : ''}`;
+        h.tip.className = `h-tip on k-${e.key}`;
+        clearTimeout(h.tipTimer);
+        h.tipTimer = setTimeout(() => (h.tip.className = 'h-tip'), 3200);
+        break;
+      }
+      case 'comms': {
+        const c = h.comms;
+        c.querySelector('b').textContent = `${e.name} · ${e.car}`;
+        c.querySelector('b').style.color = hex(e.color);
+        c.querySelector('span').textContent = e.text;
+        c.style.setProperty('--c', hex(e.color));
+        c.classList.add('on');
+        if (!echo) this.app.audio.radio(e.id, e.text, e.kind === 'lose' ? 'lose' : 'talk');
+        clearTimeout(h.commsTimer);
+        h.commsTimer = setTimeout(() => c.classList.remove('on'), 4200);
+        break;
+      }
+      case 'finish':
+        this.popup(race.solo ? 'FINISH' : `${ordinal(e.place)} PLACE`, '#ff4fd8', false, h);
+        break;
+    }
+  }
+
+  hudView(race, h, p, k, drawMap) {
+    if (!h) return;
     const place = race.placeOf(p);
     const n = race.racers.length;
     const ord = ordinal(place);
@@ -852,19 +891,15 @@ export class UI {
     for (const c of h.chips) {
       const m = +c.dataset.m;
       c.classList.toggle('active', m === p.mode);
-      const k = c.querySelector('kbd');
-      const g = m === RED ? I.glyph('red') : m === BLUE ? I.glyph('blue') : I.glyph('both');
-      if (k.textContent !== g) k.textContent = g;
+      const kb = c.querySelector('kbd');
+      const g = this.lensGlyph(race, k, m === RED ? 'red' : m === BLUE ? 'blue' : 'both');
+      if (kb.textContent !== g) kb.textContent = g;
     }
     h.energy.style.width = `${(p.energy * 100).toFixed(1)}%`;
     h.energyBox.className = `h-energy m${p.mode}${p.energy < 0.25 ? ' low' : ''}${h.energyBox.classList.contains('deny') ? ' deny' : ''}`;
     h.wrong.classList.toggle('on', (p.wrongWay || 0) > 1.2 && race.state === 'race');
-    this.mapT -= dt;
-    if (this.mapT <= 0) {
-      this.mapT = 1 / 20;
-      this.map.draw(race.world, race.racers, p.mode);
-    }
-    document.body.dataset.mode = MODE_NAME[p.mode];
+    h.root.dataset.mode = MODE_NAME[p.mode];
+    if (drawMap) h.map.draw(race.world, race.racers, p.mode, p);
   }
 }
 

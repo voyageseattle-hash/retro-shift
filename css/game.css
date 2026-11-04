@@ -12,6 +12,9 @@
 }
 body[data-mode='RED'] { --mode: var(--red); }
 body[data-mode='BLUE'] { --mode: var(--blue); }
+.hud-view[data-mode='RED'] { --mode: var(--red); }
+.hud-view[data-mode='BLUE'] { --mode: var(--blue); }
+.hud-view[data-mode='BOTH'] { --mode: var(--violet); }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--white); overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: none; }
@@ -168,6 +171,31 @@ kbd { font-family: 'Chakra Petch', monospace; font-weight: 700; font-size: 0.8em
 .lobby-course canvas { width: 220px; height: 130px; background: rgba(0, 0, 0, 0.35); }
 
 /* ---------------------------------------------------------------- HUD */
+/* split-screen: two stacked HUDs */
+.hud-view { position: absolute; inset: 0; }
+#hud.split .hud-view { bottom: auto; height: 50%; overflow: hidden; }
+#hud.split .hud-view.v1 { top: 50%; border-top: 2px solid rgba(255, 79, 216, 0.7); box-shadow: 0 -1px 12px rgba(255, 79, 216, 0.5); }
+#hud.split .h-place { font-size: 38px; }
+#hud.split .h-place sup { font-size: 16px; }
+#hud.split .h-lap { font-size: 15px; }
+#hud.split .h-lap b { font-size: 19px; }
+#hud.split .h-time { font-size: 13px; }
+#hud.split .h-map { width: 110px; height: 110px; bottom: 10px; }
+#hud.split .h-speed { bottom: 10px; }
+#hud.split .h-speed b { font-size: 40px; }
+#hud.split .h-lens { bottom: 10px; gap: 5px; }
+#hud.split .h-chips .chip { font-size: 11px; padding: 3px 9px; }
+#hud.split .h-energy { height: 10px; width: 220px; }
+#hud.split .h-count { font-size: 90px; }
+#hud.split .pop { font-size: 26px; }
+#hud.split .pop.small { font-size: 15px; }
+#hud.split .h-tip { font-size: 14px; top: 12%; }
+#hud.split .h-wrong { font-size: 28px; }
+#hud.split .h-comms { left: 140px; bottom: 12px; }
+#hud.split .h-tr { right: 64px; }
+#hud.split .v1 .h-tr { display: none; }
+.h-who { position: absolute; left: 50%; top: 8px; transform: translateX(-50%) skewX(-10deg); font-family: 'Russo One'; font-style: italic; font-size: 18px; padding: 0 10px; color: #fff; text-shadow: 0 0 10px var(--pink); }
+
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; font-weight: 700; text-shadow: 0 0 8px rgba(0, 0, 0, 0.9); }
 .h-tl { position: absolute; top: max(14px, env(safe-area-inset-top)); left: 18px; }
 .h-place { font-family: 'Russo One'; font-style: italic; font-size: 56px; line-height: 1; color: #fff; text-shadow: 0 0 14px var(--mode); }

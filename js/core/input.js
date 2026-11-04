@@ -16,6 +16,7 @@ const BIND_SOLO = {
   rear: ['KeyI', 'KeyX'],
   horn: ['KeyH', 'KeyV'],
 };
+// Two players on one keyboard. Lens keys run left to right like the HUD: RED, BOTH, BLUE.
 const BIND_SPLIT = [
   {
     accel: ['KeyW'],
@@ -23,13 +24,13 @@ const BIND_SPLIT = [
     left: ['KeyA'],
     right: ['KeyD'],
     drift: ['ShiftLeft', 'Space'],
-    fire: ['KeyF'],
-    item: ['KeyG'],
-    special: ['KeyR'],
+    fire: ['KeyX'],
+    item: ['KeyQ'],
+    special: ['KeyE'],
     look: ['KeyC'],
-    reset: ['KeyT'],
-    jump: ['KeyZ'],
-    rear: ['KeyX'],
+    reset: ['KeyR'],
+    jump: ['KeyF'],
+    rear: ['KeyZ'],
     horn: ['KeyV'],
   },
   {
@@ -38,15 +39,20 @@ const BIND_SPLIT = [
     left: ['ArrowLeft'],
     right: ['ArrowRight'],
     drift: ['ShiftRight', 'Numpad0'],
-    fire: ['Comma', 'Numpad1'],
-    item: ['Period', 'Numpad2'],
+    fire: ['Quote'],
+    item: ['Comma', 'Numpad1'],
     special: ['Slash', 'Numpad3'],
     look: ['Numpad5'],
-    reset: ['Numpad7', 'Backspace'],
-    jump: ['Semicolon', 'Numpad4'],
-    rear: ['Quote', 'Numpad6'],
+    reset: ['Backspace', 'Numpad7'],
+    jump: ['Period', 'Numpad2'],
+    rear: ['Numpad6'],
     horn: ['Numpad9', 'Backslash'],
   },
+];
+// Keyboard key names for each player's lens buttons in split-screen.
+export const SPLIT_GLYPHS = [
+  { red: 'Q', both: 'F', blue: 'E' },
+  { red: ',', both: '.', blue: '/' },
 ];
 // Buttons that act once per press. The game latches them per rendered frame so a short tap is
 // never lost between fixed sim steps, and online joiners send them as running counts.
@@ -187,6 +193,8 @@ export class Input {
     });
 
     window.addEventListener('keydown', (e) => {
+      // typing in a text box (online name, room code) belongs to the box, not the game
+      if (e.target?.tagName === 'INPUT') return;
       if (GAME_KEYS.has(e.code) && !e.metaKey && !e.ctrlKey) e.preventDefault();
       if (!e.repeat) {
         this.edges.add(e.code);

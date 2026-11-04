@@ -64,7 +64,7 @@ class App {
 
   onResize() {
     const a = this.renderer.width / this.renderer.height;
-    if (this.race) this.race.cam.setAspect(a);
+    if (this.race) this.race.setAspect(a);
     this.showroom?.setAspect(a);
     if (this.attract) {
       this.attract.camera.aspect = a;
@@ -147,16 +147,21 @@ class App {
     this.hideCar();
     this.recentUnlocks = [];
     this.ui.clear();
+    const split = c.mode === 'split';
+    this.input.twoPlayer = split;
     this.race = new Race(this, def, {
-      kind: c.mode,
+      kind: split ? 'race' : c.mode,
+      split,
       car: c.car,
       livery: liveryFor(c.car),
+      car2: c.car2,
+      livery2: split ? liveryFor(c.car2) : null,
       rivals: solo ? 0 : 5,
       difficulty: this.ui.settings.difficulty,
       staff,
       autopilot: this.autopilot,
     });
-    this.race.cam.setAspect(this.renderer.width / this.renderer.height);
+    this.race.setAspect(this.renderer.width / this.renderer.height);
     this.ui.buildHud(this.race);
     this.paused = false;
     this.resultsShown = false;
@@ -221,8 +226,9 @@ class App {
     this.recentUnlocks = [];
     this.ui.clear();
     this.ui.choice.track = def.id;
+    this.input.twoPlayer = false;
     this.race = new Race(this, def, { kind: 'online', car: me?.car, livery: me?.livery, online: { slots: cfg.slots, mySlot, isHost } });
-    this.race.cam.setAspect(this.renderer.width / this.renderer.height);
+    this.race.setAspect(this.renderer.width / this.renderer.height);
     this.ui.buildHud(this.race);
     this.paused = false;
     this.resultsShown = false;
@@ -257,6 +263,7 @@ class App {
   }
   quit() {
     this.gp = null;
+    this.input.twoPlayer = false;
     if (this.net.active) this.net.close();
     if (this.race) this.race.dispose();
     this.race = null;
@@ -291,7 +298,7 @@ class App {
           if (this.resultsShown) this.ui.update();
         }
       }
-      this.renderer.render(this.race.scene, [{ camera: this.race.cam.camera, x: 0, y: 0, w: 1, h: 1 }], 0.85);
+      this.renderer.render(this.race.scene, this.race.views(), 0.85);
     } else {
       this.ui.update();
       if (this.showroom) {
@@ -311,7 +318,7 @@ class App {
       this.race.update(dt);
       this.ui.updateHud(this.race, dt);
     }
-    this.renderer.render(this.race.scene, [{ camera: this.race.cam.camera, x: 0, y: 0, w: 1, h: 1 }], 0.85);
+    this.renderer.render(this.race.scene, this.race.views(), 0.85);
   }
 
   // ------------------------------------------------------------------ touch: steer on the left, pedals and lenses on the right

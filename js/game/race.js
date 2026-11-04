@@ -47,16 +47,22 @@ export class Race {
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
     // browser simulates only its own racers (the host also runs the AI); everyone else is a puppet fed by the network.
     this.online = opts.online || null;
+    this.split = !!opts.split;
     const playerCar = CARS.find((c) => c.id === opts.car) || CARS[0];
     const field = this.online ? this.online.slots.length - 1 : opts.rivals ?? 5;
     const others = CARS.filter((c) => c !== playerCar && !c.secret);
+    const others2 = this.split ? others.filter((c) => c.id !== opts.car2) : others;
     const diff = opts.difficulty ?? 1; // 0 easy, 1 normal, 2 hard
     for (let k = 0; k <= field; k++) {
       const S = this.online?.slots[k];
-      const isPlayer = S ? S.slot === this.online.mySlot : k === field; // offline, the player starts at the back of the grid
-      const car = S ? CARS.find((c) => c.id === S.car) || CARS[0] : isPlayer ? playerCar : others[k % others.length];
-      const name = isPlayer ? 'YOU' : S?.human ? S.name : car.name;
-      const r = new Racer(car, { isPlayer, index: k, name, livery: isPlayer ? opts.livery : S?.livery || null });
+      // offline, the player starts at the back of the grid (in split-screen, player 2 just ahead of player 1)
+      const pIndex = S ? (S.slot === this.online.mySlot ? 0 : -1) : k === field ? 0 : this.split && k === field - 1 ? 1 : -1;
+      const isPlayer = pIndex >= 0;
+      const pCar = pIndex === 1 ? CARS.find((c) => c.id === opts.car2) || CARS[1] : playerCar;
+      const car = S ? CARS.find((c) => c.id === S.car) || CARS[0] : isPlayer ? pCar : others2[k % others2.length];
+      const name = isPlayer ? (this.split ? `P${pIndex + 1}` : 'YOU') : S?.human ? S.name : car.name;
+      const r = new Racer(car, { isPlayer, index: k, name, livery: isPlayer ? (pIndex === 1 ? opts.livery2 : opts.livery) : S?.livery || null });
+      if (isPlayer) r.pIndex = pIndex;
       r.session = this;
       if (S) {
         r.slot = S.slot;
@@ -83,14 +89,23 @@ export class Race {
         r.ai = new RaceAI(r, this.world, skill);
         r.speedMul = [0.9, 0.97, 1.02][diff] + (k / field) * 0.03;
       } else if (isPlayer) {
-        this.player = r;
+        if (pIndex === 0) this.player = r;
+        this.players ||= [];
+        this.players[pIndex] = r;
         // headless staff runs: the AI drives the player's car flat out
         if (opts.autopilot) r.ai = new RaceAI(r, this.world, 1);
       }
       this.scene.add(r.root, r.trail.mesh);
       this.racers.push(r);
     }
-    this.cam.snap(this.player);
+    this.cams = [this.cam];
+    if (this.split) {
+      const c2 = new ChaseCamera();
+      c2.camera.far = 6000;
+      c2.camera.updateProjectionMatrix();
+      this.cams.push(c2);
+    }
+    this.players.forEach((p, k) => this.cams[k].snap(p));
     this.events = [];
     this.lastMode = BOTH;
     // ghosts: your best run and the staff run
@@ -128,6 +143,23 @@ export class Race {
     return msg;
   }
 
+  camOf(r) {
+    return this.cams[r.pIndex || 0] || this.cam;
+  }
+  emitP(r, type, data = {}) {
+    this.emit(type, { ...data, pi: r.pIndex || 0 });
+  }
+  // A player's lens changed: their view's sky and grid follow it, and the music follows the lens (in split-screen,
+  // only when both players agree; otherwise it plays both worlds).
+  lensChanged(r) {
+    const k = r.pIndex || 0;
+    if (this.split) this.env.useView(k);
+    this.env.setMode(r.mode);
+    if (this.split) this.env.useView(0);
+    const modes = new Set(this.players.map((p) => p.mode));
+    this.app.audio.setMode(modes.size === 1 ? r.mode : BOTH);
+  }
+
   emit(type, data = {}) {
     this.events.push({ type, ...data });
   }
@@ -136,41 +168,40 @@ export class Race {
   onShift(r, prev, mode, forced) {
     if (r.isPlayer) {
       this.app.audio.play('shift', mode);
-      this.app.audio.setMode(mode);
-      this.env.setMode(mode);
-      this.cam.fovPunch(mode === BOTH ? 3 : 6);
-      this.cam.addShake(0.15);
+      this.lensChanged(r);
+      this.camOf(r).fovPunch(mode === BOTH ? 3 : 6);
+      this.camOf(r).addShake(0.15);
       this.aberr = 1;
       this.stats.shifts++;
-      this.emit('shift', { mode, forced });
+      this.emitP(r, 'shift', { mode, forced });
     }
   }
   onShiftDenied(r) {
     if (r.isPlayer) {
       this.app.audio.play('denied');
-      this.emit('denied');
+      this.emitP(r, 'denied');
     }
   }
   onDriftLevel(r, lvl) {
-    if (r.isPlayer) this.emit('drift', { lvl });
+    if (r.isPlayer) this.emitP(r, 'drift', { lvl });
   }
   onMiniTurbo(r, lvl) {
     if (r.isPlayer) {
       this.app.audio.play('turbo', lvl);
-      this.emit('popup', { text: ['', 'TURBO', 'SUPER TURBO', 'ULTRA TURBO'][lvl], color: '#ff4fd8' });
+      this.emitP(r, 'popup', { text: ['', 'TURBO', 'SUPER TURBO', 'ULTRA TURBO'][lvl], color: '#ff4fd8' });
     }
   }
   onWallHit(r, impact) {
     if (r.isPlayer && impact > 6) {
       this.app.audio.play('scrape');
-      this.cam.addShake(Math.min(0.4, impact * 0.02));
+      this.camOf(r).addShake(Math.min(0.4, impact * 0.02));
       this.app.input.rumble(0, 0.3, 0.2, 80);
     }
   }
   onLand(r, impact) {
     if (r.isPlayer && impact > 6) {
       this.app.audio.play('land', impact);
-      this.cam.addShake(Math.min(0.5, impact * 0.025));
+      this.camOf(r).addShake(Math.min(0.5, impact * 0.025));
     }
   }
   onFell(r) {
@@ -180,7 +211,7 @@ export class Race {
     r.root.visible = false;
     if (r.isPlayer) {
       this.app.audio.play('fall');
-      this.emit('popup', { text: r.mode === BOTH ? 'FELL' : `NO ROAD IN ${MODE_NAME[r.mode]}`, color: '#ff4a6a' });
+      this.emitP(r, 'popup', { text: r.mode === BOTH ? 'FELL' : `NO ROAD IN ${MODE_NAME[r.mode]}`, color: '#ff4a6a' });
     }
   }
 
@@ -195,8 +226,7 @@ export class Race {
     r.vel.set(Math.sin(sp.yaw), 0, Math.cos(sp.yaw)).multiplyScalar(12);
     if (r.ai) r.ai.path = this.world.main;
     if (r.isPlayer) {
-      this.app.audio.setMode(r.mode);
-      this.env.setMode(r.mode);
+      this.lensChanged(r);
       this.cam.snap(r);
     }
   }
@@ -206,25 +236,27 @@ export class Race {
     this.t += dt;
     const input = this.app.input;
     const p = this.player;
-    // player controls
-    const c = this.app.paused ? NO_INPUT : input.controls(0);
-    p.ctl.throttle = c.throttle;
-    p.ctl.brake = c.brake;
-    p.ctl.steer = c.steer;
-    p.ctl.drift = c.drift;
-    if (this.state === 'race' && !p.finished) {
-      if (c.item) p.setMode(RED, this);
-      if (c.special) p.setMode(BLUE, this);
+    // player controls (two sets in split-screen)
+    const C = this.players.map((pl, k) => (this.app.paused ? NO_INPUT : input.controls(k)));
+    this.players.forEach((pl, k) => {
+      const c = C[k];
+      pl.ctl.throttle = c.throttle;
+      pl.ctl.brake = c.brake;
+      pl.ctl.steer = c.steer;
+      pl.ctl.drift = c.drift;
+      if (this.state !== 'race' || pl.finished) return;
+      if (c.item) pl.setMode(RED, this);
+      if (c.special) pl.setMode(BLUE, this);
       if (c.jump) {
-        if (p.mono) p.setMode(BOTH, this);
-        else if (p.mode !== BOTH) p.shiftTo(BOTH, this);
+        if (pl.mono) pl.setMode(BOTH, this);
+        else if (pl.mode !== BOTH) pl.shiftTo(BOTH, this);
       }
-      if (c.reset && p.respawnT <= 0 && !this.resetHeld) {
-        this.resetHeld = true;
-        this.onFell(p);
+      if (c.reset && pl.respawnT <= 0 && !pl.resetHeld) {
+        pl.resetHeld = true;
+        this.onFell(pl);
       }
-      if (!c.reset) this.resetHeld = false;
-    }
+      if (!c.reset) pl.resetHeld = false;
+    });
     if (this.state === 'intro') {
       if (this.introT < 0.5 && this.introT + dt >= 0.5 && !this.solo) this.comms(pick(this.racers.filter((r) => !r.isPlayer && !r.human)), 'pre');
       this.introT += dt;
@@ -245,7 +277,7 @@ export class Race {
         this.state = 'race';
         for (const r of this.racers) r.controlLocked = false;
         // rocket start: on the gas right at GO
-        if (c.throttle > 0 && this.countdown > -0.3) p.giveBoost(0.9, 1.25);
+        this.players.forEach((pl, k) => C[k].throttle > 0 && this.countdown > -0.3 && pl.giveBoost(0.9, 1.25));
       }
     }
     if (this.state === 'race' || this.state === 'finished') this.raceTime += dt;
@@ -260,7 +292,7 @@ export class Race {
 
     if (this.recorder && this.state === 'race' && !p.finished) this.recorder.sample(this.raceTime, p);
     // rivals talk when they get past you (not too often)
-    if (this.state === 'race' && !this.solo && !p.finished) {
+    if (this.state === 'race' && !this.solo && !this.split && !p.finished) {
       const place = this.placeOf(p);
       if (this.lastPlace && place > this.lastPlace && this.raceTime > (this.nextComms || 8)) {
         this.comms(this.standings()[place - 2], 'pass');
@@ -273,22 +305,31 @@ export class Race {
     // visuals
     this.app.net?.applyPuppets(this);
     for (const r of this.racers) if (r.puppet ? r.root.visible : r.respawnT <= 0) r.syncVisual(dt);
-    this.world.update(dt, this.t, p.mode);
-    const look = c.look;
-    if (this.state === 'intro') {
-      // fly-by
-      const a = this.introT * 0.5;
-      const cam = this.cam;
-      cam.cinematic = (dtc, C) => {
-        C.pos.set(p.pos.x + Math.sin(a + p.yaw) * (24 - this.introT * 6), p.pos.y + 8 - this.introT * 2, p.pos.z + Math.cos(a + p.yaw) * (24 - this.introT * 6));
-        C.look.copy(p.pos);
-      };
-    } else if (this.cam.cinematic) {
-      this.cam.cinematic = null;
-      this.cam.snap(p);
-    }
-    this.cam.update(dt, p, this.world, look);
-    this.env.update(dt, this.t, this.cam.camera);
+    if (this.split) {
+      // the obstacles move once; each view then fades the worlds for its own player's lens (see views())
+      for (const fn of this.world.animated) fn(this.t, dt);
+      this.players.forEach((pl, k) => {
+        this.world.layers.useView(k);
+        this.world.layers.update(dt, pl.mode, this.t);
+      });
+    } else this.world.update(dt, this.t, p.mode);
+    this.players.forEach((pl, k) => {
+      const cam = this.cams[k];
+      if (this.state === 'intro') {
+        // fly-by
+        const a = this.introT * 0.5 + k * 1.4;
+        cam.cinematic = (dtc, CC) => {
+          CC.pos.set(pl.pos.x + Math.sin(a + pl.yaw) * (24 - this.introT * 6), pl.pos.y + 8 - this.introT * 2, pl.pos.z + Math.cos(a + pl.yaw) * (24 - this.introT * 6));
+          CC.look.copy(pl.pos);
+        };
+      } else if (cam.cinematic) {
+        cam.cinematic = null;
+        cam.snap(pl);
+      }
+      cam.update(dt, pl, this.world, C[k].look);
+    });
+    this.dtLast = dt;
+    if (!this.split) this.env.update(dt, this.t, this.cam.camera);
     this.aberr = Math.max(0, (this.aberr || 0) - dt * 3);
     this.app.renderer.setGrade('neon', this.aberr * 1.6 + (p.boostTime > 0 ? 0.3 : 0), 0);
     const A = this.app.audio;
@@ -301,7 +342,8 @@ export class Race {
     this._listener.fwd.x = _v.x / fl;
     this._listener.fwd.z = _v.z / fl;
     this._listener.vel = p.vel;
-    A.rivalEngines(this._listener, this.racers);
+    // player 2 is heard like a rival, from player 1's camera
+    A.rivalEngines(this._listener, this.racers, this.split ? p : null);
 
     // tips (tutorial track)
     for (const tip of this.def.tips || []) {
@@ -314,6 +356,27 @@ export class Race {
         this.emit('tip', { text: tip.text, key: tip.key });
       }
     }
+  }
+
+  // What to draw: one full-screen view, or two stacked views (player 1 on top), each prepared for its own lens.
+  views() {
+    if (!this.split) return [{ camera: this.cam.camera, x: 0, y: 0, w: 1, h: 1 }];
+    return this.players.map((pl, k) => ({
+      camera: this.cams[k].camera,
+      x: 0,
+      y: k === 0 ? 0.5 : 0,
+      w: 1,
+      h: 0.5,
+      before: () => {
+        this.world.layers.useView(k);
+        this.world.layers.update(0, pl.mode, this.t);
+        this.env.useView(k);
+        this.env.update(this.dtLast || 0, this.t, this.cams[k].camera);
+      },
+    }));
+  }
+  setAspect(a) {
+    for (const c of this.cams) c.setAspect(this.split ? a * 2 : a);
   }
 
   step(dt) {
@@ -331,7 +394,7 @@ export class Race {
           r.ctl.throttle *= 0.6;
         } else if (this.state === 'race') r.ai.update(dt);
       }
-      if (r.finished && r.isPlayer) {
+      if (r.finished && r.isPlayer && !r.ai) {
         // autopilot after the flag
         r.ctl.throttle = 0.3;
         r.ctl.steer = 0;
@@ -382,7 +445,7 @@ export class Race {
           r.energy = Math.min(1, r.energy + 0.04);
           if (r.isPlayer) {
             this.app.audio.play('phase');
-            this.emit('popup', { text: 'PHASED', color: r.mode === RED ? '#ff4a6a' : r.mode === BLUE ? '#4ab0ff' : '#d8c8ff', small: true });
+            this.emitP(r, 'popup', { text: 'PHASED', color: r.mode === RED ? '#ff4a6a' : r.mode === BLUE ? '#4ab0ff' : '#d8c8ff', small: true });
             this.stats.phased++;
           }
         }
@@ -418,11 +481,11 @@ export class Race {
         if (hard) r.spinOut(o.type === 'wall' ? 0.9 : 0.6, Math.random() < 0.5 ? -1 : 1);
         if (r.isPlayer) {
           this.app.audio.play(o.type === 'wall' ? 'wall' : 'hit');
-          this.cam.addShake(o.type === 'wall' ? 0.9 : 0.5);
+          this.camOf(r).addShake(o.type === 'wall' ? 0.9 : 0.5);
           this.app.input.rumble(0, 0.8, 0.6, 250);
           this.aberr = 1;
           this.stats.crashes++;
-          if (hard) this.emit('popup', { text: 'CRASH', color: '#ff4a6a' });
+          if (hard) this.emitP(r, 'popup', { text: 'CRASH', color: '#ff4a6a' });
         }
       }
     }
@@ -437,7 +500,7 @@ export class Race {
       r.giveBoost(1.2, 1.32);
       if (r.isPlayer) {
         this.app.audio.play('boost');
-        this.cam.fovPunch(8);
+        this.camOf(r).fovPunch(8);
       }
     }
     for (const sh of w.shards) {
@@ -449,7 +512,7 @@ export class Race {
       r.energy = Math.min(1, r.energy + SHIFT.shard);
       if (r.isPlayer) {
         this.app.audio.play('shard');
-        this.emit('popup', { text: '+SHIFT', color: '#ffffff', small: true });
+        this.emitP(r, 'popup', { text: '+SHIFT', color: '#ffffff', small: true });
       }
     }
   }
@@ -487,7 +550,7 @@ export class Race {
           B.vel.addScaledVector(_v, -rel * 1.2 * wb);
           if ((A.isPlayer || B.isPlayer) && rel < -4) {
             this.app.audio.play('hit');
-            this.cam.addShake(0.2);
+            this.camOf(A.isPlayer ? A : B).addShake(0.2);
           }
         }
       }
@@ -522,10 +585,10 @@ export class Race {
       r.lap = lap;
       if (r.lap >= this.laps) this.finish(r);
       else if (r.isPlayer) {
-        this.emit('lap', { lap: r.lap + 1, time: lt });
+        this.emitP(r, 'lap', { lap: r.lap + 1, time: lt });
         this.app.audio.play('lap');
         if (r.lap === this.laps - 1) {
-          this.emit('popup', { text: 'FINAL LAP', color: '#ff4fd8' });
+          this.emitP(r, 'popup', { text: 'FINAL LAP', color: '#ff4fd8' });
           this.app.audio.play('finalLap');
         }
       }
@@ -536,7 +599,14 @@ export class Race {
     r.finished = true;
     r.finishTime = this.raceTime;
     this.finishOrder.push(r);
-    if (r.isPlayer) {
+    // after the flag the AI takes your craft round on a cool-down lap
+    if (r.isPlayer && !r.ai && !r.puppet) r.ai = new RaceAI(r, this.world, 0.6);
+    if (r.isPlayer && this.split) {
+      // split-screen: the race ends when both players are home
+      this.emitP(r, 'finish', { place: this.placeOf(r) });
+      this.app.audio.play('finish', this.placeOf(r) <= 3 ? 1 : 0);
+      if (this.players.every((pl) => pl.finished)) this.state = 'finished';
+    } else if (r.isPlayer) {
       this.state = 'finished';
       this.app.audio.play('finish', this.solo || this.placeOf(r) <= 3 ? 1 : 0);
       if (this.recorder) {
@@ -557,7 +627,7 @@ export class Race {
         const bl = storage.get(lkey, null);
         if (!bl || r.bestLap < bl) storage.set(lkey, r.bestLap);
       } else if (this.mono) this.newRecord = this.newGhost;
-      this.emit('finish', { place: this.placeOf(r) });
+      this.emitP(r, 'finish', { place: this.placeOf(r) });
       if (!this.solo && !this.online) {
         const st = this.standings();
         const winner = st[0];
