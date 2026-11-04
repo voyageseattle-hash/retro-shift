@@ -57,7 +57,9 @@ class App {
       this.startRace();
     } else {
       this.ui.title();
-      if (!params.has('nosplash')) showSplash(this);
+      // A first launch goes from the studio card straight into the guided first run.
+      const firstRun = !storage.get('rs.onboarded', false) && !storage.get('rs.best.core', null);
+      if (!params.has('nosplash')) showSplash(this, () => firstRun && this.startTutorial());
     }
     document.getElementById('loader')?.remove();
     requestAnimationFrame((t) => this.frame(t));
@@ -148,8 +150,8 @@ class App {
     if (c.mode !== 'gp') this.gp = null;
     if (this.gp) c.track = this.gp.cup.tracks[this.gp.round];
     const def = trackById(c.track);
-    const solo = c.mode === 'trial' || c.mode === 'mono';
-    const staff = solo && !this.autopilot ? await loadStaff(def.id, c.mode === 'mono') : null;
+    const solo = c.mode === 'trial' || c.mode === 'mono' || c.mode === 'tutorial';
+    const staff = solo && c.mode !== 'tutorial' && !this.autopilot ? await loadStaff(def.id, c.mode === 'mono') : null;
     if (this.race) this.race.dispose();
     this.audio.stopEngines();
     this.audio.duckMusic(false);
@@ -170,12 +172,19 @@ class App {
       difficulty: this.ui.settings.difficulty,
       staff,
       autopilot: this.autopilot,
+      laps: c.mode === 'tutorial' ? 1 : undefined,
     });
     this.race.setAspect(this.renderer.width / this.renderer.height);
     this.ui.buildHud(this.race);
     this.paused = false;
     this.resultsShown = false;
     document.body.classList.add('racing');
+  }
+  // The guided first run: one lap of Core Circuit alone, with the lessons in Race.coachLessons.
+  startTutorial() {
+    this.ui.choice.track = 'core';
+    this.ui.choice.mode = 'tutorial';
+    this.startRace();
   }
   // ------------------------------------------------------------------ Grand Prix: five races, points carried over
   startGP(cupId) {
@@ -272,6 +281,7 @@ class App {
     this.ui.clear();
   }
   quit() {
+    if (this.race?.tutorial) storage.set('rs.onboarded', true);
     this.gp = null;
     this.input.twoPlayer = false;
     if (this.net.active) this.net.close();
@@ -303,12 +313,14 @@ class App {
           this.race.finishT = (this.race.finishT || 0) + dt;
           if (this.race.finishT > 2.5 && !this.resultsShown) {
             this.resultsShown = true;
-            this.ui.results(this.race);
+            if (this.race.tutorial) this.ui.tutorialDone();
+            else this.ui.results(this.race);
           }
           if (this.resultsShown) this.ui.update();
         }
       }
-      this.renderer.render(this.race.scene, this.race.views(), 0.85);
+      // (a menu press above can have quit the race this frame)
+      if (this.race) this.renderer.render(this.race.scene, this.race.views(), 0.85);
     } else {
       this.ui.update();
       if (this.showroom) {

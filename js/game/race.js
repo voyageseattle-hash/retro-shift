@@ -21,7 +21,8 @@ export class Race {
     this.app = app;
     this.kind = opts.kind || (opts.rivals === 0 ? 'trial' : 'race');
     this.mono = this.kind === 'mono';
-    this.solo = this.kind === 'trial' || this.mono;
+    this.tutorial = this.kind === 'tutorial';
+    this.solo = this.kind === 'trial' || this.mono || this.tutorial;
     if (this.mono) def = monoDef(def);
     this.def = def;
     this.opts = opts;
@@ -45,7 +46,8 @@ export class Race {
     this.tipShown = new Set();
     // Wall coaching: until a player has phased through a few walls, a wall that's solid in their lens is called out
     // (with the button that gets them through) and stays called out until they shift or pass it.
-    this.coachLeft = 6 - storage.get('rs.coach.phased', 0);
+    this.coachLeft = this.tutorial ? 99 : 6 - storage.get('rs.coach.phased', 0);
+    this.lesson = 0;
     this.stats = { phased: 0, crashes: 0, shifts: 0 };
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
     // browser simulates only its own racers (the host also runs the AI); everyone else is a puppet fed by the network.
@@ -113,7 +115,7 @@ export class Race {
     this.lastMode = BOTH;
     // ghosts: your best run and the staff run
     this.ghosts = [];
-    if (this.solo) {
+    if (this.solo && !this.tutorial) {
       this.recorder = new GhostRecorder();
       const mine = loadGhost(def.id, this.mono);
       if (mine && opts.showGhost !== false) this.addGhost(mine, 0xffffff, 'BEST');
@@ -352,6 +354,7 @@ export class Race {
 
     // wall coaching
     if (this.state === 'race' && this.coachLeft > 0) for (const pl of this.players) this.coachWalls(pl);
+    if (this.tutorial && this.state === 'race') this.coachLessons(p, dt);
     // tips (tutorial track)
     for (const tip of this.def.tips || []) {
       const key = tip.at;
@@ -374,6 +377,31 @@ export class Race {
     const to = red && !blue ? 'RED' : 'BLUE';
     if (this.mono) return { text: `${colour} WALL: SWAP TO ${to}`, key: 'both' };
     return { text: `${colour} WALL: SHIFT TO ${to}`, key: to === 'RED' ? 'red' : 'blue' };
+  }
+
+  // First run: gas, steer, back to BOTH, drift, one at a time. Wall tips take the tip line while a wall is ahead.
+  coachLessons(p, dt) {
+    if (p.finished || p.coachWall) return;
+    this.lessonT = (this.lessonT || 0) + dt;
+    const say = (text, key, hold = 0) => {
+      this.emitP(p, 'tip', { text, key, hold });
+      this.lessonT = 0;
+      this.lesson++;
+    };
+    switch (this.lesson) {
+      case 0:
+        return say('HOLD THE GAS', 'gas');
+      case 1:
+        if (p.speed > 12) say('STEER', 'steer', 2.5);
+        return;
+      case 2:
+        // after the first wall you phase through
+        if (this.stats.phased > 0 && this.lessonT > 0.6) say('SHIFT DRAINS AS YOU HOLD IT · BOTH REFILLS IT', 'both', 3.5);
+        return;
+      case 3:
+        if (this.stats.phased > 1 && this.lessonT > 0.6) say('HOLD DRIFT THROUGH TURNS · LET GO FOR A TURBO', 'drift', 4);
+        return;
+    }
   }
 
   coachWalls(r) {
@@ -682,7 +710,7 @@ export class Race {
         this.medal = medalFor(r.finishTime, this.staffTime);
         if (!this.opts.autopilot) recordMedal(this.kind, this.def.id, this.medal);
       }
-      if (!this.mono && !this.opts.autopilot && !this.online) {
+      if (!this.mono && !this.tutorial && !this.opts.autopilot && !this.online) {
         const key = `rs.best.${this.def.id}`;
         const best = storage.get(key, null);
         this.newRecord = !best || r.finishTime < best.time;

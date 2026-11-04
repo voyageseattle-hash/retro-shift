@@ -111,6 +111,7 @@ export class UI {
       { label: '2 PLAYER', action: () => ((this.choice.mode = 'split'), this.app.audio.announce('twoplayer'), this.trackSelect()) },
       { label: 'ONLINE', action: () => (this.app.audio.announce('online'), this.onlineMenu()) },
       { label: 'GARAGE', action: () => this.garage() },
+      { label: 'FIRST RUN', action: () => this.app.startTutorial() },
       { label: 'HOW TO PLAY', action: () => this.howTo() },
       { label: 'SETTINGS', action: () => this.settingsScreen() },
     ];
@@ -506,7 +507,7 @@ export class UI {
     this.menu = new Menu(this.app, list, [
       { label: 'RESUME', action: () => this.app.resume() },
       ...(gp ? [] : [{ label: 'RESTART', action: () => this.app.startRace() }]),
-      { label: gp ? 'QUIT GRAND PRIX' : 'QUIT TO MENU', action: () => this.app.quit() },
+      { label: gp ? 'QUIT GRAND PRIX' : this.app.race?.tutorial ? 'SKIP TO MENU' : 'QUIT TO MENU', action: () => this.app.quit() },
     ], { onBack: () => this.app.resume() });
     this.menu.nodes.forEach((n) => list.appendChild(n));
   }
@@ -583,6 +584,21 @@ export class UI {
     this.root.appendChild(s);
     this.menu = new Menu(this.app, list, [{ label: 'CONTINUE', action: done }], { onBack: done });
     this.menu.nodes.forEach((n) => list.appendChild(n));
+  }
+  // End of the first run.
+  tutorialDone() {
+    this.hideHud();
+    this.storyCard(
+      {
+        title: 'YOU’RE READY',
+        lines: [
+          'Red walls vanish through the blue lens. Blue walls vanish through the red.',
+          'Hold a lens and SHIFT drains. BOTH fills it back up.',
+          'Grand Prix is waiting. HOW TO PLAY has every button.',
+        ],
+      },
+      () => this.app.quit(),
+    );
   }
   // Run any secret-driver arrival scenes that are waiting, then carry on.
   afterScenes(fn) {
@@ -748,6 +764,7 @@ export class UI {
     H.querySelector('.h-pause').addEventListener('click', () => this.app.pause());
     const best = race.mono ? loadGhost(race.def.id, true) : storage.get(`rs.best.${race.def.id}`, null);
     const bits = [];
+    if (race.tutorial) bits.push('FIRST RUN · ESC TO SKIP');
     if (race.kind === 'gp') bits.push(`${this.app.gp.cup.name} · RACE ${this.app.gp.round + 1}/5`);
     if (best) bits.push(`RECORD ${formatTime(best.time)}`);
     if (race.staffTime) bits.push(`<span style="color:#ffd04a">STAFF ${formatTime(race.staffTime)}</span>`);
