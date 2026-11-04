@@ -1,4 +1,4 @@
-# RETRO SHIFT
+# RETRO SHIFT: Dual World Racing
 
 A neon wireframe racer through two overlapping worlds, made for **GitHub Game Off 2026**.
 
@@ -61,6 +61,10 @@ Up to six racers. One player picks ONLINE → HOST A ROOM and shares the four-le
 Eight neon craft, faceted hulls that catch the red world on one flank and the blue on the other: VECTOR, SCANLINE and POLYGON from the start; CHROMA, RASTER and GLITCH unlocked by trophies and medals; and two secret drivers from the studio's other games: **DASH** from LAST LINE, surfing a pencil, and **GREAT WEDGE** from ABSURD COMBAT RACING, Captain Finn Razorback's shark truck. The garage sets each car's paint, trail and underglow. `?unlockall` unlocks everything for testing.
 
 Staff ghosts live in `data/staff/` and are recorded by `node tools/make-staff.mjs` (the race AI driving each course alone).
+
+## Wrecks and takedowns
+
+Hit a wall or a block flat out and your car comes apart into its own neon lines. They tumble, bounce down the road and flicker out, the race drops into slow motion for a beat, and you're back on the road a second later. Ram a rival hard enough and it's a TAKEDOWN: their car breaks apart instead. Rivals wreck each other too. Blocks smash into pieces and come back twenty seconds later, and every scrape and bump throws sparks and tears a few lines off the car.
 
 ## Secret routes
 

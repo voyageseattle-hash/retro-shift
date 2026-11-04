@@ -12,8 +12,13 @@ import { clamp, rand, storage } from '../core/util.js';
 import { GhostRecorder, GhostCar, loadGhost, saveGhost } from './ghost.js';
 import { monoDef, medalFor, recordMedal } from './modes.js';
 import { driverOf, pick } from './story.js';
+import { Debris } from './wreck.js';
 
 const _v = new THREE.Vector3();
+const _a = new THREE.Vector3();
+// closing speeds (m/s) that wreck a car: into a wall or block, and a car rammed by another
+const WRECK_SPEED = 30;
+const TAKEDOWN_SPEED = 14;
 const NO_INPUT = { throttle: 0, brake: 0, steer: 0, drift: false, item: false, special: false, jump: false, reset: false, look: false };
 
 export class Race {
@@ -48,7 +53,10 @@ export class Race {
     // through) until you shift or pass it. Everywhere else the roadside signs do that job.
     this.coachLeft = this.tutorial ? 99 : 0;
     this.lesson = 0;
-    this.stats = { phased: 0, crashes: 0, shifts: 0 };
+    this.stats = { phased: 0, crashes: 0, shifts: 0, wrecks: 0, takedowns: 0 };
+    this.debris = new Debris();
+    this.scene.add(this.debris.mesh);
+    this.slowT = 0;
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
     // browser simulates only its own racers (the host also runs the AI); everyone else is a puppet fed by the network.
     this.online = opts.online || null;
@@ -81,6 +89,8 @@ export class Race {
       }
       const slot = this.world.gridSlot(field - k);
       r.reset(slot.pos, slot.yaw);
+      r.hints[this.world.main.id] = slot.i;
+      r.hints._cur = this.world.main.id;
       r.grounded = true;
       r.lastU = this.world.main.mainU(slot.i);
       r.prog = r.lastU > 0.5 ? r.lastU - 1 : r.lastU;
@@ -197,6 +207,7 @@ export class Race {
     }
   }
   onWallHit(r, impact) {
+    if (impact > 6 && this.near(r)) this.debris.sparks(r.pos, _v.copy(r.vel).multiplyScalar(-0.03), Math.min(24, impact), 0xffd27a, 14, r.gnd.y);
     if (r.isPlayer && impact > 6) {
       this.app.audio.play('scrape');
       this.camOf(r).addShake(Math.min(0.4, impact * 0.02));
@@ -220,10 +231,83 @@ export class Race {
     }
   }
 
+  // Is this racer close enough to the camera for its debris to be worth drawing?
+  near(r) {
+    return this.players.some((p) => p.pos.distanceToSquared(r.pos) < 260 * 260);
+  }
+
+  // The car comes apart into its own lines and respawns a moment later.
+  wreck(r, by) {
+    if (r.respawnT > 0 || r.finished || (r.invuln > 0 && !by)) return;
+    if (this.near(r)) {
+      this.debris.burst(r.root, r.vel, 16, r.gnd.y);
+      this.debris.sparks(r.pos, _v.set(0, 0, 0), 40, 0xffd27a, 26, r.gnd.y);
+    }
+    r.wrecks = (r.wrecks || 0) + 1;
+    r.respawnT = 1.8;
+    r.root.visible = false;
+    r.drift.active = false;
+    r.vel.set(0, 0, 0);
+    r.speed = 0;
+    if (r.isPlayer) {
+      this.stats.wrecks++;
+      this.emitP(r, 'popup', { text: 'WRECKED', color: '#ff4a6a' });
+      this.app.input.rumble(r.pIndex || 0, 1, 1, 500);
+      this.aberr = 1.5;
+    }
+    if (by?.isPlayer) {
+      this.stats.takedowns++;
+      by.takedowns = (by.takedowns || 0) + 1;
+      this.emitP(by, 'popup', { text: 'TAKEDOWN', color: '#ffd04a' });
+      this.app.input.rumble(by.pIndex || 0, 0.8, 0.8, 300);
+    }
+    const seen = r.isPlayer || by?.isPlayer || this.players.some((p) => p.pos.distanceToSquared(r.pos) < 60 * 60);
+    if (seen) {
+      this.app.audio.play('wreck');
+      for (const p of this.players) {
+        const cam = this.camOf(p);
+        cam.addShake(p === r ? 1.2 : 0.7);
+        cam.fovPunch(p === r ? 12 : 7);
+      }
+      // a beat of slow motion, solo screens only (online and split-screen keep real time)
+      if (!this.online && !this.split) {
+        this.slowLen = r.isPlayer ? 0.9 : 0.7;
+        this.slowT = this.slowLen;
+      }
+    }
+  }
+
+  // A block (not a wall) breaks into its lines and is gone for a while.
+  smash(o, r) {
+    if (o.broken || o.type === 'wall') return;
+    o.broken = true;
+    if (this.near(r)) this.debris.burst(o.root, _v.copy(r.vel).multiplyScalar(0.8), 12, o.path.py[o.i], 1, 3);
+    o.root.visible = false;
+    if (r.isPlayer) {
+      this.emitP(r, 'popup', { text: 'SMASHED', color: '#ffffff', small: true });
+      this.app.audio.play('smash');
+    }
+    setTimeout(() => {
+      o.broken = false;
+      o.root.visible = true;
+    }, 20000);
+  }
+
+  // A glancing hit: sparks, and a few lines torn off the car.
+  scrape(r, into, dir) {
+    if (!this.near(r)) return;
+    this.debris.sparks(r.pos, dir.multiplyScalar(0.6), Math.round(10 + into), 0xffd27a, 16, r.gnd.y);
+    if (into > 8) this.debris.burst(r.root, _a.copy(dir).multiplyScalar(into * 0.4).add(r.vel), 6, r.gnd.y, Math.min(0.18, into * 0.008), 1.6);
+  }
+
   respawn(r) {
     const u = r.lastU;
     const sp = this.world.respawnPoint(u, r.mono ? r.mode : BOTH);
     r.reset(sp.pos, sp.yaw);
+    // start the road search at the respawn sample: on a stacked course (Helix) the nearest sample with no hint can
+    // be a loop above or below, and you'd fall straight back out
+    r.hints[this.world.main.id] = sp.i;
+    r.hints._cur = this.world.main.id;
     if (r.mono) r.energy = Math.max(r.energy, SHIFT.monoCost);
     else r.mode = BOTH;
     r.grounded = true;
@@ -286,10 +370,13 @@ export class Race {
         this.players.forEach((pl, k) => C[k].throttle > 0 && this.countdown > -0.3 && pl.giveBoost(0.9, 1.25));
       }
     }
-    if (this.state === 'race' || this.state === 'finished') this.raceTime += dt;
+    // a wreck or a takedown slows the whole race for a beat (real time keeps running for the camera)
+    const sim = this.slowT > 0 ? dt * (0.25 + 0.75 * Math.max(0, 1 - this.slowT / this.slowLen) ** 2) : dt;
+    this.slowT = Math.max(0, this.slowT - dt);
+    if (this.state === 'race' || this.state === 'finished') this.raceTime += sim;
 
     // fixed sub-steps
-    let left = Math.min(dt, 0.1);
+    let left = Math.min(sim, 0.1);
     while (left > 1e-6) {
       const h = Math.min(left, 1 / 120);
       left -= h;
@@ -307,6 +394,7 @@ export class Race {
       this.lastPlace = place;
     }
     for (const g of this.ghosts) g.update(this.raceTime, p.mode);
+    this.debris.update(sim);
 
     // visuals
     this.app.net?.applyPuppets(this);
@@ -499,7 +587,7 @@ export class Race {
     if (!tr) return;
     const P = tr.path;
     for (const o of w.obstacles) {
-      if (o.path !== P) continue;
+      if (o.path !== P || o.broken) continue;
       let di = tr.i - o.i;
       if (P.closed) {
         if (di > P.N / 2) di -= P.N;
@@ -556,6 +644,15 @@ export class Race {
         // Pressing against a wall touches it every frame: only a fresh impact crashes, shakes and rumbles.
         if (into < 3 || r.hitCd > 0) continue;
         r.hitCd = 0.5;
+        // flat out into it: the car comes apart
+        if (into > WRECK_SPEED) {
+          this.wreck(r, null);
+          if (o.type !== 'wall') this.smash(o, r);
+          continue;
+        }
+        // a block hit hard enough breaks; anything you hit throws sparks and scraps
+        if (o.type !== 'wall' && into > 14) this.smash(o, r);
+        this.scrape(r, into, _v.set(-tx * s, 0, -tz * s));
         const hard = into > 12;
         if (hard) r.spinOut(o.type === 'wall' ? 0.9 : 0.6, Math.random() < 0.5 ? -1 : 1);
         if (r.isPlayer) {
@@ -632,6 +729,18 @@ export class Race {
           if ((A.isPlayer || B.isPlayer) && rel < -4) {
             this.app.audio.play('hit');
             this.camOf(A.isPlayer ? A : B).addShake(0.2);
+          }
+          if (rel < -4 && this.near(A)) this.debris.sparks(_a.copy(A.pos).lerp(B.pos, 0.5).setY(A.pos.y + 0.5), _v, Math.round(-rel), 0xffffff, 10, A.gnd.y);
+          // Rammed: the car that got hit from behind (or T-boned) comes apart. Online it's left alone: each
+          // browser owns its own car.
+          if (rel < -TAKEDOWN_SPEED && this.state === 'race' && !this.online) {
+            // the one moving slower along the hit is the one being hit
+            const va = A.vel.x * _v.x + A.vel.z * _v.z;
+            const vb = B.vel.x * _v.x + B.vel.z * _v.z;
+            const victim = va > vb ? B : A;
+            const by = victim === A ? B : A;
+            // you're tougher than the field: it takes a harder hit to wreck the player
+            if (!victim.isPlayer || rel < -TAKEDOWN_SPEED * 1.5) this.wreck(victim, by);
           }
         }
       }

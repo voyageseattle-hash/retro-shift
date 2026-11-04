@@ -540,6 +540,8 @@ export class UI {
           <div><span>SHIFTS</span><b>${race.stats.shifts}</b></div>
           <div><span>PHASED</span><b>${race.stats.phased}</b></div>
           <div><span>CRASHES</span><b>${race.stats.crashes}</b></div>
+          ${race.stats.takedowns ? `<div><span>TAKEDOWNS</span><b>${race.stats.takedowns}</b></div>` : ''}
+          ${race.stats.wrecks ? `<div><span>WRECKED</span><b>${race.stats.wrecks}</b></div>` : ''}
           ${race.newRecord ? `<div class="record">${solo ? 'NEW BEST · GHOST SAVED' : 'NEW COURSE RECORD'}</div>` : ''}
         </div>
       </div>`;

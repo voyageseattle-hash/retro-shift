@@ -535,6 +535,17 @@ export class Audio extends Engine {
       case 'scrape':
         super.play('clank', 0.6);
         break;
+      case 'wreck':
+        // the crash, then the car's lines raining down like glass
+        super.play('wreck');
+        this.thump(t, 110, 30, 0.5, 0.5);
+        this.arp(t + 0.08, [96, 91, 99, 88, 94], 0.035, 0.06, 'bell');
+        break;
+      case 'smash':
+        super.play('crunch');
+        super.play('spark');
+        this.arp(t, [93, 88, 96], 0.03, 0.05, 'bell');
+        break;
       case 'beep':
         super.play(arg ? 'go' : 'beep');
         break;
