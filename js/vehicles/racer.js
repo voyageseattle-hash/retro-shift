@@ -1,4 +1,4 @@
-// A shift racer: the driving model is WEDGEWRECK RALLY's truck physics (vehicles/vehicle.js: throttle curve,
+// A shift racer: the driving model is Absurd Combat Racing's truck physics (vehicles/vehicle.js: throttle curve,
 // drift with three mini-turbo levels, lateral grip, slope gravity, suspension and ground snap), with the combat
 // stripped out and a lens added. Each racer looks through its own lens, so the ground it finds, the rails that hold
 // it and the obstacles that hit it all depend on its world.
@@ -28,10 +28,10 @@ export const CARS = [
   { id: 'glitch', name: 'GLITCH', color: 0xffd04a, stats: { speed: 3, accel: 4, handling: 5 } },
   // secret drivers from the studio's other games
   { id: 'dash', name: 'DASH', color: 0xf4f0ff, stats: { speed: 4, accel: 5, handling: 5 }, secret: true, from: 'LAST LINE', mass: 0.8 },
-  { id: 'greatwedge', name: 'GREAT WEDGE', color: 0xcfd6dd, stats: { speed: 5, accel: 4, handling: 3 }, secret: true, from: 'WEDGEWRECK RALLY', driver: 'Captain Finn Razorback', mass: 1.8 },
+  { id: 'greatwedge', name: 'GREAT WEDGE', color: 0xcfd6dd, stats: { speed: 5, accel: 4, handling: 3 }, secret: true, from: 'ABSURD COMBAT RACING', driver: 'Captain Finn Razorback', mass: 1.8 },
 ];
 
-// WEDGEWRECK's star-stats-to-physics, nudged faster: these are hover wedges, not trucks.
+// Absurd Combat Racing's star-stats-to-physics, nudged faster: these are hover wedges, not trucks.
 export function physicsFor(stats) {
   return {
     topSpeed: 44 + stats.speed * 2.4,
@@ -173,7 +173,7 @@ export class Racer {
     return true;
   }
 
-  // ------------------------------------------------------------ physics (from WEDGEWRECK's Vehicle.update)
+  // ------------------------------------------------------------ physics (from Absurd Combat Racing's Vehicle.update)
   update(dt, world, session) {
     const P = this.phys;
     const ctl = this.ctl;
@@ -390,7 +390,7 @@ export class Racer {
       _v.set(this.pos.x - Math.sin(yaw) * 2.1, this.pos.y + 0.45, this.pos.z - Math.cos(yaw) * 2.1);
       this.trail.update(dt, _v, -Math.cos(yaw), Math.sin(yaw), clamp(Math.abs(this.speed) / this.phys.topSpeed, 0, 1) + (this.boostTime > 0 ? 0.4 : 0), this.grounded || this.airTime < 0.5);
     }
-    m.glowMat.opacity = 0.5 + (this.drift.active ? 0.35 : 0);
+    m.glowMat.opacity = 0.22 + (this.drift.active ? 0.18 : 0);
     // spinning out after a hit
     if (this.invuln > 0) root.visible = Math.floor(this.invuln * 14) % 2 === 0 || this.invuln < 0.2;
     else root.visible = true;

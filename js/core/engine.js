@@ -1,4 +1,4 @@
-// Ported from WEDGEWRECK RALLY. Retro Shift adds world gates: a mix channel tagged world: 'red' or 'blue' runs
+// Ported from Absurd Combat Racing. Retro Shift adds world gates: a mix channel tagged world: 'red' or 'blue' runs
 // through a gate that drops it behind a low-pass when the player shifts into the other world (setWorld).
 //
 // WebAudio engine: mix buses, the step-sequenced soundtrack (songs.js), punchy procedural sound

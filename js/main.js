@@ -1,5 +1,5 @@
 // RETRO SHIFT: a dual-world neon racer for GitHub Game Off 2026.
-// Racing engine from WEDGEWRECK RALLY, the red/blue lens from LAST LINE's 3-D matinee.
+// Racing engine from Absurd Combat Racing, the red/blue lens from LAST LINE's 3-D matinee.
 
 import * as THREE from '../vendor/three.js';
 import { Renderer } from './core/renderer.js';
@@ -165,7 +165,7 @@ class App {
     const cup = CUPS.find((c) => c.id === cupId) || CUPS[0];
     this.gp = { cup, round: 0, points: {}, colors: {}, awarded: -1 };
     this.ui.choice.mode = 'gp';
-    this.startRace();
+    this.ui.gpIntro(cup.id, () => this.startRace());
   }
   gpAward(race) {
     const gp = this.gp;

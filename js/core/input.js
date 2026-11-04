@@ -1,5 +1,5 @@
 // Keyboard, gamepad and touch input, merged into per-player control snapshots.
-// Ported from WEDGEWRECK RALLY. In Retro Shift, item = shift to RED, special = shift to BLUE, jump = back to BOTH.
+// Ported from Absurd Combat Racing. In Retro Shift, item = shift to RED, special = shift to BLUE, jump = back to BOTH.
 
 const BIND_SOLO = {
   accel: ['KeyW', 'ArrowUp'],

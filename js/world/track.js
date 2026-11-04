@@ -1,7 +1,7 @@
 // Shift tracks: a closed main loop plus open branch paths (shortcuts, bridges, alternate routes). Every stretch of
 // road, every obstacle and every pickup is tagged with the lenses it is solid in (see shift.js), so the track a racer
 // drives on depends on the world they're looking through. The spline sampling, auto-banking and ground frame come
-// from WEDGEWRECK RALLY's TrackWorld; the multi-path, per-lens ground query is new.
+// from Absurd Combat Racing's TrackWorld; the multi-path, per-lens ground query is new.
 
 import * as THREE from '../../vendor/three.js';
 import { clamp, lerp, wrapAngle, mulberry32, smoothstep } from '../core/util.js';
@@ -554,7 +554,7 @@ export class TrackWorld {
         const b = m.point(r + 1, l0, 0.05, new THREE.Vector3());
         const c = m.point(r + 1, l1, 0.05, new THREE.Vector3());
         const d = m.point(r, l1, 0.05, new THREE.Vector3());
-        L.quad(M.ALL, a, b, c, d, 0xffffff, 0.8);
+        L.quad(M.ALL, a, b, c, d, 0xffffff, 0.3);
       }
     }
     // gantry

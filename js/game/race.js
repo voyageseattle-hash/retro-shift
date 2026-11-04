@@ -11,6 +11,7 @@ import { BOTH, RED, BLUE, SHIFT, solidIn, MODE_NAME } from '../world/shift.js';
 import { clamp, rand, storage } from '../core/util.js';
 import { GhostRecorder, GhostCar, loadGhost, saveGhost } from './ghost.js';
 import { monoDef, medalFor, recordMedal } from './modes.js';
+import { driverOf, pick } from './story.js';
 
 const _v = new THREE.Vector3();
 
@@ -103,6 +104,16 @@ export class Race {
     g.update(0, this.player.mode);
     this.scene.add(g.root);
     this.ghosts.push(g);
+  }
+
+  // A rival gets on the radio.
+  comms(r, kind) {
+    const d = r && driverOf(r.car.id);
+    if (!d) return;
+    const text = Array.isArray(d[kind]) ? pick(d[kind]) : d[kind];
+    if (!text) return;
+    this.emit('comms', { name: d.name, car: r.car.name, color: r.color, text });
+    return { name: d.name, car: r.car.name, color: r.color, text };
   }
 
   emit(type, data = {}) {
@@ -203,6 +214,7 @@ export class Race {
       if (!c.reset) this.resetHeld = false;
     }
     if (this.state === 'intro') {
+      if (this.introT < 0.5 && this.introT + dt >= 0.5 && !this.solo) this.comms(pick(this.racers.filter((r) => !r.isPlayer)), 'pre');
       this.introT += dt;
       for (const r of this.racers) r.controlLocked = true;
       if (this.introT > 2.2 || input.menu('confirm')) {
@@ -235,6 +247,15 @@ export class Race {
     }
 
     if (this.recorder && this.state === 'race' && !p.finished) this.recorder.sample(this.raceTime, p);
+    // rivals talk when they get past you (not too often)
+    if (this.state === 'race' && !this.solo && !p.finished) {
+      const place = this.placeOf(p);
+      if (this.lastPlace && place > this.lastPlace && this.raceTime > (this.nextComms || 8)) {
+        this.comms(this.standings()[place - 2], 'pass');
+        this.nextComms = this.raceTime + 18;
+      }
+      this.lastPlace = place;
+    }
     for (const g of this.ghosts) g.update(this.raceTime, p.mode);
 
     // visuals
@@ -518,6 +539,13 @@ export class Race {
         if (!bl || r.bestLap < bl) storage.set(lkey, r.bestLap);
       } else if (this.mono) this.newRecord = this.newGhost;
       this.emit('finish', { place: this.finishOrder.length });
+      if (!this.solo) {
+        const st = this.standings();
+        const winner = st[0];
+        // the winner gloats, or if you won, whoever came second sulks
+        this.quote = winner.isPlayer ? this.comms(st[1], 'lose') : this.comms(winner, 'win');
+        this.events.pop();
+      }
     }
   }
 

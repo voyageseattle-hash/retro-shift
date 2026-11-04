@@ -95,7 +95,7 @@ export const UNLOCKS = [
   { id: 'car:raster', name: 'RASTER', hint: 'Take a trophy in the STATIC CUP', test: (p) => cupTop(p, 'static', 3) },
   { id: 'car:glitch', name: 'GLITCH', hint: 'Earn 5 medals in Time Trial or Mono Run', test: (p) => medalCount(p) >= 5 },
   { id: 'car:dash', name: 'DASH (from LAST LINE)', hint: 'Earn 3 gold medals in Mono Run', test: (p) => golds(p.mono) >= 3 },
-  { id: 'car:greatwedge', name: 'GREAT WEDGE (from WEDGEWRECK RALLY)', hint: 'Win gold trophies in both cups', test: (p) => cupTop(p, 'signal', 1) && cupTop(p, 'static', 1) },
+  { id: 'car:greatwedge', name: 'GREAT WEDGE (from ABSURD COMBAT RACING)', hint: 'Win gold trophies in both cups', test: (p) => cupTop(p, 'signal', 1) && cupTop(p, 'static', 1) },
   { id: 'paint:acid', name: 'ACID paint', hint: 'Earn 3 medals', test: (p) => medalCount(p) >= 3 },
   { id: 'paint:sunset', name: 'SUNSET paint', hint: 'Take any cup trophy', test: (p) => cupTop(p, 'signal', 3) || cupTop(p, 'static', 3) },
   { id: 'paint:chrome', name: 'CHROME paint', hint: 'Earn 10 medals', test: (p) => medalCount(p) >= 10 },
@@ -112,14 +112,14 @@ export function isUnlocked(id) {
 }
 export const unlockFor = (id) => UNLOCKS.find((u) => u.id === id);
 
-// Newly earned unlocks since the last check (names, for the results banner).
+// Newly earned unlocks since the last check (for the results banner and the secret-driver scenes).
 export function checkUnlocks() {
   const p = getProgress();
   const fresh = [];
   for (const u of UNLOCKS) {
     if (p.unlocked.includes(u.id) || !u.test(p)) continue;
     p.unlocked.push(u.id);
-    fresh.push(u.name);
+    fresh.push(u);
   }
   if (fresh.length) saveProgress(p);
   return fresh;

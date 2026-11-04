@@ -45,7 +45,7 @@ Touch controls appear on phones and tablets.
 
 ## Wedges and the garage
 
-Eight wireframe bodies: VECTOR, SCANLINE and POLYGON from the start; CHROMA, RASTER and GLITCH unlocked by trophies and medals; and two secret drivers from the studio's other games: **DASH** from LAST LINE, surfing a pencil, and **GREAT WEDGE** from WEDGEWRECK RALLY, Captain Finn Razorback's shark truck. The garage sets each car's paint, trail and underglow. `?unlockall` unlocks everything for testing.
+Eight wireframe bodies: VECTOR, SCANLINE and POLYGON from the start; CHROMA, RASTER and GLITCH unlocked by trophies and medals; and two secret drivers from the studio's other games: **DASH** from LAST LINE, surfing a pencil, and **GREAT WEDGE** from ABSURD COMBAT RACING, Captain Finn Razorback's shark truck. The garage sets each car's paint, trail and underglow. `?unlockall` unlocks everything for testing.
 
 Staff ghosts live in `data/staff/` and are recorded by `node tools/make-staff.mjs` (the race AI driving each course alone).
 
@@ -57,10 +57,10 @@ Staff ghosts live in `data/staff/` and are recorded by `node tools/make-staff.mj
 
 - `js/world/shift.js`: the three lenses and world masks. The rule comes from LAST LINE's red/blue 3-D matinee: a thing drawn for one eye only is there only while that eye is looking.
 - `js/world/track.js`: a closed main loop plus branch paths, each sample, wall, pad and shard tagged with the worlds it's solid in. The ground query is per racer and per lens.
-- `js/vehicles/racer.js`: the driving model is WEDGEWRECK RALLY's truck physics (throttle curve, drift and mini-turbos, grip, slope gravity, suspension).
+- `js/vehicles/racer.js`: the driving model is Absurd Combat Racing's truck physics (throttle curve, drift and mini-turbos, grip, slope gravity, suspension).
 - `js/vehicles/ai.js`: rivals read the road ahead in all three worlds and pick a lens, a lane and a fork.
 - `js/core/audio.js`: synthesized synthwave split into a red band and a blue band; shifting drops the other band behind a filter.
-- `js/core/input.js`, `js/core/renderer.js`, `js/game/camera.js`: carried over from WEDGEWRECK RALLY.
+- `js/core/input.js`, `js/core/renderer.js`, `js/game/camera.js`: carried over from Absurd Combat Racing.
 - `vendor/three.js`: three.js r186 (MIT).
 
 A Forbidden Fruit Productions game from Guy Stephens Productions.

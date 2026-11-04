@@ -1,4 +1,4 @@
-// Retro Shift's audio: WEDGEWRECK RALLY's engine (engine.js: mix buses, reverb, ping-pong delay, glue compressor
+// Retro Shift's audio: Absurd Combat Racing's engine (engine.js: mix buses, reverb, ping-pong delay, glue compressor
 // and limiter, the step sequencer and synth, per-car engines), with the songs split into red and blue bands,
 // shift effects of our own, and rival engines placed in 3D around the player.
 
@@ -95,7 +95,7 @@ export class Audio extends Engine {
   }
 
   // ------------------------------------------------------------ effects
-  // Retro Shift names, mapped onto WEDGEWRECK's effect library or our own shift sounds.
+  // Retro Shift names, mapped onto Absurd Combat Racing's effect library or our own shift sounds.
   play(name, arg) {
     if (!this.ctx || this.ctx.state !== 'running') return;
     const t = this.now();

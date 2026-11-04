@@ -6,8 +6,9 @@ import { CARS } from '../vehicles/racer.js';
 import { drawPaths, MiniMap } from './minimap.js';
 import { BOTH, RED, BLUE, MODE_NAME } from '../world/shift.js';
 import { formatTime, ordinal, storage } from '../core/util.js';
-import { CUPS, POINTS, TROPHY, getProgress, medalInfo, isUnlocked, unlockFor, COLORWAYS, getGarage, setLivery, liveryFor } from '../game/modes.js';
+import { CUPS, POINTS, TROPHY, getProgress, saveProgress as saveProgressUI, medalInfo, isUnlocked, unlockFor, COLORWAYS, getGarage, setLivery, liveryFor } from '../game/modes.js';
 import { loadGhost } from '../game/ghost.js';
+import { PREMISE, CUP_STORY, SECRET_SCENES, DRIVERS } from '../game/story.js';
 
 const el = (tag, cls, html) => {
   const e = document.createElement(tag);
@@ -76,6 +77,8 @@ export class UI {
     this.settings = storage.get('rs.settings', { music: 0.55, sfx: 0.8, difficulty: 1, laps: 0, quality: 'auto' });
     this.choice = { track: storage.get('rs.lastTrack', 'core'), car: storage.get('rs.lastCar', 'vector'), mode: 'race', cup: 'signal' };
     this.previews = new Map();
+    this.sceneQueue = [];
+    this.scenesShown = new Set();
   }
 
   clear() {
@@ -350,7 +353,7 @@ export class UI {
       ? `<div class="medalbox">${medal ? `<div class="bigmedal" style="--mc:${medal.color}">${medal.name}</div>` : '<div class="bigmedal none">NO MEDAL</div>'}
           ${race.staffTime ? `<div class="targets">${[3, 2, 1].map((id) => { const m = medalInfo(id); return `<div style="color:${m.color}">${m.name} <b>${formatTime(race.staffTime * m.factor)}</b></div>`; }).join('')}</div>` : ''}</div>`
       : `<table class="standings">${rows}</table>`;
-    s.innerHTML = `<h2>${solo ? MODE_TITLE[race.kind] : place === 1 ? 'YOU WIN' : `${ordinal(place)} PLACE`}</h2>
+    s.innerHTML = `<h2>${solo ? MODE_TITLE[race.kind] : place === 1 ? 'YOU WIN' : `${ordinal(place)} PLACE`}</h2>${this.quoteHtml(race)}
       <div class="rgrid">
         ${left}
         <div class="rstats">
@@ -368,19 +371,62 @@ export class UI {
     this.root.appendChild(s);
     const idx = TRACKS.findIndex((t) => t.id === race.def.id);
     const items = [
-      { label: 'RETRY', action: () => this.app.startRace() },
+      { label: 'RETRY', action: () => this.afterScenes(() => this.app.startRace()) },
       {
         label: 'NEXT COURSE',
-        action: () => {
-          this.choice.track = TRACKS[(idx + 1) % TRACKS.length].id;
-          storage.set('rs.lastTrack', this.choice.track);
-          this.app.startRace();
-        },
+        action: () =>
+          this.afterScenes(() => {
+            this.choice.track = TRACKS[(idx + 1) % TRACKS.length].id;
+            storage.set('rs.lastTrack', this.choice.track);
+            this.app.startRace();
+          }),
       },
-      { label: 'MENU', action: () => this.app.quit() },
+      { label: 'MENU', action: () => this.afterScenes(() => this.app.quit()) },
     ];
     this.menu = new Menu(this.app, list, items, { cols: 3 });
     this.menu.nodes.forEach((n) => list.appendChild(n));
+  }
+
+  // ------------------------------------------------------------------ story cards
+  // A full-screen card of a few lines that appear one after another, then CONTINUE.
+  storyCard({ title, sub, lines, cls = '', car }, done) {
+    this.clear();
+    if (car) this.app.showCar(car, liveryFor(car.id));
+    const s = el('div', `screen story ${cls}`);
+    s.innerHTML = `${title ? `<h2>${title}</h2>` : ''}${sub ? `<div class="story-sub">${sub}</div>` : ''}`;
+    const box = el('div', 'story-lines');
+    lines.forEach((l, k) => {
+      const p = el('p', '', l);
+      p.style.animationDelay = `${0.25 + k * 0.9}s`;
+      box.appendChild(p);
+    });
+    s.appendChild(box);
+    const list = el('div', 'list row');
+    s.appendChild(list);
+    this.root.appendChild(s);
+    this.menu = new Menu(this.app, list, [{ label: 'CONTINUE', action: done }], { onBack: done });
+    this.menu.nodes.forEach((n) => list.appendChild(n));
+  }
+  // Run any secret-driver arrival scenes that are waiting, then carry on.
+  afterScenes(fn) {
+    const id = this.sceneQueue.shift();
+    if (!id) return fn();
+    this.scenesShown.add(id);
+    const sc = SECRET_SCENES[id];
+    this.app.audio.play('finish', 1);
+    this.storyCard({ title: sc.title, sub: sc.from, lines: sc.lines, cls: 'secret', car: CARS.find((c) => c.id === id) }, () => this.afterScenes(fn));
+  }
+  // The cup intro (and, the first time ever, the premise) before race one of a Grand Prix.
+  gpIntro(cupId, go) {
+    const prog = getProgress();
+    const st = CUP_STORY[cupId];
+    const rivals = CARS.filter((c) => !c.secret && c.id !== this.choice.car).slice(0, 5);
+    const roster = `<div class="roster">${rivals.map((c) => `<span style="color:${hex(c.color)}"><b>${DRIVERS[c.id].name}</b> ${c.name}</span>`).join('')}</div>`;
+    const cup = () => this.storyCard({ title: st.intro[0], lines: [...st.intro.slice(1), roster], cls: 'cup' }, go);
+    if (prog.seen.includes('premise')) return cup();
+    prog.seen.push('premise');
+    saveProgressUI(prog);
+    this.storyCard({ title: 'RETRO SHIFT', lines: PREMISE, cls: 'premise' }, cup);
   }
 
   // ------------------------------------------------------------------ Grand Prix
@@ -407,6 +453,11 @@ export class UI {
     this.menu.nodes.forEach((n) => grid.appendChild(n));
   }
 
+  quoteHtml(race) {
+    const q = race.quote;
+    return q ? `<div class="quote"><b style="color:${hex(q.color)}">${q.name}</b> “${q.text}”</div>` : '';
+  }
+
   gpTable(gp, raceRows) {
     const tot = Object.entries(gp.points).sort((a, b) => b[1] - a[1]);
     return tot
@@ -428,7 +479,7 @@ export class UI {
       .standings()
       .map((r, k) => `<tr class="${r.isPlayer ? 'me' : ''}"><td>${ordinal(k + 1)}</td><td style="color:${hex(r.color)}">${r.name}</td><td>${r.finished ? formatTime(r.finishTime) : '--'}</td></tr>`)
       .join('');
-    s.innerHTML = `<h2>${gp.cup.name} · RACE ${gp.round + 1}/${gp.cup.tracks.length} · ${ordinal(place)}</h2>
+    s.innerHTML = `<h2>${gp.cup.name} · RACE ${gp.round + 1}/${gp.cup.tracks.length} · ${ordinal(place)}</h2>${this.quoteHtml(race)}
       <div class="rgrid">
         <table class="standings">${rows}</table>
         <table class="standings gp"><tr class="hd"><td></td><td>CUP</td><td>RACE</td><td>PTS</td></tr>${this.gpTable(gp, added)}</table>
@@ -457,7 +508,10 @@ export class UI {
     const list = el('div', 'list row');
     s.appendChild(list);
     this.root.appendChild(s);
-    this.menu = new Menu(this.app, list, [{ label: 'CONTINUE', action: () => this.app.quit() }]);
+    const st = CUP_STORY[gp.cup.id];
+    const end = rank === 1 ? st.win : rank <= 3 ? st.podium : st.lose;
+    const finish = () => this.storyCard({ title: end[0], lines: end.slice(1), cls: 'cup' }, () => this.afterScenes(() => this.app.quit()));
+    this.menu = new Menu(this.app, list, [{ label: 'CONTINUE', action: finish }]);
     this.menu.nodes.forEach((n) => list.appendChild(n));
   }
 
@@ -465,8 +519,12 @@ export class UI {
   unlockBanner(s) {
     const fresh = this.app.checkUnlocks?.() || [];
     if (!fresh.length) return;
-    s.appendChild(el('div', 'unlocks', `<b>UNLOCKED</b> ${fresh.map((u) => `<span>${u}</span>`).join('')}`));
+    s.appendChild(el('div', 'unlocks', `<b>UNLOCKED</b> ${fresh.map((u) => `<span>${u.name}</span>`).join('')}`));
     this.app.audio.play('shard');
+    for (const u of fresh) {
+      const id = u.id.slice(4);
+      if (u.id.startsWith('car:') && SECRET_SCENES[id] && !this.sceneQueue.includes(id) && !this.scenesShown.has(id)) this.sceneQueue.push(id);
+    }
   }
 
   // ------------------------------------------------------------------ HUD
@@ -487,6 +545,7 @@ export class UI {
       </div>
       <div class="h-center"></div>
       <div class="h-tip"></div>
+      <div class="h-comms"><b></b><span></span></div>
       <div class="h-count"></div>
       <div class="h-wrong">WRONG WAY</div>
       <div class="h-flash"></div>
@@ -508,6 +567,7 @@ export class UI {
       energyBox: q('.h-energy'),
       center: q('.h-center'),
       tip: q('.h-tip'),
+      comms: q('.h-comms'),
       count: q('.h-count'),
       wrong: q('.h-wrong'),
       flash: q('.h-flash'),
@@ -581,6 +641,17 @@ export class UI {
           h.tip.className = `h-tip on k-${e.key}`;
           clearTimeout(this.tipTimer);
           this.tipTimer = setTimeout(() => (h.tip.className = 'h-tip'), 3200);
+          break;
+        }
+        case 'comms': {
+          const c = h.comms;
+          c.querySelector('b').textContent = `${e.name} · ${e.car}`;
+          c.querySelector('b').style.color = hex(e.color);
+          c.querySelector('span').textContent = e.text;
+          c.style.setProperty('--c', hex(e.color));
+          c.classList.add('on');
+          clearTimeout(this.commsTimer);
+          this.commsTimer = setTimeout(() => c.classList.remove('on'), 4200);
           break;
         }
         case 'finish':

@@ -1,4 +1,4 @@
-// Rival drivers. Steering and braking follow WEDGEWRECK's RaceAI idea (aim at a point down the road, ease off where
+// Rival drivers. Steering and braking follow Absurd Combat Racing's RaceAI idea (aim at a point down the road, ease off where
 // the curvature is high), plus the new part: each rival reads the road ahead in all three worlds and picks the lens
 // that keeps road under it and walls out of its way, and decides at every fork whether a shortcut is worth the
 // SHIFT energy.

@@ -1,7 +1,7 @@
 // The wedges, as wireframes. Each body is built from lofts (cross-section rings strung along the car), boxes and a
 // few loose lines, so every car keeps the concept sheet's look while reading as its own shape from the chase camera:
 // lines take the colour of the lens you're in, accents take your paint, and a dark hull hides the road behind.
-// Two secret drivers come from the studio's other games: Dash from LAST LINE surfing a pencil, and WEDGEWRECK
+// Two secret drivers come from the studio's other games: Dash from LAST LINE surfing a pencil, and Absurd Combat Racing
 // RALLY's GREAT WEDGE, a shark-finned monster truck.
 
 import * as THREE from '../../vendor/three.js';
@@ -176,7 +176,7 @@ export const BODIES = {
     return { thrusters: [[-0.16, 0.3, -1.95], [0.16, 0.3, -1.95]], tails: [], glow: [1.4, 4.6] };
   },
 
-  // SECRET: WEDGEWRECK RALLY's GREAT WEDGE: stainless shark truck, Captain Finn Razorback at the wheel.
+  // SECRET: Absurd Combat Racing's GREAT WEDGE: stainless shark truck, Captain Finn Razorback at the wheel.
   greatwedge(K, parts) {
     K.loft([trap(-2.0, 1.15, 0.75, 0.95, 0.75), trap(0.1, 1.25, 0.7, 0.95, 0.6), trap(2.35, 0.75, 0.22, 0.95, 0.9)], { accentTop: [0] });
     // chassis rails down to the axles

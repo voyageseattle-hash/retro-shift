@@ -1,4 +1,4 @@
-// Time-trial ghosts, after WEDGEWRECK RALLY's ghost recorder: the player's position, heading and lens sampled 20
+// Time-trial ghosts, after Absurd Combat Racing's ghost recorder: the player's position, heading and lens sampled 20
 // times a second, packed as delta-encoded integers so a whole run fits in a few kilobytes of localStorage.
 
 import * as THREE from '../../vendor/three.js';

@@ -1,4 +1,4 @@
-// The RETRO SHIFT soundtrack, in WEDGEWRECK RALLY's song format (see sequencer.js for the track syntax).
+// The RETRO SHIFT soundtrack, in Absurd Combat Racing's song format (see sequencer.js for the track syntax).
 //
 // Every song is written as two bands over one rhythm section:
 //   world: 'red'   the driving half: bass, saw leads, guitar stabs

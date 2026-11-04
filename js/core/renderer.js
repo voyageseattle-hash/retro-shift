@@ -1,6 +1,6 @@
 import * as THREE from '../../vendor/three.js';
 
-// Ported from WEDGEWRECK RALLY (bloom + grade composer), retuned for neon wireframe.
+// Ported from Absurd Combat Racing (bloom + grade composer), retuned for neon wireframe.
 // Final colour grade, per stage: saturation, contrast, a highlight tint and a shadow lift colour,
 // plus vignette and film grain. Hits add chromatic aberration; lightning adds a flash.
 export const GRADES = {
