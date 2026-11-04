@@ -102,15 +102,24 @@ export class RaceAI {
     }
     // For each world, the best single lane through everything solid in it.
     const LANES = [-0.65, -0.35, 0, 0.35, 0.65].map((f) => f * P.halfW);
-    const hits = (m, lat) => {
+    // Obstacles inside the reaction distance can't be dodged by a lane change any more, so they are checked
+    // against the lane we are in now: the only way past those is the lens.
+    const curLat = r.track ? r.track.lat : 0;
+    const react = 4 + r.speed * 0.4;
+    const hits = (m, lat, lane = false) => {
       let c = 0;
       for (const o of obs) {
         if (!solidIn(o.mask, m)) continue;
+        let d = o.i - pi;
+        if (P.closed && d < -P.N / 2) d += P.N;
+        const at = !lane && d * P.ds < react ? curLat : lat;
         if (o.type === 'wall') c += 10;
-        else if (Math.abs(lat - o.lat) < o.w + r.halfW + 0.8 + Math.abs(o.sweep || 0) * P.halfW) c += 1;
+        else if (Math.abs(at - o.lat) < o.w + r.halfW + 0.8 + Math.abs(o.sweep || 0) * P.halfW) c += 1;
       }
       return c;
     };
+    // Pinned against something: go to whichever lens it doesn't exist in.
+    this.pinned = r.speed < 4 && !r.mono ? (this.pinned || 0) + dt : 0;
     for (const m of MODES) blocked[m] = Math.min(...LANES.map((lat) => hits(m, lat)));
     // energy needed to hold a single lens to the end of the look-ahead
     const secs = look / speed;
@@ -140,6 +149,11 @@ export class RaceAI {
       }
       // weaker drivers sometimes hesitate
       if (Math.random() > this.skill * 1.1 && best !== r.mode) best = r.mode;
+      if (this.pinned > 0.6) {
+        const front = obs.filter((o) => { let d = o.i - pi; if (P.closed && d < -P.N / 2) d += P.N; return d >= -1 && d * P.ds < 6 + o.len + o.w; });
+        const free = MODES.find((m) => ok[m] && front.every((o) => !solidIn(o.mask, m)));
+        if (free !== undefined) best = free;
+      }
       this.wantMode = best;
     }
     if (this.wantMode !== r.mode && r.canShift(this.wantMode)) r.shiftTo(this.wantMode, r.session);
@@ -151,7 +165,7 @@ export class RaceAI {
       let bestCost = Infinity;
       for (const lat of LANES) {
         let c = Math.abs(lat - (r.track ? r.track.lat : 0)) * 0.05 + Math.abs(lat - this.prefLat) * 0.02;
-        c += hits(this.wantMode, lat) * 10;
+        c += hits(this.wantMode, lat, true) * 10;
         for (const p of w.pads) if (p.path === P && solidIn(p.mask, this.wantMode) && Math.abs(p.i - pi) < n && Math.abs(lat - p.lat) < 2) c -= 0.6;
         if (c < bestCost) {
           bestCost = c;
@@ -176,18 +190,29 @@ export class RaceAI {
     let kmax = 0;
     for (let k = 2; k < Math.ceil(look / P.ds); k += 2) {
       const j = P.closed ? P.wrap(pi + k) : Math.min(P.N - 1, pi + k);
-      kmax = Math.max(kmax, Math.abs(P.curv[j]));
+      // no rail to lean on: treat the bend as tighter, and stay off the open edge
+      const open = !P.railL[j] || !P.railR[j];
+      kmax = Math.max(kmax, Math.abs(P.curv[j]) * (open ? 1.7 : 1));
+      if (open && k * P.ds < 30) this.targetLat = clamp(this.targetLat, -P.halfW * 0.35, P.halfW * 0.35);
     }
     const lat = r.speed * r.speed * kmax;
     const limit = 26 + this.skill * 16;
     ctl.throttle = lat > limit ? 0.35 : 1;
     ctl.brake = lat > limit * 1.45 && r.speed > 22 ? 0.5 : 0;
     ctl.drift = false;
-    if (Math.abs(err) > 1.4 && r.speed < 6) {
-      // stuck facing the wrong way: back up
-      ctl.throttle = 0;
-      ctl.brake = 1;
-      ctl.steer = -ctl.steer;
+    // stuck facing the wrong way: a three-point turn, reversing with the wheel one way, then driving out
+    if (this.turn > 0) {
+      this.turn -= dt;
+      // never reverse toward an open edge: near one, just drive out at full lock toward the middle
+      const edge = r.track && Math.abs(r.track.lat) > P.halfW * 0.6;
+      const rev = this.turn > 0.6 && !edge;
+      if (edge) this.turnDir = clamp(-err * 9, -1, 1) || 1;
+      ctl.throttle = rev ? 0 : 1;
+      ctl.brake = rev ? 1 : 0;
+      ctl.steer = rev ? -this.turnDir : this.turnDir;
+    } else if (Math.abs(err) > 1.4 && r.speed < 6) {
+      this.turn = 1.5;
+      this.turnDir = Math.sign(-err) || 1;
     }
   }
 

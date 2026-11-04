@@ -224,7 +224,7 @@ export class Race {
     r.grounded = true;
     r.invuln = 1.5;
     r.vel.set(Math.sin(sp.yaw), 0, Math.cos(sp.yaw)).multiplyScalar(12);
-    if (r.ai) r.ai.path = this.world.main;
+    if (r.ai) Object.assign(r.ai, { path: this.world.main, _branch: null, turn: 0, pinned: 0, planT: 0 });
     if (r.isPlayer) {
       this.lensChanged(r);
       this.cam.snap(r);
