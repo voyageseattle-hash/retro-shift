@@ -93,7 +93,7 @@ export class ChaseCamera {
       target = v.yaw + wrapTo(velHeading - v.yaw) * w;
     }
     this.heading += wrapTo(target - this.heading) * (1 - Math.exp(-7 * dt));
-    const sp = clamp(Math.abs(v.speed) / 45, 0, 1.4);
+    const sp = clamp(Math.abs(v.speed) / (v.phys?.topSpeed || 60), 0, 1.5);
     const boosting = v.boostTime > 0;
     if (boosting && !this.wasBoosting) {
       // Boost kick: the camera gets yanked back and the view widens.
@@ -103,8 +103,9 @@ export class ChaseCamera {
     this.wasBoosting = boosting;
     // Boosting lets the truck pull away a little, then the camera catches up.
     this.pull = damp(this.pull, boosting ? 1.3 : 0, boosting ? 3 : 1.5, dt);
-    const dist = (5.5 + sp * 1.0 + this.pull) * v.scale;
-    const height = (2.2 + sp * 0.25) * v.scale;
+    // at speed the camera drops and tucks in close behind, and the view stretches wide
+    const dist = (5.6 - sp * 0.5 + this.pull) * v.scale;
+    const height = (2.25 - sp * 0.35) * v.scale;
     const dir = lookBack ? -1 : 1;
     const f = _d.set(Math.sin(this.heading), 0, Math.cos(this.heading));
     this.rel.x = damp(this.rel.x, -f.x * dist * dir, 10, dt);
@@ -128,7 +129,9 @@ export class ChaseCamera {
     const lookTarget = _l.copy(v.pos).addScaledVector(f, 6 * dir * v.scale);
     lookTarget.y += 1.4 * v.scale + Math.sin(pitch) * 6 * dir;
     this.look.lerp(lookTarget, 1 - Math.exp(-14 * dt));
-    this.fov = damp(this.fov, 66 + sp * 9 + (boosting ? 9 : 0), 4, dt);
+    this.fov = damp(this.fov, 62 + sp * 20 + (boosting ? 12 : 0), 3, dt);
+    // a constant fine buzz near top speed
+    if (sp > 0.75 && v.grounded) this.shake = Math.max(this.shake, (sp - 0.75) * 0.5 * this.shakeScale);
     // Lean into drifts a touch.
     const rollT = flying ? -(v.bank || 0) * 0.18 : v.drift.active && v.grounded ? -v.drift.dir * 0.035 : clamp(-v.yawRate * 0.012, -0.02, 0.02);
     this.roll = damp(this.roll, rollT * this.shakeScale, 5, dt);

@@ -128,11 +128,11 @@ export class UI {
     const g = (a) => `<kbd>${a}</kbd>`;
     s.innerHTML = `<h2>HOW TO PLAY</h2>
       <div class="cols">
-        <div class="card both"><h3>BOTH WORLDS</h3><p>Red and blue overlap. The shared road and every wall are there. Your SHIFT bar refills.</p></div>
-        <div class="card red"><h3>RED ONLY</h3><p>The blue world is gone. Red-only shortcuts and hidden boost pads appear. Drains SHIFT, except on a red-only road.</p></div>
-        <div class="card blue"><h3>BLUE ONLY</h3><p>The red world is gone. Blue-only shortcuts and hidden boost pads appear. Drains SHIFT, except on a blue-only road.</p></div>
+        <div class="card both"><h3>BOTH WORLDS</h3><p>The safe lens. Everything's there and your SHIFT bar refills, but you're a step slower.</p></div>
+        <div class="card red"><h3>RED ONLY</h3><p>Raw speed: the highest top speed and hardest launch, with a loose back end. The blue world is gone, red-only shortcuts and boost pads appear. Drains SHIFT.</p></div>
+        <div class="card blue"><h3>BLUE ONLY</h3><p>Grip: the car sticks in corners and drifts charge their turbo faster. The red world is gone, blue-only routes appear. Drains SHIFT.</p></div>
       </div>
-      <p class="rule">Watch the road: if the strip under you is the colour you shifted away from, it's gone. Grab white shards for SHIFT, phase through walls for a little more.</p>
+      <p class="rule">Shift into a wall at the last moment for a CLOSE PHASE boost. A road that only your lens can see doesn't drain SHIFT. Watch the road: if the strip under you is the colour you shifted away from, it's gone. Grab white shards for SHIFT, phase through walls for a little more.</p>
       <p class="rule"><b>MONO RUN</b> takes BOTH away: your BOTH button swaps RED and BLUE, each swap costs SHIFT, and nothing refills it but shards and phasing.</p>
       <table class="keys">
         <tr><td>Drive</td><td>${g('W')} ${g('A')} ${g('S')} ${g('D')} / arrows</td><td>RT · LT · stick</td></tr>
@@ -935,7 +935,7 @@ export class UI {
       const g = (key) => `<kbd>${this.lensGlyph(race, k, key)}</kbd>`;
       const html = `<div><span>GAS ${g('gas')}</span><span>BRAKE ${g('brake')}</span><span>STEER ${g('steer')}</span><span>DRIFT ${g('drift')}</span></div>
         <div><span class="red">RED ${g('red')}</span><span class="both">${race.mono ? 'SWAP' : 'BOTH'} ${g('both')}</span><span class="blue">BLUE ${g('blue')}</span></div>
-        <p>${race.mono ? 'SWAP flips your lens.' : 'Shift to one colour and the other colour’s walls and roads vanish.'}</p>`;
+        <p>${race.mono ? 'SWAP flips your lens.' : 'RED is fastest · BLUE grips and drifts · BOTH refills SHIFT'}</p>`;
       if (h.controlsHtml !== html) h.controls.innerHTML = h.controlsHtml = html;
     }
     if (drawMap) h.map.draw(race.world, race.racers, p.mode, p);

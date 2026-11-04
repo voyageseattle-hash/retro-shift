@@ -322,18 +322,35 @@ export class TrackWorld {
       path.side = side;
       // No rails where it overlaps the main road (where it leaves and rejoins it); rails everywhere else.
       const fr = {};
+      const fr2 = {};
       let hint = iA;
       for (let i = 0; i < path.N; i++) {
         if (!main.frame(path.px[i], path.pz[i], hint, fr)) continue;
         hint = fr.i;
         const near = Math.abs(fr.lat) < this.halfWidth + hw * 0.6 && Math.abs(fr.y - path.py[i]) < 1.5;
-        if (near) path.railL[i] = path.railR[i] = 0;
+        if (!near) continue;
+        // drop only the rail whose edge lies over the main road; the outer edge keeps its rail, or a car running
+        // wide at the junction slides off into nothing
+        const ex = path.rightX(i) * hw;
+        const ez = path.rightZ(i) * hw;
+        const latOf = (x, z) => (main.frame(x, z, fr.i, fr2) ? Math.abs(fr2.lat) : 1e9);
+        const l = latOf(path.px[i] - ex, path.pz[i] - ez);
+        const r = latOf(path.px[i] + ex, path.pz[i] + ez);
+        // the edge nearer the road's middle opens; the outer one stays unless it's well inside the road too (a
+        // strip laid flush along the road's edge keeps its outer rail, which is the road's edge there)
+        if (l < r) path.railL[i] = 0;
+        else path.railR[i] = 0;
+        if (Math.max(l, r) < this.halfWidth - 0.5) path.railL[i] = path.railR[i] = 0;
       }
       // And no main rail on that side at the junctions.
       const w = Math.ceil((lead * 1.3) / main.ds);
       for (const i0 of [iA, iB]) {
         for (let k2 = -4; k2 <= w; k2++) {
           const i = main.wrap(i0 === iA ? i0 + k2 : i0 - k2);
+          // the gap in the rail is only open in the worlds the branch is in: anyone else still bounces off it
+          // (a lens-only fork would otherwise leave a hole in the rail for BOTH to fall through)
+          const J = side > 0 ? (main.jR ||= {}) : (main.jL ||= {});
+          J[i] = (J[i] || 0) | (b.mask ?? M.ALL);
           if (side > 0) main.railR[i] = 0;
           else main.railL[i] = 0;
         }
@@ -678,7 +695,9 @@ export class TrackWorld {
       }
       if (!path.frame(x, z, hints[path.id] ?? -1, f)) continue;
       hints[path.id] = f.i;
-      if (Math.abs(f.lat) > path.halfW + 0.35) continue;
+      // a little grace past the edge of the strip you're on: at speed a hard corner can carry you past its rail for
+      // a step before the rail pushes you back, and that step shouldn't drop you through the world
+      if (Math.abs(f.lat) > path.halfW + (path.id === cur ? 1.4 : 0.35)) continue;
       if (!solidIn(f.mask, mode)) continue;
       if (f.y > y + 1.6 || f.y < y - 7) continue;
       // a strip climbing out of the road beneath you (a ramp laid over it) takes you up
@@ -724,7 +743,10 @@ export class TrackWorld {
     if (Math.abs(lat) <= hw) return 0;
     const side = Math.sign(lat);
     const rail = side < 0 ? path.railL[g.i] : path.railR[g.i];
-    if (!rail) return 0;
+    if (!rail) {
+      const open = (side < 0 ? path.jL : path.jR)?.[g.i];
+      if (!open || solidIn(open, r.mode)) return 0;
+    }
     const push = Math.abs(lat) - hw;
     r.pos.x -= g.rx * side * push;
     r.pos.z -= g.rz * side * push;

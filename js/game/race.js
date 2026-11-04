@@ -13,9 +13,11 @@ import { GhostRecorder, GhostCar, loadGhost, saveGhost } from './ghost.js';
 import { monoDef, medalFor, recordMedal } from './modes.js';
 import { driverOf, pick } from './story.js';
 import { Debris } from './wreck.js';
+import { SpeedLines } from './speedlines.js';
 
 const _v = new THREE.Vector3();
 const _a = new THREE.Vector3();
+const _c = new THREE.Color();
 // closing speeds (m/s) that wreck a car: into a wall or block, and a car rammed by another
 const WRECK_SPEED = 30;
 const TAKEDOWN_SPEED = 14;
@@ -56,6 +58,8 @@ export class Race {
     this.stats = { phased: 0, crashes: 0, shifts: 0, wrecks: 0, takedowns: 0 };
     this.debris = new Debris();
     this.scene.add(this.debris.mesh);
+    this.speedLines = new SpeedLines();
+    this.scene.add(this.speedLines.mesh);
     this.slowT = 0;
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
     // browser simulates only its own racers (the host also runs the AI); everyone else is a puppet fed by the network.
@@ -102,7 +106,8 @@ export class Race {
       if (!isPlayer && !r.puppet) {
         const skill = clamp([0.55, 0.75, 0.92][diff] + (k / field) * 0.1 + rand(-0.05, 0.05), 0.3, 1);
         r.ai = new RaceAI(r, this.world, skill);
-        r.speedMul = [0.9, 0.97, 1.02][diff] + (k / field) * 0.03;
+        // (a step up from the car's own pace: rivals mostly ride BOTH, which is the slow lens)
+        r.speedMul = [0.93, 1.0, 1.05][diff] + (k / field) * 0.03;
       } else if (isPlayer) {
         if (pIndex === 0) this.player = r;
         this.players ||= [];
@@ -181,6 +186,7 @@ export class Race {
 
   // ------------------------------------------------------------ session hooks (called by racers)
   onShift(r, prev, mode, forced) {
+    if (!forced) r.lastShiftT = this.t;
     if (r.isPlayer) {
       this.app.audio.play('shift', mode);
       this.lensChanged(r);
@@ -311,6 +317,7 @@ export class Race {
     if (r.mono) r.energy = Math.max(r.energy, SHIFT.monoCost);
     else r.mode = BOTH;
     r.grounded = true;
+    r.wrongWay = 0;
     r.invuln = 1.5;
     r.vel.set(Math.sin(sp.yaw), 0, Math.cos(sp.yaw)).multiplyScalar(12);
     if (r.ai) Object.assign(r.ai, { path: this.world.main, _branch: null, turn: 0, pinned: 0, planT: 0 });
@@ -425,6 +432,10 @@ export class Race {
     });
     this.dtLast = dt;
     if (!this.split) this.env.update(dt, this.t, this.cam.camera);
+    if (!this.split) {
+      const k = (p.respawnT > 0 || !p.grounded ? 0 : Math.abs(p.speed) / p.phys.topSpeed) + (p.boostTime > 0 ? 0.3 : 0);
+      this.speedLines.update(dt, this.cam.camera, k, _c.set(p.mode === RED ? 0xff4a6a : p.mode === BLUE ? 0x4ab0ff : 0xe8dcff));
+    } else this.speedLines.mesh.visible = false;
     this.aberr = Math.max(0, (this.aberr || 0) - dt * 3);
     this.app.renderer.setGrade('neon', this.aberr * 1.6 + (p.boostTime > 0 ? 0.3 : 0), 0);
     const A = this.app.audio;
@@ -488,6 +499,9 @@ export class Race {
         return;
       case 3:
         if (this.stats.phased > 1 && this.lessonT > 0.6) say('HOLD DRIFT THROUGH TURNS · LET GO FOR A TURBO', 'drift', 4);
+        return;
+      case 4:
+        if (this.lessonT > 6) say('RED IS THE FAST LENS · BLUE GRIPS AND DRIFTS', 'red', 4);
         return;
     }
   }
@@ -606,6 +620,18 @@ export class Race {
         if (r.inside !== o) {
           r.inside = o;
           r.energy = Math.min(1, r.energy + 0.04);
+          // shifted at the last moment: a CLOSE PHASE throws you through it with a boost and some SHIFT back
+          const close = this.t - (r.lastShiftT ?? -9) < 0.45 && o.type === 'wall';
+          if (close) {
+            r.giveBoost(0.9, 1.3);
+            r.energy = Math.min(1, r.energy + 0.12);
+            if (r.isPlayer) {
+              this.emitP(r, 'popup', { text: 'CLOSE PHASE', color: '#ffffff' });
+              this.app.audio.play('turbo', 2);
+              this.camOf(r).fovPunch(8);
+              this.stats.close = (this.stats.close || 0) + 1;
+            }
+          }
           if (r.isPlayer) {
             this.app.audio.play('phase');
             this.emitP(r, 'popup', { text: 'PHASED', color: r.mode === RED ? '#ff4a6a' : r.mode === BLUE ? '#4ab0ff' : '#d8c8ff', small: true });

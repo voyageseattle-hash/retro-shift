@@ -5,7 +5,7 @@
 
 import * as THREE from '../../vendor/three.js';
 import { clamp, damp, sign } from '../core/util.js';
-import { BOTH, RED, BLUE, SHIFT, solidIn, COLORS } from '../world/shift.js';
+import { BOTH, RED, BLUE, SHIFT, LENS, solidIn, COLORS } from '../world/shift.js';
 import { buildBody, Trail } from './bodies.js';
 
 const G_AIR = 27;
@@ -34,10 +34,10 @@ export const CARS = [
 // Absurd Combat Racing's star-stats-to-physics, nudged faster: these are hover wedges, not trucks.
 export function physicsFor(stats) {
   return {
-    topSpeed: 44 + stats.speed * 2.4,
-    accel: 18 + stats.accel * 3.2,
+    topSpeed: 58 + stats.speed * 3,
+    accel: 24 + stats.accel * 4.2,
     steer: 1.6 + stats.handling * 0.16,
-    grip: 5.6 + stats.handling * 0.9,
+    grip: 6.6 + stats.handling * 1,
   };
 }
 
@@ -212,10 +212,11 @@ export class Racer {
 
     if (this.grounded) {
       const boosting = this.boostTime > 0;
-      const top = P.topSpeed * this.speedMul * (boosting ? this.boostPower : 1);
+      const lens = LENS[this.mode] || LENS[BOTH];
+      const top = P.topSpeed * this.speedMul * lens.top * (boosting ? this.boostPower : 1);
       if (throttle > 0 && vF < top) {
         const k = 1 - Math.pow(clamp(vF / top, 0, 1), 2);
-        vF += P.accel * this.accelMul * throttle * (0.25 + 0.75 * k) * dt * (vF < 0 ? 2.5 : 1);
+        vF += P.accel * this.accelMul * lens.accel * throttle * (0.25 + 0.75 * k) * dt * (vF < 0 ? 2.5 : 1);
       }
       if (boosting) vF += (top - vF) * 3 * dt;
       if (brake > 0) {
@@ -236,7 +237,7 @@ export class Racer {
       }
       if (d.active) {
         const along = steer * d.dir;
-        d.charge += dt * (0.75 + 0.55 * Math.max(0, along));
+        d.charge += dt * (0.75 + 0.55 * Math.max(0, along)) * lens.drift;
         const lvl = d.charge > 2.7 ? 3 : d.charge > 1.7 ? 2 : d.charge > 0.8 ? 1 : 0;
         if (lvl > d.level) session?.onDriftLevel?.(this, lvl);
         d.level = lvl;
@@ -251,7 +252,7 @@ export class Racer {
         }
       }
 
-      const grip = P.grip * (d.active ? 0.3 : 1) * (this.spinTime > 0 ? 0.12 : 1);
+      const grip = P.grip * lens.grip * (d.active ? 0.3 : 1) * (this.spinTime > 0 ? 0.12 : 1);
       vR *= Math.exp(-grip * dt);
       this.slip = clamp(Math.abs(vR) / 8 + (d.active ? 0.5 : 0), 0, 1);
 
@@ -290,13 +291,15 @@ export class Racer {
       const nn = _up.set(g2.nx, g2.ny, g2.nz);
       const h = this.pos.y - g2.y;
       const vIntoN = this.vel.dot(nn);
+      // hover pads hold the road harder the faster you go, so a crest at full speed doesn't throw you off it
+      const stick = Math.max(0, this.vel.length() - 45);
       if (h <= 0.02) {
         if (!this.grounded) this.onLand(-vIntoN, session);
         this.pos.y = g2.y;
         if (vIntoN < 0) this.vel.addScaledVector(nn, -vIntoN);
         this.grounded = true;
         this.airTime = 0;
-      } else if (this.grounded && h < 0.45 && vIntoN < 1.2) {
+      } else if (this.grounded && h < 0.45 + stick * 0.008 && vIntoN < 1.2 + stick * 0.05) {
         this.pos.y = g2.y;
         if (vIntoN > 0) this.vel.addScaledVector(nn, -vIntoN);
         this.grounded = true;

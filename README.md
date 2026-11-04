@@ -4,9 +4,11 @@ A neon wireframe racer through two overlapping worlds, made for **GitHub Game Of
 
 Race in **BOTH** worlds (red + blue), **RED only**, or **BLUE only**. Every piece of the course belongs to a world: shift and the track, its shortcuts and its obstacles change under you.
 
-- **BOTH**: the worlds overlap. The shared road, every wall and every bridge are there, and your SHIFT bar refills. The lens-only shortcuts and boost pads are hidden.
-- **RED**: the blue world is gone completely and everything left glows red. Red shortcuts and hidden red boost pads appear. Drains SHIFT.
-- **BLUE**: the same, the other way round.
+- **BOTH**: the safe lens. The worlds overlap, the shared road, every wall and every bridge are there, and your SHIFT bar refills, but the car is a step slower (95% top speed). The lens-only shortcuts and boost pads are hidden.
+- **RED**: raw speed, with a 110% top speed and 115% acceleration but less grip. The blue world is gone completely and everything left glows red. Red shortcuts and hidden red boost pads appear. Drains SHIFT.
+- **BLUE**: grip. The car holds 135% grip and drifts charge their turbo 60% faster. The red world is gone and blue-only routes appear. Drains SHIFT.
+
+Shift into a wall in the last moment before it and you get a CLOSE PHASE: a boost and some SHIFT back.
 
 If the strip under you belongs to the world you shifted away from, it's gone. Grab white shards for SHIFT, and phase through walls for a little more.
 

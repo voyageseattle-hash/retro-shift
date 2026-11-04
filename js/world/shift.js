@@ -63,6 +63,15 @@ export const SHIFT = {
   monoCost: 0.16,
 };
 
+// What each lens does to the car. BOTH is the safe lens: everything's there and SHIFT refills, but you're a step
+// slower. RED is raw speed with a loose back end; BLUE is grip, and drifts charge their turbo faster. Holding a
+// single lens drains SHIFT, so the race is choosing when to spend it.
+export const LENS = {
+  [BOTH]: { top: 0.95, accel: 1, grip: 1, drift: 1 },
+  [RED]: { top: 1.1, accel: 1.15, grip: 0.82, drift: 1 },
+  [BLUE]: { top: 1.0, accel: 1, grip: 1.35, drift: 1.6 },
+};
+
 // The 3 lens tints (UI, fog, ground grid).
 export const MODE_TINT = {
   // The sky is black in every lens (the concept sheets): only the lines carry colour. grid/gridB are the two
