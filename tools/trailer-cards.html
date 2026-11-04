@@ -1,0 +1,46 @@
+<!doctype html>
+<!-- Title cards for the trailer, rendered over transparent background and grabbed frame by frame
+     (tools only; the game never loads this). ?card=text&a=TWO&b=WORLDS or ?card=end -->
+<meta charset="utf-8" />
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,700&family=Russo+One&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../css/game.css" />
+<style>
+  html, body { background: transparent !important; margin: 0; width: 1280px; height: 720px; overflow: hidden; }
+  body::before, body::after { display: none !important; }
+  .card { position: absolute; inset: 0; display: grid; place-items: center; }
+  .words { font-family: 'Russo One', sans-serif; font-style: italic; font-size: 96px; letter-spacing: 0.04em; transform: skewX(-8deg); white-space: nowrap; display: flex; gap: 0.35em; }
+  .w { display: inline-block; opacity: 0; color: #fff; }
+  .w.a { text-shadow: -4px 0 #ff2a4a, 4px 0 #1e8cff, 0 0 30px rgba(255, 42, 74, 0.8); animation: inL 0.42s 0.05s cubic-bezier(0.2, 0.9, 0.2, 1) forwards, out 0.3s 1.75s forwards; }
+  .w.b { text-shadow: 4px 0 #1e8cff, -4px 0 #ff2a4a, 0 0 30px rgba(30, 140, 255, 0.8); animation: inR 0.42s 0.3s cubic-bezier(0.2, 0.9, 0.2, 1) forwards, out 0.3s 1.75s forwards; }
+  .bar { position: absolute; left: 0; right: 0; top: calc(50% + 70px); height: 3px; background: linear-gradient(90deg, transparent, #ff2a4a 30%, #fff 50%, #1e8cff 70%, transparent); transform: scaleX(0); animation: bar 0.6s 0.1s ease-out forwards, out 0.3s 1.75s forwards; box-shadow: 0 0 18px #ff3a9a; }
+  @keyframes inL { 0% { opacity: 0; transform: translateX(-160px); filter: blur(10px); } 60% { opacity: 1; } 100% { opacity: 1; transform: none; filter: none; } }
+  @keyframes inR { 0% { opacity: 0; transform: translateX(160px); filter: blur(10px); } 60% { opacity: 1; } 100% { opacity: 1; transform: none; filter: none; } }
+  @keyframes bar { to { transform: scaleX(1); } }
+  @keyframes out { to { opacity: 0; filter: blur(6px); } }
+  /* end card */
+  .end { background: radial-gradient(ellipse at 50% 55%, rgba(60, 10, 70, 0.6), transparent 70%); }
+  .end .stack { display: grid; justify-items: center; gap: 26px; }
+  .end .logo { font-size: 150px; opacity: 0; animation: slam 0.5s 0.05s cubic-bezier(0.1, 1.4, 0.3, 1) forwards; }
+  .end .sub { font-family: 'Chakra Petch', sans-serif; font-weight: 600; letter-spacing: 0.6em; font-size: 20px; color: #c9b8ff; opacity: 0; animation: fade 0.6s 0.6s forwards; padding-left: 0.6em; }
+  .end .soon { font-family: 'Russo One', sans-serif; font-style: italic; font-size: 64px; letter-spacing: 0.16em; color: #fff; padding-left: 0.16em; text-shadow: -3px 0 #ff2a4a, 3px 0 #1e8cff, 0 0 26px #b04cff; opacity: 0; animation: soon 0.9s 2.0s steps(1) forwards; }
+  .end .foot { font-family: 'Chakra Petch', sans-serif; font-weight: 600; letter-spacing: 0.3em; font-size: 16px; color: #8a7aa8; opacity: 0; animation: fade 0.8s 2.9s forwards; }
+  @keyframes slam { 0% { opacity: 0; transform: scale(2.6) skewX(-8deg); filter: blur(14px); } 60% { opacity: 1; filter: blur(0); } 100% { opacity: 1; transform: scale(1) skewX(-8deg); } }
+  @keyframes fade { to { opacity: 1; } }
+  @keyframes soon { 0% { opacity: 1; } 10% { opacity: 0; } 20% { opacity: 1; } 30% { opacity: 0.2; } 40%, 100% { opacity: 1; } }
+</style>
+<div id="root"></div>
+<script>
+  const q = new URLSearchParams(location.search);
+  const root = document.getElementById('root');
+  if (q.get('card') === 'end') {
+    root.innerHTML = `<div class="card end"><div class="stack">
+      <div class="logo"><span class="retro">RETRO</span><span class="shift">SHIFT</span></div>
+      <div class="sub">DUAL WORLD RACING</div>
+      <div class="soon">PLAY NOW!</div>
+      <div class="foot">FREE IN YOUR BROWSER ON ITCH.IO · GITHUB GAME OFF 2026</div>
+    </div></div>`;
+  } else {
+    root.innerHTML = `<div class="card"><div class="words"><span class="w a">${q.get('a') || ''}</span><span class="w b">${q.get('b') || ''}</span></div><div class="bar"></div></div>`;
+  }
+  window.ready = document.fonts.ready.then(() => true);
+</script>

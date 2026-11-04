@@ -118,7 +118,7 @@ export const TRACKS = [
         { from: P(5, 0.4), to: P(8, 0.3), mask: M.R, side: -1, lift: 4, bulge: -20, label: 'RED BORE' },
         // the secret one: red-only, behind a hatch, around the block field
         // (leaves from inside the third tunnel, skips the overlap-only gap and the block field)
-        { from: 830 / 1007, to: 960 / 1007, mask: M.RO, side: 1, lift: 3, label: 'SECRET BORE', hatch: true },
+        { from: 830 / 1007, to: 960 / 1007, mask: M.RO, side: 1, lift: 3, label: 'SECRET BORE', hatch: true, shards: [{ at: 0.3 }, { at: 0.55 }, { at: 0.8 }] },
       ],
       gaps: [
         { at: P(2, 0.3), len: 34, mask: M.R, noRails: true },
@@ -177,7 +177,7 @@ export const TRACKS = [
       branches: [
         { from: P(1, 0.4), to: P(8, 0.45), mask: M.R, side: 1, lift: 16, label: 'RED SKYBRIDGE' },
         { from: P(12, 0.25), to: P(16, 0.5), mask: M.B, side: 1, lift: 12, label: 'BLUE FLYOVER' },
-        { from: P(5, 0.6), to: P(7, 0.6), mask: M.BO, side: -1, lift: 14, label: 'BLUE ROOFTOPS', facade: M.R },
+        { from: P(5, 0.6), to: P(7, 0.6), mask: M.BO, side: -1, lift: 14, label: 'BLUE ROOFTOPS', facade: M.R, shards: [{ at: 0.36 }, { at: 0.64 }] },
       ],
       gaps: [{ at: P(9, 0.2), len: 36, mask: M.R, noRails: true }, { at: P(19, 0.1), len: 36, mask: M.B, noRails: true }],
       obstacles: [

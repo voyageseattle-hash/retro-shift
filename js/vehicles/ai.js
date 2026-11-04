@@ -40,6 +40,9 @@ export class RaceAI {
     // Did we end up on a different strip (fell to a lower one, missed a fork, a branch ended)?
     this.planT = (this.planT || 0) + dt;
     if (t && t.path === path) this.planT = 0;
+    // A branch that starts flush with the main road reads as "main" under the wheels until it climbs away; we are
+    // still on it as long as we sit inside its strip at its height.
+    if (t && t.path !== path && !path.closed && path.frame(r.pos.x, r.pos.z, i, _f) && Math.abs(_f.lat) < path.halfW + 1 && Math.abs(_f.y - r.pos.y) < 2.5) this.planT = 0;
     if (t && t.path !== path && this.planT > 1.5) {
       this.path = t.path;
       this._branch = null;
@@ -124,6 +127,13 @@ export class RaceAI {
     // energy needed to hold a single lens to the end of the look-ahead
     const secs = look / speed;
     const afford = r.mono ? r.energy >= SHIFT.monoCost : r.energy - SHIFT.drain * secs * 0.6 > 0.02;
+    // heading for a lens-only branch: keep the meter for it, and give the branch up if it can no longer be held
+    const saving = !r.mono && this._branch && this.path === w.main && this.singleLen(this._branch) > 0;
+    if (saving && !this.canTakeBranch(this._branch)) {
+      let d = w.main.index(this._branch.mainFrom) - pi;
+      if (d < -w.main.N / 2) d += w.main.N;
+      if (d * w.main.ds > 8) this._branch = null;
+    }
     const score = (m) => {
       if (r.mono) {
         if (m === BOTH || !ok[m]) return 1e6;
@@ -132,6 +142,7 @@ export class RaceAI {
       if (!ok[m]) return 1e6;
       let s = blocked[m] * 10;
       if (m !== BOTH) s += afford ? 3 : 200;
+      if (m !== BOTH && saving) s += 6;
       if (m === r.mode) s -= 1.5;
       return s;
     };
@@ -217,17 +228,37 @@ export class RaceAI {
     }
   }
 
-  wantsBranch(b) {
+  // Metres of a branch that only one lens can drive.
+  singleLen(b) {
+    if (b._single === undefined) {
+      let n = 0;
+      for (let i = 0; i < b.N; i++) if (!solidIn(b.mask[i], BOTH)) n++;
+      b._single = n * b.ds;
+    }
+    return b._single;
+  }
+
+  // Can we hold a lens all the way along it? Running dry halfway over a lens-only road drops you through it.
+  canTakeBranch(b) {
     const r = this.r;
-    // Which lenses can drive it?
-    const needSingle = !solidIn(b.mask[Math.floor(b.N / 2)], BOTH);
+    const len = this.singleLen(b);
+    if (!len) return true;
     if (r.mono) {
       const m = b.mask[Math.floor(b.N / 2)];
-      if (!solidIn(m, r.mode) && r.energy < SHIFT.monoCost * 2) return false;
-    } else if (needSingle) {
-      const secs = b.length / Math.max(25, r.phys.topSpeed * 0.85);
-      if (r.energy < SHIFT.drain * secs + 0.15) return false;
+      return solidIn(m, r.mode) || r.energy >= SHIFT.monoCost * 2;
     }
+    // budget at the speed we will really hold through it, not top speed
+    const v = Math.max(18, Math.min(r.speed, r.phys.topSpeed * 0.6));
+    // shards on the branch itself top us up on the way (count most of them; we may clip past one)
+    let refill = 0;
+    for (const s of this.world.shards) if (s.path === b && solidIn(s.mask, b.mask[s.i])) refill += SHIFT.shard * 0.7;
+    return r.energy + refill >= SHIFT.drain * (len / v) + 0.12;
+  }
+
+  wantsBranch(b) {
+    if (!this.canTakeBranch(b)) return false;
     return Math.random() < 0.35 + this.skill * 0.5;
   }
 }
+
+const _f = {};

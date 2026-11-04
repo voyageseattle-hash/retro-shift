@@ -76,15 +76,126 @@ export class Audio extends Engine {
     return buf.duration;
   }
   // The studio card's sting: a bright detuned chord stab that rings out into the room.
+  // The studio card's sound, timed to its picture (css #splash): an old set thunks on and its flyback whines, mains
+  // hum under everything, the red outline zaps in on the left and the blue on the right, the snake hisses up out of the
+  // dark as the logo flickers in, a sub boom and a dark E minor chord as it lands, and the cracks in the apple beat
+  // like a slow heart. A bell rings for PRESENTS.
+  splashIntro(delay = 0.05) {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + delay;
+    const dry = this.sfxDry || this.sfx;
+    const room = this.roomIn || dry;
+    const pan = (v, dest) => {
+      const p = ctx.createStereoPanner();
+      p.pan.value = v;
+      p.connect(dest);
+      return p;
+    };
+    const hold = (node, t0, t1, peak, a = 0.05, r = 0.4) => {
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(peak, t0 + a);
+      g.gain.setValueAtTime(peak, t1 - r);
+      g.gain.linearRampToValueAtTime(0, t1);
+      node.connect(g);
+      return g;
+    };
+    // power on: relay click, a dropping thunk, the tube's degauss "boing", the 15.7 kHz flyback
+    this.noiseHit(t, 0.02, 0.5, dry, 'highpass', 3000, 0.7);
+    this.thump(t + 0.01, 90, 32, 0.5, 0.75);
+    this.tone('sine', 52, t + 0.02, 0.9, 0.25, dry, { slideTo: 44, attack: 0.01 });
+    this.tone('triangle', 110, t + 0.05, 0.6, 0.06, room, { slideTo: 70, filter: 400 });
+    const fly = ctx.createOscillator();
+    fly.frequency.value = 15734;
+    hold(fly, t + 0.05, t + 4.4, 0.01, 0.3, 1).connect(dry);
+    fly.start(t);
+    fly.stop(t + 4.5);
+    // mains hum with a little buzz
+    const hum = ctx.createOscillator();
+    hum.type = 'sawtooth';
+    hum.frequency.value = 60;
+    const hf = ctx.createBiquadFilter();
+    hf.type = 'lowpass';
+    hf.frequency.value = 260;
+    hum.connect(hf);
+    hold(hf, t, t + 4.5, 0.035, 0.25, 1.2).connect(dry);
+    hum.start(t);
+    hum.stop(t + 4.6);
+    // the outline traced in red (left) then blue (right): a buzzing zap sweeping up as the line draws down the logo
+    for (const [t0, p, f0, det] of [[0.45, -0.7, 180, 0], [0.7, 0.7, 186, 14]]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.detune.value = det;
+      o.frequency.setValueAtTime(f0, t + t0);
+      o.frequency.exponentialRampToValueAtTime(f0 * 4, t + t0 + 1.1);
+      const f = ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.Q.value = 6;
+      f.frequency.setValueAtTime(700, t + t0);
+      f.frequency.exponentialRampToValueAtTime(4200, t + t0 + 1.1);
+      const am = ctx.createOscillator();
+      am.type = 'square';
+      am.frequency.value = 30;
+      const amg = ctx.createGain();
+      amg.gain.value = 0.35;
+      o.connect(f);
+      const g = hold(f, t + t0, t + t0 + 1.15, 0.09, 0.02, 0.25);
+      am.connect(amg).connect(g.gain);
+      g.connect(pan(p, dry));
+      g.connect(pan(p, room));
+      for (const x of [o, am]) {
+        x.start(t + t0);
+        x.stop(t + t0 + 1.2);
+      }
+      this.noiseHit(t + t0 + 1.1, 0.12, 0.18, pan(p, room), 'bandpass', 5000, 2);
+    }
+    // the snake: a long hiss that tightens, gated by the logo's flicker
+    const hs = ctx.createBufferSource();
+    hs.buffer = this.buffers.noise;
+    hs.loop = true;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'bandpass';
+    hp.Q.value = 1.4;
+    hp.frequency.setValueAtTime(2600, t + 1.2);
+    hp.frequency.exponentialRampToValueAtTime(7500, t + 2.6);
+    const hg = ctx.createGain();
+    const T = t + 1.25;
+    hg.gain.setValueAtTime(0, T);
+    hg.gain.linearRampToValueAtTime(0.22, T + 0.17);
+    hg.gain.linearRampToValueAtTime(0.05, T + 0.25);
+    hg.gain.linearRampToValueAtTime(0.3, T + 0.42);
+    hg.gain.exponentialRampToValueAtTime(0.0005, T + 1.7);
+    hs.connect(hp).connect(hg);
+    hg.connect(pan(-0.25, dry));
+    hg.connect(room);
+    hs.start(T);
+    hs.stop(T + 1.8);
+    // landing: sub boom, a low tom and the chord, red voices left and blue voices right
+    const L = t + 1.67;
+    this.thump(L, 70, 28, 1.6, 0.9);
+    this.noiseHit(L, 0.35, 0.25, room, 'lowpass', 900, 0.7, 120);
+    [[40, -0.4], [47, 0.4], [52, -0.6], [55, 0.6], [59, -0.3], [66, 0.3], [71, 0]].forEach(([m, p], k) => {
+      const f = mtof(m);
+      const dest = pan(p, k > 4 ? room : dry);
+      this.tone('sawtooth', f, L + k * 0.025, 2.6, 0.035, dest, { attack: 0.06, filter: 2400, filterTo: 300, detune: k % 2 ? 7 : -7 });
+      this.tone('sine', f, L + k * 0.025, 3, 0.05, room, { attack: 0.2 });
+    });
+    // the apple's heartbeat on each pulse of the cracks
+    for (const b of [3.25, 5.65]) {
+      this.thump(t + b, 58, 34, 0.3, 0.45);
+      this.thump(t + b + 0.24, 52, 30, 0.35, 0.3);
+    }
+    // PRESENTS
+    this.tone('sine', mtof(83), t + 2.75, 1.6, 0.05, room, { fm: [3.5, 2] });
+    this.tone('sine', mtof(76), t + 2.78, 1.8, 0.04, room, { fm: [2, 1] });
+  }
+  // The press that leaves the card: a short tape-stop swish into the title.
   splashSting() {
     if (!this.ctx) return;
-    const t = this.ctx.currentTime + 0.03;
-    const out = this.sfxDry || this.sfx;
-    [52, 59, 64, 68, 71, 76].forEach((m, k) => {
-      const f = 440 * Math.pow(2, (m - 69) / 12);
-      this.tone(k % 2 ? 'square' : 'sawtooth', f, t + k * 0.035, 1.1, 0.05, out);
-      if (this.roomIn) this.tone('sine', f * 2, t + k * 0.035, 1.4, 0.03, this.roomIn);
-    });
+    const t = this.ctx.currentTime + 0.02;
+    this.swell(t, 0.5, 0.12, this.roomIn || this.sfxDry, 'bandpass', 600, 5000, 1.2);
+    this.tone('sawtooth', mtof(52), t, 0.45, 0.05, this.sfxDry, { slideTo: mtof(40), filter: 1800, filterTo: 200 });
   }
   // The title shout: a V8 cranked, caught, idling with a lumpy cam, blipped twice and wound all the way out,
   // with the announcer landing on top of the scream.

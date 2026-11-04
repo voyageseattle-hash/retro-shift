@@ -32,13 +32,15 @@ class App {
     this.renderer.onResize.push(() => this.onResize());
     this.last = performance.now();
     this.setupTouch();
+    // The first press anywhere starts sound. The studio card wakes audio itself and starts the title when it leaves.
+    this.titleAudio = (delay = 0.35) => {
+      this.audio.playTitle();
+      this.audio.titleShout(delay);
+    };
     const wake = (fromSplash = false) => {
       const first = !this.audio.ctx;
       this.audio.init();
-      if (first && !this.race) {
-        this.audio.playTitle();
-        this.audio.titleShout(fromSplash === true ? 0.75 : 0.35);
-      }
+      if (first && !this.race && fromSplash !== true) this.titleAudio(0.35);
     };
     this.wake = wake;
     window.addEventListener('pointerdown', wake);

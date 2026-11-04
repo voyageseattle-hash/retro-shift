@@ -495,6 +495,13 @@ export class TrackWorld {
       const n = s.n ?? 3;
       for (let k = 0; k < n; k++) this.addShard({ ...s, at: s.at + k * (s.gap ?? 0.006) });
     }
+    // shards laid along a branch (a long lens-only road refills you on the way)
+    for (const p of this.paths) {
+      for (const s of (p !== this.main && p.def?.shards) || []) {
+        const n = s.n ?? 1;
+        for (let k = 0; k < n; k++) this.addShard({ mask: p.def.mask, ...s, path: p.id, at: s.at + k * (s.gap ?? 0.03) });
+      }
+    }
   }
 
   pathOf(o) {
@@ -654,7 +661,8 @@ export class TrackWorld {
     const f = this._f;
     let bestY = -Infinity;
     // Stick to the strip you're already on while it's still under you; only change strips when you drive off its
-    // edge (onto a fork) or it ends. Otherwise a fork that starts level with the road would grab you.
+    // edge (onto a fork), it ends, or a ramp rises out of it under you. Otherwise a fork that starts level with the
+    // road would grab you.
     const cur = hints._cur;
     for (const path of this.paths) {
       // cheap bounds reject
@@ -666,7 +674,10 @@ export class TrackWorld {
       if (Math.abs(f.lat) > path.halfW + 0.35) continue;
       if (!solidIn(f.mask, mode)) continue;
       if (f.y > y + 1.6 || f.y < y - 7) continue;
-      const score = f.y + (path.id === cur ? 2.5 : 0);
+      // a strip climbing out of the road beneath you (a ramp laid over it) takes you up
+      const j = Math.min(path.N - 1, f.i + 3);
+      const ramp = !path.closed && path.id !== cur && path.py[j] - path.py[f.i] > 0.25 && f.y > y - 0.6 && Math.abs(f.lat) < path.halfW - 0.5;
+      const score = f.y + (path.id === cur ? 2.5 : 0) + (ramp ? 3 : 0);
       if (score > bestY) {
         bestY = score;
         g.y = f.y;

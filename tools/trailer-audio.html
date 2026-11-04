@@ -1,0 +1,56 @@
+<!doctype html>
+<!-- Offline render of the trailer's sound from the game's own audio engine: songs, lens changes, announcer, effects. -->
+<meta charset="utf-8" />
+<title>RETRO SHIFT trailer audio</title>
+<script type="module">
+  import { Audio } from '../js/core/audio.js';
+  import { SONGS } from '../js/core/songs.js';
+  import { BOTH, RED, BLUE } from '../js/world/shift.js';
+  const SR = 44100;
+  // cues: [time, kind, arg] with kind in splash | song | stop | mode | say | sfx | thump
+  window.renderTrailer = async (seconds, cues, extraVoice = []) => {
+    const ctx = new OfflineAudioContext(2, Math.ceil(SR * seconds), SR);
+    const a = new Audio();
+    a.musicVolume = 0.6;
+    a.sfxVolume = 1;
+    a.build(ctx);
+    a.clock = 0;
+    a.voice = new Map();
+    const ids = new Set([...cues.filter((c) => c[1] === 'say').map((c) => c[2])]);
+    for (const id of ids) {
+      const url = extraVoice.includes(id) ? `trailer/${id}.mp3` : `../audio/voice/${id}.mp3`;
+      a.voice.set(id, await ctx.decodeAudioData(await (await fetch(url)).arrayBuffer()));
+    }
+    const M = { BOTH, RED, BLUE };
+    const times = [...new Set([...cues.map((c) => c[0]), ...Array.from({ length: Math.floor(seconds * 2) }, (_, k) => k * 0.5)])].sort((x, y) => x - y);
+    for (const t of times) {
+      if (t >= seconds) continue;
+      ctx.suspend(t).then(() => {
+        a.clock = t;
+        for (const [ct, kind, arg, v] of cues) {
+          if (ct !== t) continue;
+          if (kind === 'splash') a.splashIntro(0);
+          else if (kind === 'song') a.playSong(SONGS[arg]);
+          else if (kind === 'stop') a.stopSong();
+          else if (kind === 'mode') a.setMode(M[arg]);
+          else if (kind === 'say') a.announce(arg, 0, v ?? 1.4);
+          else if (kind === 'sfx') a.play(arg);
+          else if (kind === 'thump') { a.thump(t + 0.01, 80, 30, 1.4, 1); a.noiseHit(t, 1.6, 0.35, a.roomIn, 'lowpass', 6000, 0.7, 300); }
+        }
+        if (a.song) a.schedule(a.song, t + 0.7);
+        ctx.resume();
+      });
+    }
+    const buf = await ctx.startRendering();
+    const n = buf.length, L = buf.getChannelData(0), R = buf.getChannelData(1);
+    const out = new DataView(new ArrayBuffer(44 + n * 4));
+    const w = (o, s) => [...s].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
+    w(0, 'RIFF'); out.setUint32(4, 36 + n * 4, true); w(8, 'WAVEfmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 2, true);
+    out.setUint32(24, SR, true); out.setUint32(28, SR * 4, true); out.setUint16(32, 4, true); out.setUint16(34, 16, true); w(36, 'data'); out.setUint32(40, n * 4, true);
+    for (let i = 0, o = 44; i < n; i++, o += 4) { out.setInt16(o, Math.max(-1, Math.min(1, L[i])) * 32767, true); out.setInt16(o + 2, Math.max(-1, Math.min(1, R[i])) * 32767, true); }
+    const bytes = new Uint8Array(out.buffer); let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  };
+  window.ready = true;
+</script>

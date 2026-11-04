@@ -290,18 +290,22 @@ body:not(.racing) #touch { display: none; }
 #splash .crt::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.35) 0 2px, transparent 2px 4px), radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.85) 100%); animation: crtflicker 0.12s steps(2) infinite; }
 @keyframes crtflicker { 50% { opacity: 0.92; } }
 #splash .glass { display: grid; justify-items: center; gap: 1.2rem; text-align: center; }
-#splash .apple { width: min(28vw, 220px); overflow: visible; }
-#splash .apple path { fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1.3s 0.5s ease-out forwards; }
-#splash .apple .scan { stroke-width: 1; opacity: 0.6; }
-#splash .apple .red path { stroke: #ff2a4a; filter: drop-shadow(0 0 4px #ff2a4a) drop-shadow(0 0 12px #ff2a4a); }
-#splash .apple .blue { transform: translate(3px, -1px); mix-blend-mode: screen; }
-#splash .apple .blue path { stroke: #1e8cff; animation-delay: 0.75s; filter: drop-shadow(0 0 4px #1e8cff) drop-shadow(0 0 12px #1e8cff); }
-@keyframes draw { to { stroke-dashoffset: 0; } }
-#splash .studio { display: grid; gap: 0.2rem; font-family: 'Russo One', sans-serif; opacity: 0; animation: studioIn 0.5s 1.6s forwards; }
-#splash .ff { font-size: clamp(1.6rem, 5vw, 3.2rem); letter-spacing: 0.08em; color: #f4eeff; text-shadow: -2px 0 #ff2a4a, 2px 0 #1e8cff, 0 0 18px rgba(176, 76, 255, 0.7); }
-#splash .pr { font-family: 'Chakra Petch', sans-serif; font-weight: 600; font-size: clamp(0.8rem, 2vw, 1.15rem); letter-spacing: 0.7em; color: #c9b8ff; padding-left: 0.7em; }
-#splash .presents { font-family: 'Chakra Petch', sans-serif; letter-spacing: 0.5em; font-size: 0.8rem; color: #8a7aa8; opacity: 0; animation: studioIn 0.5s 2.1s forwards; }
+#splash .logo { position: relative; width: min(78vw, 560px, 62vh * 1.258); aspect-ratio: 1100 / 874; }
+#splash .logo > div { position: absolute; inset: 0; }
+#splash .body { background: url(../assets/splash/ff-body.webp) center / contain no-repeat; opacity: 0; filter: brightness(0.2) drop-shadow(0 0 22px rgba(150, 60, 255, 0.35)); animation: ffBody 1.4s 1.25s ease-out forwards; }
+#splash .line { -webkit-mask: url(../assets/splash/ff-lines.webp) center / contain no-repeat; mask: url(../assets/splash/ff-lines.webp) center / contain no-repeat; mix-blend-mode: screen; clip-path: inset(0 0 100% 0); animation: ffTrace 1.1s 0.45s cubic-bezier(0.5, 0, 0.3, 1) forwards, ffFade 1.2s 2.2s forwards; }
+#splash .line.red { background: #ff2a4a; filter: drop-shadow(0 0 6px #ff2a4a); transform: translate(-0.6%, 0.2%); }
+#splash .line.blue { background: #1e8cff; filter: drop-shadow(0 0 6px #1e8cff); transform: translate(0.6%, -0.2%); animation-delay: 0.7s, 2.35s; }
+#splash .veins { background: url(../assets/splash/ff-veins.webp) center / contain no-repeat; mix-blend-mode: screen; opacity: 0; filter: drop-shadow(0 0 8px #a050ff) drop-shadow(0 0 22px #7a2cff); animation: ffVeins 2.4s 2.2s ease-in-out infinite; }
+#splash .sweep { background: linear-gradient(180deg, transparent 0 46%, rgba(255, 255, 255, 0.55) 49.5% 50.5%, transparent 54% 100%); background-size: 100% 220%; mix-blend-mode: screen; opacity: 0; animation: ffSweep 1.1s 0.45s cubic-bezier(0.5, 0, 0.3, 1); }
+@keyframes ffTrace { to { clip-path: inset(0 0 0 0); } }
+@keyframes ffFade { to { opacity: 0.38; } }
+@keyframes ffBody { 0% { opacity: 0; } 12% { opacity: 0.7; } 18% { opacity: 0.2; } 30% { opacity: 1; } 100% { opacity: 1; filter: brightness(1) drop-shadow(0 0 22px rgba(150, 60, 255, 0.35)); } }
+@keyframes ffVeins { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+@keyframes ffSweep { 0% { opacity: 1; background-position: 0 100%; } 100% { opacity: 1; background-position: 0 0; } }
+#splash .presents { font-family: 'Chakra Petch', sans-serif; letter-spacing: 0.5em; font-size: 0.8rem; color: #8a7aa8; opacity: 0; animation: studioIn 0.5s 2.7s forwards; }
 @keyframes studioIn { 0% { opacity: 0; transform: translateY(6px) skewX(-8deg); filter: blur(4px); } 60% { opacity: 1; filter: blur(0); } 70% { opacity: 0.4; } 100% { opacity: 1; transform: none; } }
-#splash .press { font-family: 'Chakra Petch', sans-serif; font-weight: 700; letter-spacing: 0.35em; font-size: 0.95rem; color: #fff; margin-top: 1.5rem; opacity: 0; }
-#splash.ready .press { animation: blink 1s steps(2) infinite; }
+#splash .power { position: absolute; inset: 0; display: grid; place-items: center; font-family: 'Chakra Petch', sans-serif; font-weight: 700; letter-spacing: 0.35em; padding-left: 0.35em; font-size: 0.95rem; color: #fff; text-shadow: -1px 0 #ff2a4a, 1px 0 #1e8cff; animation: blink 1s steps(2) infinite; }
+#splash.on .power { display: none; }
+#splash:not(.on) .logo > div, #splash:not(.on) .presents { animation: none; }
 @keyframes blink { 0% { opacity: 1; } 100% { opacity: 0; } }

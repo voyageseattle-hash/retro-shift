@@ -323,7 +323,8 @@ export class Race {
           CC.pos.set(pl.pos.x + Math.sin(a + pl.yaw) * (24 - this.introT * 6), pl.pos.y + 8 - this.introT * 2, pl.pos.z + Math.cos(a + pl.yaw) * (24 - this.introT * 6));
           CC.look.copy(pl.pos);
         };
-      } else if (cam.cinematic) {
+      } else if (cam.cinematic && !cam.held) {
+        // (a held cinematic, cam.held, is a shot someone else is directing: trailer and replay cameras)
         cam.cinematic = null;
         cam.snap(pl);
       }

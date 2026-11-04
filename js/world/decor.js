@@ -129,17 +129,23 @@ const DECOR = {
         if (Math.abs(fr.lat) > main.halfW + 3) break;
       }
       world.addObstacle({ type: 'wall', door: true, path: b.id, at: b.frac(Math.min(b.N - 1, j)), mask: M.B, r: b.halfW + 1.8, cy: b.halfW * 0.45 });
-      // and the bore itself: red-only hex rings, a tunnel you only see through the red lens
+      // and the bore itself: a twisting red-only hex tube, a tunnel you only see through the red lens
       let prev = null;
-      for (let k = j + 3; k < b.N - 6; k += 4) {
+      for (let k = j + 3, n = 0; k < b.N - 6; k += 3, n++) {
         const c = b.point(k, 0, b.halfW * 0.35);
         const u = V(b.rightX(k), 0, b.rightZ(k));
+        const r = b.halfW + 2.5;
+        const rot = n * 0.09;
         const P = [];
         for (let q = 0; q <= 6; q++) {
-          const a = (q / 6) * Math.PI * 2;
-          P.push(c.clone().addScaledVector(u, Math.cos(a) * (b.halfW + 2.5)).addScaledVector(UP, Math.sin(a) * (b.halfW + 2.5)));
+          const a = rot + (q / 6) * Math.PI * 2;
+          P.push(c.clone().addScaledVector(u, Math.cos(a) * r).addScaledVector(UP, Math.sin(a) * r));
         }
-        for (let q = 0; q < 6; q++) L.line(M.RO, P[q], P[q + 1]);
+        for (let q = 0; q < 6; q++) {
+          L.line(M.RO, P[q], P[q + 1]);
+          // a flange on every other ring, dim like the main tunnel's so the stack doesn't white out
+          if (n % 2 === 0) L.quad(M.RO, P[q], P[q + 1], P[q + 1].clone().lerp(c, -0.12), P[q].clone().lerp(c, -0.12), null, 0.3);
+        }
         if (prev) for (let q = 0; q < 6; q++) L.line(M.RO, prev[q], P[q]);
         prev = P;
       }
