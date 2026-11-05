@@ -66,7 +66,7 @@ export class Racer {
     this.livery = resolveLivery(car, opts.livery);
     this.model = buildBody(car.body || car.id, hexOf(this.livery.paint), hexOf(this.livery.glow));
     this.root = this.model.root;
-    addForms(this.model);
+    addForms(this.model, car.body || car.id, hexOf(this.livery.paint));
     this.mass = car.mass || 1;
     this.trail = new Trail(hexOf(this.livery.trail));
     this.trailOn = this.livery.trail !== 'off';
