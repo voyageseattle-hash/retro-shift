@@ -12,6 +12,7 @@ import { Kit, Fleet, TAG, trap, placeOnPath, hitRacer, scratchOf, nearPlayer, li
 import { Telegraph } from './hazards.js';
 
 const _d = new THREE.Vector3();
+const _c = new THREE.Color();
 const GHOST = 0.14;
 const PACE = 64;
 const CRUISE = 0.64; // of race pace, once the chase has settled into the field
@@ -20,48 +21,64 @@ const LANES = [-0.6, -0.3, 0, 0.3, 0.6];
 const GAPS = [13, 25, 37]; // metres each cruiser hangs behind the getaway
 const OFFS = [-4.5, 4.5, 0]; // and to the side of its line
 
+// The getaway coupe: low and wide, a wing on struts, hot pink from behind (a wide tail bar and a spill of pink on
+// the road) so it reads as the one to follow.
 function getawayTpl() {
   const K = new Kit();
   K.loft([trap(-2.3, 0.95, 0.5, 0.28, 0.9), trap(-1.6, 1.0, 0.6, 0.25, 0.95), trap(-1.0, 1.0, 1.05, 0.25, 0.72), trap(0.4, 1.0, 1.05, 0.25, 0.72), trap(1.0, 1.0, 0.6, 0.25, 0.95), trap(2.3, 0.9, 0.4, 0.3, 0.9)]);
   for (const s of [-1, 1]) {
     K.seg([s * 0.86, 0.85, -1.0], [s * 0.86, 0.85, 0.4], TAG.glass);
     // the rear wing on two struts
-    K.seg([s * 1.05, 1.15, -2.0], [s * 1.05, 1.15, -1.6]);
-    K.seg([s * 0.9, 0.78, -1.9], [s * 0.9, 1.15, -1.9]);
-    K.lamp(s * 0.55, 0.52, 2.31, 0.24, TAG.head);
-    K.cone(s * 0.55, 0.5, 2.3, 10, 1.5, TAG.head, 0.06);
-    K.seg([s * 0.9, 0.6, -2.31], [s * 0.15, 0.6, -2.31], TAG.tail);
+    K.seg([s * 1.05, 1.15, -2.0], [s * 1.05, 1.15, -1.6], TAG.stripe);
+    K.seg([s * 0.9, 0.78, -1.9], [s * 0.9, 1.15, -1.9], TAG.stripe);
+    // a racing stripe down each flank
+    K.seg([s * 1.0, 0.62, -2.2], [s * 1.0, 0.62, 2.1], TAG.stripe);
+    K.lampGlow(s * 0.55, 0.52, 2.31, 0.24, 1, TAG.head, 0.7);
+    K.cone(s * 0.55, 0.5, 2.3, 10, 1.5, TAG.head, 0.035);
+    K.lampGlow(s * 0.6, 0.6, -2.31, 0.3, -1, TAG.tail, 0.8);
   }
-  K.seg([-1.05, 1.15, -1.8], [1.05, 1.15, -1.8]);
+  K.seg([-1.05, 1.15, -1.8], [1.05, 1.15, -1.8], TAG.stripe);
   K.seg([0, 1.3, 0.4], [0, 0.85, 1.0], TAG.glass);
   K.seg([0, 1.3, -1.0], [0, 0.85, -1.6], TAG.glass);
-  K.glowQuad([-0.95, 0.42, -2.38], [0.95, 0.42, -2.38], [0.95, 0.78, -2.38], [-0.95, 0.78, -2.38], TAG.tail, 0.26);
-  K.glowQuad([-1.3, 0.06, -2.6], [1.3, 0.06, -2.6], [1.3, 0.06, 2.6], [-1.3, 0.06, 2.6], TAG.under, 0.12);
+  K.seg([-0.3, 0.6, -2.31], [0.3, 0.6, -2.31], TAG.tail);
+  K.glowQuad([-1.3, 0.05, -2.5], [1.3, 0.05, -2.5], [0.9, 0.05, -5.5], [-0.9, 0.05, -5.5], TAG.tail, 0.1);
+  K.glowQuad([-1.3, 0.06, -2.6], [1.3, 0.06, -2.6], [1.3, 0.06, 2.6], [-1.3, 0.06, 2.6], TAG.under, 0.14);
   return K.build({ w: 1.05, len: 2.4, h: 1.35 });
 }
+// A cruiser: white body, a violet livery band down the doors and across the boot, a push bar, and the light bar
+// on the roof. The bar is what has to read from behind at speed: each half carries a halo above, a lamp facing
+// back, a pillar of light standing up from it and a halo on the road under the car, all flashing with it.
 function cruiserTpl() {
   const K = new Kit();
   K.loft([trap(-2.4, 0.88, 0.58, 0.3, 0.9), trap(-1.5, 0.95, 0.66, 0.25, 0.95), trap(-0.9, 0.95, 1.2, 0.25, 0.76), trap(0.6, 0.95, 1.2, 0.25, 0.76), trap(1.2, 0.95, 0.7, 0.25, 0.95), trap(2.4, 0.86, 0.5, 0.3, 0.9)]);
   for (const s of [-1, 1]) {
     K.seg([s * 0.83, 0.95, -0.9], [s * 0.83, 0.95, 0.6], TAG.glass);
-    K.lamp(s * 0.52, 0.6, 2.41, 0.22, TAG.head);
-    K.cone(s * 0.52, 0.55, 2.4, 10, 1.5, TAG.head, 0.07);
-    K.seg([s * 0.8, 0.7, -2.41], [s * 0.2, 0.7, -2.41], TAG.tail);
+    // the livery: a band along the doors, a chevron back from the rear wheel
+    K.seg([s * 0.96, 0.72, -1.4], [s * 0.96, 0.72, 1.3], TAG.stripe);
+    K.seg([s * 0.96, 0.52, -1.4], [s * 0.96, 0.52, 1.3], TAG.stripe);
+    K.seg([s * 0.96, 0.72, -1.4], [s * 0.9, 0.52, -2.0], TAG.stripe);
+    K.lampGlow(s * 0.52, 0.6, 2.41, 0.22, 1, TAG.head, 0.6);
+    K.cone(s * 0.52, 0.55, 2.4, 10, 1.5, TAG.head, 0.035);
+    K.lampGlow(s * 0.55, 0.7, -2.41, 0.22, -1, TAG.tail, 0.3);
     // push bar uprights
     K.seg([s * 0.6, 0.3, 2.55], [s * 0.6, 0.95, 2.55]);
+    // the light bar half: its box, a halo above, a lamp facing back, a pillar of light up from it
+    const tag = s < 0 ? TAG.barL : TAG.barR;
+    K.box(0.36, 0.14, 0.22, s * 0.38, 1.47, -0.15, tag, false);
+    K.glowQuad([s * 0.02, 1.76, -0.75], [s * 1.0, 1.76, -0.75], [s * 1.0, 1.76, 0.4], [s * 0.02, 1.76, 0.4], tag, 0.22);
+    K.glowQuad([s * 0.02, 1.2, -0.42], [s * 1.05, 1.2, -0.42], [s * 1.05, 2.0, -0.42], [s * 0.02, 2.0, -0.42], tag, 0.26);
+    K.glowQuad([s * 0.02, 1.2, 0.1], [s * 1.05, 1.2, 0.1], [s * 1.05, 2.0, 0.1], [s * 0.02, 2.0, 0.1], tag, 0.18);
+    K.glowQuad([s * 0.08, 1.5, -0.15], [s * 0.7, 1.5, -0.15], [s * 0.7, 6.5, -0.15], [s * 0.08, 6.5, -0.15], tag, 0.07);
+    K.glowQuad([s * 0.39, 1.5, -0.5], [s * 0.39, 1.5, 0.2], [s * 0.39, 6.5, 0.2], [s * 0.39, 6.5, -0.5], tag, 0.07);
+    // the road halo for this half's flash
+    K.glowQuad([s * 0.1, 0.05, -4.0], [s * 3.2, 0.05, -4.0], [s * 3.2, 0.05, 3.4], [s * 0.1, 0.05, 3.4], TAG.halo, 0.2);
   }
   K.seg([0, 1.45, 0.6], [0, 0.95, 1.2], TAG.glass);
   K.seg([0, 1.45, -0.9], [0, 0.91, -1.5], TAG.glass);
   K.seg([-0.6, 0.5, 2.55], [0.6, 0.5, 2.55]);
   K.seg([-0.6, 0.85, 2.55], [0.6, 0.85, 2.55]);
-  // the light bar: two halves on the roof, each with a halo above and one facing back
-  K.box(0.36, 0.14, 0.22, -0.38, 1.47, -0.15, TAG.barL, false);
-  K.box(0.36, 0.14, 0.22, 0.38, 1.47, -0.15, TAG.barR, false);
-  K.glowQuad([-0.95, 1.75, -0.7], [0, 1.75, -0.7], [0, 1.75, 0.3], [-0.95, 1.75, 0.3], TAG.barL, 0.32);
-  K.glowQuad([0, 1.75, -0.7], [0.95, 1.75, -0.7], [0.95, 1.75, 0.3], [0, 1.75, 0.3], TAG.barR, 0.32);
-  K.glowQuad([-1.0, 1.25, -0.4], [0, 1.25, -0.4], [0, 1.95, -0.4], [-1.0, 1.95, -0.4], TAG.barL, 0.3);
-  K.glowQuad([0, 1.25, -0.4], [1.0, 1.25, -0.4], [1.0, 1.95, -0.4], [0, 1.95, -0.4], TAG.barR, 0.3);
-  K.glowQuad([-0.85, 0.5, -2.48], [0.85, 0.5, -2.48], [0.85, 0.9, -2.48], [-0.85, 0.9, -2.48], TAG.tail, 0.2);
+  // the band across the boot
+  K.seg([-0.85, 0.72, -2.3], [0.85, 0.72, -2.3], TAG.stripe);
   K.glowQuad([-1.2, 0.06, -2.6], [1.2, 0.06, -2.6], [1.2, 0.06, 2.6], [-1.2, 0.06, 2.6], TAG.under, 0.08);
   return K.build({ w: 1.0, len: 2.55, h: 1.6 });
 }
@@ -83,22 +100,27 @@ export class Police {
     this.def = def;
     this.path = race.world.main;
     const white = new THREE.Color(0xffffff);
-    const mk = (body, glass, tail, k) => {
+    const mk = (body, glass, stripe, tail, k) => {
       const pal = [];
-      // (violet is pushed over the bloom threshold like the traffic; white blooms on its own)
+      // (the coloured lines are pushed over the bloom threshold like the traffic; white blooms on its own, so the
+      // cruiser body is held back and its livery and bar carry the glow)
       pal[TAG.body] = new THREE.Color(body).multiplyScalar(k);
       pal[TAG.glass] = new THREE.Color(glass).multiplyScalar(k * 0.8);
+      pal[TAG.stripe] = new THREE.Color(stripe);
       pal[TAG.head] = white.clone().multiplyScalar(1.5);
-      pal[TAG.tail] = new THREE.Color(tail).multiplyScalar(1.4);
+      pal[TAG.tail] = new THREE.Color(tail).multiplyScalar(1.6);
       pal[TAG.under] = new THREE.Color(body);
       pal[TAG.barL] = new THREE.Color(COLORS.redHot);
       pal[TAG.barR] = new THREE.Color(COLORS.blueHot);
       pal[TAG.marker] = pal[TAG.tail];
       return pal;
     };
-    this.pal = { getaway: mk(COLORS.violet, 0xe0b0ff, COLORS.pink, 1.8), cruiser: mk(COLORS.white, 0xb8e4ff, COLORS.redHot, 1.0) };
-    this.dim = { L: new THREE.Color(COLORS.redHot).multiplyScalar(0.18), R: new THREE.Color(COLORS.blueHot).multiplyScalar(0.18) };
-    this.lit = { L: new THREE.Color(COLORS.redHot).multiplyScalar(2.6), R: new THREE.Color(COLORS.blueHot).multiplyScalar(2.6) };
+    this.pal = {
+      getaway: mk(COLORS.pink, 0xffd0f4, new THREE.Color(0xffffff).multiplyScalar(1.6), COLORS.pink, 2.0),
+      cruiser: mk(COLORS.white, 0xb8e4ff, new THREE.Color(COLORS.violet).multiplyScalar(2.4), 0xff2030, 0.7),
+    };
+    this.dim = { L: new THREE.Color(0xff2a4a).multiplyScalar(0.12), R: new THREE.Color(0x1e8cff).multiplyScalar(0.12) };
+    this.lit = { L: new THREE.Color(0xff3a5a).multiplyScalar(2.0), R: new THREE.Color(0x3aa0ff).multiplyScalar(2.0) };
     let segs = 0, tris = 0, glows = 0;
     for (let k = 0; k < 4; k++) {
       const kind = k === 0 ? 'getaway' : 'cruiser';
@@ -248,6 +270,7 @@ export class Police {
     const P = this.path;
     const p = R.player;
     this.t += dt;
+    this.viewer = viewer;
     for (const r of R.racers) r.copCd = Math.max(0, (r.copCd || 0) - dt);
     // once a lap, as the player crosses the trigger
     if (this.state === 'idle') {
@@ -546,13 +569,26 @@ export class Police {
       s.t += dt;
       s.tele.fx.visible = s.seen;
       s.tele.update(s.t, SHOT.warn);
+      // the targeting beam: a thread of light from the cruiser's bar to the spot, firming up as the shot comes
+      const c = s.from;
+      const lock = !s.hit && c.life === 'run' && c.alpha > 0.5;
+      s.beam.visible = lock && s.seen;
+      if (lock) {
+        const f = s.t / SHOT.warn;
+        const P = s.beam.geometry.getAttribute('position');
+        P.setXYZ(0, c.pos.x, c.pos.y + 1.6, c.pos.z);
+        P.setXYZ(1, s.x, s.y + 0.3, s.z);
+        P.needsUpdate = true;
+        s.beam.material.opacity = (0.1 + 0.5 * f * f) * (Math.random() < 0.2 ? 0.5 : 1);
+      }
       if (!s.hit && s.t >= SHOT.warn) {
         s.hit = true;
         this.land(s);
       }
       if (s.tele.done(s.t, SHOT.warn)) {
-        this.group.remove(s.tele.fx);
+        this.group.remove(s.tele.fx, s.beam);
         s.tele.dispose();
+        s.beam.geometry.dispose();
         this.strikes.splice(k, 1);
       }
     }
@@ -570,8 +606,9 @@ export class Police {
     const y = g.onRoad ? g.y : r.pos.y;
     const tele = new Telegraph(SHOT.color, 0xffd0e0, 0xff6a8a, SHOT.radius);
     tele.fx.position.set(at.x, y + 0.12, at.z);
-    this.group.add(tele.fx);
-    this.strikes.push({ x: at.x, y, z: at.z, t: 0, tele, from: c, hit: false, seen: true });
+    const beam = lines([0, 0, 0, 0, 0, 0], SHOT.color, 0);
+    this.group.add(tele.fx, beam);
+    this.strikes.push({ x: at.x, y, z: at.z, t: 0, tele, beam, from: c, hit: false, seen: true });
     if (nearPlayer(R, at, 200)) R.app.audio.play('gun', 0.5 * this.vol(c.pos));
   }
 
@@ -581,7 +618,7 @@ export class Police {
     const at = _v.set(s.x, s.y, s.z);
     if (nearPlayer(R, at, 220)) {
       // the beam from the cruiser's bar to the spot, and the splash
-      if (c.life === 'run' && c.alpha > 0.5) this.bolt(_d.set(c.pos.x, c.pos.y + 1.6, c.pos.z), at, SHOT.color, 0.12);
+      if (c.life === 'run' && c.alpha > 0.5) this.bolt(_d.set(c.pos.x, c.pos.y + 1.6, c.pos.z), at, SHOT.color, 0.14);
       R.debris.sparks(at, _d.set(0, 0, 0), 36, 0xffa0c0, 22, s.y);
       R.app.audio.play('zap', 0.6 * Math.max(0.2, this.vol(at)));
       for (const pl of R.players) {
@@ -628,12 +665,14 @@ export class Police {
     A.tone('square', f0 * 0.5, t, 0.44, 0.025 * v, A.sfxWet, { slideTo: f1 * 0.5, filter: 1400, attack: 0.03 });
   }
 
-  render(mode) {
+  render(mode, viewer = this.viewer) {
     if (!this.on) return;
     const F = this.fleet;
     const seen = solidIn(M.X, mode);
     const shimmer = 0.85 + 0.15 * Math.sin(this.t * 9);
-    const phase = Math.floor(this.t * 7) % 2;
+    // the bar's flash: a double strobe each side, red-red then blue-blue
+    const beat = Math.floor(this.t * 9);
+    const eye = viewer?.pos;
     for (const s of this.strikes) s.seen = seen;
     F.begin();
     for (const c of this.cars) {
@@ -641,14 +680,18 @@ export class Police {
       const pal = this.pal[c.kind];
       if (c.kind === 'cruiser') {
         // the light bar and wig-wag headlights
-        const on = (phase + c.k) % 2 === 0;
-        pal[TAG.barL] = on ? this.lit.L : this.dim.L;
-        pal[TAG.barR] = on ? this.dim.R : this.lit.R;
-        pal[TAG.head].setScalar(on ? 1.9 : 0.9);
+        const q = (beat + c.k * 2) % 4;
+        const left = q < 2;
+        const strobe = q % 2 === 0 ? 1 : 0.55;
+        pal[TAG.barL] = left ? this.lit.L : this.dim.L;
+        pal[TAG.barR] = left ? this.dim.R : this.lit.R;
+        pal[TAG.halo] = _c.copy(left ? this.lit.L : this.lit.R).multiplyScalar(0.4 * strobe);
+        pal[TAG.head].setScalar(left ? 1.6 : 0.8);
       }
       let a = c.alpha * (seen ? 1 : GHOST * shimmer);
       if (c.life === 'dead' && Math.random() < 0.4) a *= 0.5;
-      F.draw(c.tpl, c.m, a, pal, !seen);
+      const glowK = eye ? Math.min(1.5, Math.max(1, eye.distanceTo(c.pos) / 30)) : 1;
+      F.draw(c.tpl, c.m, a, pal, !seen, glowK);
     }
     F.end();
   }

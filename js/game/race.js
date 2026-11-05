@@ -628,8 +628,8 @@ export class Race {
         this.world.layers.update(0, pl.mode, this.t);
         this.env.useView(k);
         this.env.update(this.dtLast || 0, this.t, this.cams[k].camera);
-        this.traffic.render(pl.mode);
-        this.police.render(pl.mode);
+        this.traffic.render(pl.mode, pl);
+        this.police.render(pl.mode, pl);
       },
     }));
   }

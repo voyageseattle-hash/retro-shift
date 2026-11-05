@@ -27,6 +27,26 @@ function seg(pts, mat) {
   l.frustumCulled = false;
   return l;
 }
+// The same in the layer's vertex-coloured line material, so a line can run hotter than the world's plain wire
+// (hazard stripes, the reflective band on a cone) and still fade with its world.
+function segHot(pts, mats, color) {
+  const l = seg(pts, mats.line);
+  const c = new THREE.Color(color);
+  l.geometry.setAttribute('color', new THREE.Float32BufferAttribute(Array.from({ length: pts.length / 3 }, () => [c.r, c.g, c.b]).flat(), 3));
+  return l;
+}
+// Lamp materials per world: a hot version of the world's solid, and amber for beacons (shared by every lamp)
+const LAMP = new Map();
+function lampMats(mats) {
+  let m = LAMP.get(mats.mask);
+  if (!m) {
+    const hot = new THREE.Color(mats.base).lerp(new THREE.Color(0xffffff), 0.45).multiplyScalar(1.8);
+    m = { hot: new THREE.MeshBasicMaterial({ color: hot, ...ADD }), amber: new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffa030).multiplyScalar(1.8), ...ADD }) };
+    LAMP.set(mats.mask, m);
+  }
+  return m;
+}
+const WHITE_HOT = new THREE.Color(0xffffff).multiplyScalar(1.7);
 // Wire box edges centred at (cx, cy, cz), pushed onto pts.
 function boxEdges(pts, cx, cy, cz, w, h, d) {
   const c = [];
@@ -60,6 +80,11 @@ function cone(mats) {
   for (const [a, b] of [[[-0.5, -0.5], [0.5, -0.5]], [[0.5, -0.5], [0.5, 0.5]], [[0.5, 0.5], [-0.5, 0.5]], [[-0.5, 0.5], [-0.5, -0.5]]]) p.push(a[0], 0.01, a[1], b[0], 0.01, b[1]);
   const g = new THREE.Group();
   g.add(seg(p, mats.wire));
+  // the reflective band: two white rings a hand apart round the middle
+  const band = [];
+  ring(band, 0, 0.56, 0, 0.245, 10);
+  ring(band, 0, 0.7, 0, 0.2, 10);
+  g.add(segHot(band, mats, WHITE_HOT));
   const f = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.98, 8), mats.fill);
   f.position.y = 0.49;
   g.add(f);
@@ -77,18 +102,20 @@ function barrier(mats) {
     p.push(a[0], a[1], z, b[0], b[1], z);
   }
   for (const [x, y] of prof) p.push(x, y, -L, x, y, L);
-  // stripes: diagonals on each face, leaning the same way so they read as chevrons from the road
+  // stripes: white diagonals on each face, leaning the same way so they read as hazard chevrons from the road
+  const st = [];
   for (const s of [-1, 1]) for (let k = 0; k < 4; k++) {
     const z0 = -L + 0.1 + k * 0.45;
-    p.push(s * 0.32, 0.26, z0, s * 0.19, 0.9, z0 + 0.3);
+    st.push(s * 0.33, 0.24, z0, s * 0.2, 0.9, z0 + 0.3);
+    st.push(s * 0.33, 0.24, z0 + 0.12, s * 0.2, 0.9, z0 + 0.42);
   }
   const g = new THREE.Group();
-  g.add(seg(p, mats.wire));
+  g.add(seg(p, mats.wire), segHot(st, mats, WHITE_HOT));
   const f = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.95, L * 2), mats.fill);
   f.position.y = 0.475;
   g.add(f);
-  const lamp = new THREE.Mesh(new THREE.OctahedronGeometry(0.14), mats.solid);
-  lamp.position.y = 1.1;
+  const lamp = new THREE.Mesh(new THREE.OctahedronGeometry(0.17), lampMats(mats).hot);
+  lamp.position.y = 1.12;
   g.add(lamp);
   g.userData.lamp = lamp;
   return g;
@@ -115,7 +142,7 @@ function digger(mats) {
   upper.add(fillBox(2.6, 1.5, 2.8, mats.fill, 0, 0.75, -0.4));
   upper.add(fillBox(1.0, 1.3, 1.2, mats.fill, -0.75, 1.0, 1.2));
   // the beacon on the cab roof
-  const beacon = new THREE.Mesh(new THREE.OctahedronGeometry(0.16), mats.solid);
+  const beacon = new THREE.Mesh(new THREE.OctahedronGeometry(0.2), lampMats(mats).amber);
   beacon.position.set(-0.75, 1.8, 1.2);
   upper.add(beacon);
   // boom: a tapered box 3.4 long, hinged at the front of the house; stick 2.8 long hinged at its end; bucket
@@ -189,6 +216,13 @@ function crane(mats, height, reach, tx) {
   boxEdges(j, tx, -0.35, 0, 1.2, 0.5, 1.0);
   top.add(seg(j, mats.wire));
   top.add(fillBox(1.6, 1.4, 2.2, mats.fill, -5, -0.6, 0));
+  // aviation lamps: on the apex and the jib tip, red, blinking out of step
+  const lamps = [[ax, ay + 0.3, 0], [reach - 0.3, 0.2, 0]].map(([x, y, z]) => {
+    const l = new THREE.Mesh(new THREE.OctahedronGeometry(0.3), lampMats(mats).amber);
+    l.position.set(x, y, z);
+    top.add(l);
+    return l;
+  });
   g.add(top);
   // the cable (two lines from the trolley) and the crate, positioned each frame
   const cable = seg(new Array(12).fill(0), mats.wire);
@@ -204,7 +238,7 @@ function crane(mats, height, reach, tx) {
   crate.add(seg(c, mats.wire));
   crate.add(fillBox(2, 2, 2, mats.fill));
   g.add(cable, crate);
-  g.userData = { top, cable, crate, tx, height, cableLen: height - 2.2 - 1.0 };
+  g.userData = { top, cable, crate, tx, height, cableLen: height - 2.2 - 1.0, lamps };
   return g;
 }
 
@@ -379,6 +413,7 @@ export class Construction {
     const C = this.crane;
     const U = C.root.userData;
     U.top.rotation.y = Math.sin(t * 0.2) * 0.08;
+    U.lamps.forEach((l, k) => l.scale.setScalar(0.5 + 0.7 * Math.max(0, Math.sin(t * 2.5 + k * 1.6))));
     const swing = Math.sin(t * 1.7) * 0.3;
     const L = U.cableLen;
     // trolley in the crane's frame (+x toward the road), crate hangs and swings along the road's lateral axis,
