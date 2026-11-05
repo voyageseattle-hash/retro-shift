@@ -6,10 +6,11 @@ const BIND_SOLO = {
   brake: ['KeyS', 'ArrowDown'],
   left: ['KeyA', 'ArrowLeft'],
   right: ['KeyD', 'ArrowRight'],
-  drift: ['Space', 'ShiftLeft', 'ShiftRight'],
+  drift: ['Space'],
   fire: ['KeyX'],
-  item: ['KeyQ', 'KeyJ', 'Digit1'],
-  special: ['KeyE', 'KeyL', 'Digit3'],
+  // the Shift keys are the lenses: left for RED, right for BLUE, both together for BOTH
+  item: ['ShiftLeft', 'KeyQ', 'KeyJ', 'Digit1'],
+  special: ['ShiftRight', 'KeyE', 'KeyL', 'Digit3'],
   look: ['KeyC'],
   reset: ['KeyR'],
   jump: ['KeyF', 'KeyK', 'Digit2'],
@@ -108,7 +109,7 @@ export function padStyleOf(id = '') {
 
 // Button prompts per device family.
 const GLYPHS = {
-  keyboard: { confirm: 'ENTER', back: 'ESC', pause: 'ESC', gas: 'W', brake: 'S', steer: 'A D', drift: 'SPACE', fire: 'X', item: 'Q', special: 'E', red: 'Q', blue: 'E', both: 'F', look: 'C', reset: 'R', jump: 'U', rear: 'I', horn: 'H', paint: '▲ ▼', choose: '◀ ▶' },
+  keyboard: { confirm: 'ENTER', back: 'ESC', pause: 'ESC', gas: 'W', brake: 'S', steer: 'A D', drift: 'SPACE', fire: 'X', item: 'L⇧', special: 'R⇧', red: 'L⇧', blue: 'R⇧', both: 'L⇧+R⇧', look: 'C', reset: 'R', jump: 'U', rear: 'I', horn: 'H', paint: '▲ ▼', choose: '◀ ▶' },
   xbox: { confirm: 'A', back: 'B', pause: 'MENU', gas: 'RT', brake: 'LT', steer: 'L-STICK', drift: 'X', red: 'LB', blue: 'RB', both: 'Y', item: 'LB', special: 'RB', look: 'RS', reset: 'VIEW', jump: 'D-PAD ▲', rear: 'D-PAD ▼', horn: 'LS', paint: '▲ ▼', choose: '◀ ▶' },
   ps: { confirm: '✕', back: '○', pause: 'OPTIONS', gas: 'R2', brake: 'L2', steer: 'L-STICK', drift: '□', red: 'L1', blue: 'R1', both: '△', item: 'L1', special: 'R1', look: 'R3', reset: 'SHARE', jump: 'D-PAD ▲', rear: 'D-PAD ▼', horn: 'L3', paint: '▲ ▼', choose: '◀ ▶' },
 };
@@ -363,6 +364,11 @@ export class Input {
       look = this.key(b.look);
       reset = this.key(b.reset);
       jump = this.keyEdge(b.jump);
+      // both Shift keys down together: back to BOTH, not one lens then the other
+      if (!this.twoPlayer && this.down.has('ShiftLeft') && this.down.has('ShiftRight') && (this.edges.has('ShiftLeft') || this.edges.has('ShiftRight'))) {
+        item = special = false;
+        jump = true;
+      }
       rear = this.keyEdge(b.rear);
       horn = this.keyEdge(b.horn);
     }

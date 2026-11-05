@@ -29,12 +29,14 @@ Then go to `http://localhost:4173`. `?track=core` (or any course id) jumps strai
 | Action | Keyboard | Gamepad |
 | --- | --- | --- |
 | Drive | W A S D / arrows | RT, LT, left stick |
-| Drift (hold, release for a turbo) | Space / Shift | X / □ |
-| Shift to RED | Q or 1 | LB / L1 |
-| Shift to BLUE | E or 3 | RB / R1 |
-| Back to BOTH (or press your lens again) | F or 2 | Y / △ |
+| Drift (hold, release for a turbo) | Space | X / □ |
+| Shift to RED | Left Shift, Q or 1 | LB / L1 |
+| Shift to BLUE | Right Shift, E or 3 | RB / R1 |
+| Back to BOTH (or press your lens again) | Both Shifts together, F or 2 | Y / △ |
 | Look back / Reset | C / R | RS / View |
 | Pause | Esc / P | Start |
+
+On Windows, tapping Shift five times fast opens the Sticky Keys prompt. A browser game can't block it, but you can switch it off in Settings > Accessibility > Keyboard.
 
 Touch controls appear on phones and tablets.
 

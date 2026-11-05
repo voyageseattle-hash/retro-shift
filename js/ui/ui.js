@@ -137,10 +137,10 @@ export class UI {
       <p class="rule"><b>MONO RUN</b> takes BOTH away: your BOTH button swaps RED and BLUE, each swap costs SHIFT, and nothing refills it but shards and phasing.</p>
       <table class="keys">
         <tr><td>Drive</td><td>${g('W')} ${g('A')} ${g('S')} ${g('D')} / arrows</td><td>RT · LT · stick</td></tr>
-        <tr><td>Drift (hold, release for turbo)</td><td>${g('SPACE')} / ${g('SHIFT')}</td><td>X / □</td></tr>
-        <tr><td>Shift to RED</td><td>${g('Q')} or ${g('1')}</td><td>LB / L1</td></tr>
-        <tr><td>Shift to BLUE</td><td>${g('E')} or ${g('3')}</td><td>RB / R1</td></tr>
-        <tr><td>Back to BOTH (or press your lens again)</td><td>${g('F')} or ${g('2')}</td><td>Y / △</td></tr>
+        <tr><td>Drift (hold, release for turbo)</td><td>${g('SPACE')}</td><td>X / □</td></tr>
+        <tr><td>Shift to RED</td><td>${g('LEFT SHIFT')} or ${g('Q')}</td><td>LB / L1</td></tr>
+        <tr><td>Shift to BLUE</td><td>${g('RIGHT SHIFT')} or ${g('E')}</td><td>RB / R1</td></tr>
+        <tr><td>Back to BOTH (or press your lens again)</td><td>${g('BOTH SHIFTS')} or ${g('F')}</td><td>Y / △</td></tr>
         <tr><td>Look back · Reset</td><td>${g('C')} · ${g('R')}</td><td>RS · VIEW</td></tr>
       </table>`;
     const list = el('div', 'list row');
