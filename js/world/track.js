@@ -92,11 +92,57 @@ export class Path {
       this.ny[i] = ny / nl;
       this.nz[i] = nz / nl;
     }
+    if (opts.profile?.length) this.reshape(opts.profile);
     this.minY = Math.min(...this.py);
     this.maxY = Math.max(...this.py);
     // Main-loop fraction at each end, for branches (progress and AI).
     this.mainFrom = opts.mainFrom ?? 0;
     this.mainTo = opts.mainTo ?? 1;
+  }
+
+  // Drops and crests laid into the road after it's built: heights move, the tangents follow.
+  //   drop: { at, kind: 'drop', depth, down, up }: a sharp lip, a steep fall, and a long climb back
+  //   crest: { at, kind: 'crest', height, len }: a sharp rise and fall
+  reshape(profile) {
+    const N = this.N;
+    for (const f of profile) {
+      const i0 = Math.round(f.at * N);
+      const span = f.kind === 'drop' ? f.down + f.up : f.len;
+      const n = Math.round(span / this.ds);
+      for (let k = 0; k <= n; k++) {
+        const s = k * this.ds;
+        let off = 0;
+        if (f.kind === 'drop') {
+          if (s < f.down) off = -f.depth * (1 - (1 - s / f.down) ** 2);
+          else off = -f.depth * (1 - smoothstep(0, 1, (s - f.down) / f.up));
+        } else off = f.height * Math.sin(Math.PI * Math.min(1, s / f.len)) ** 0.8;
+        this.py[this.wrap(i0 + k)] += off;
+      }
+    }
+    // tangents from the new heights (horizontal heading is unchanged)
+    const ty = new Float32Array(N);
+    for (let i = 0; i < N; i++) ty[i] = (this.py[this.wrap(i + 1)] - this.py[this.wrap(i - 1)]) / (2 * this.ds);
+    for (let i = 0; i < N; i++) {
+      const l = Math.hypot(1, ty[i]);
+      this.tx[i] = this.thx[i] / l;
+      this.tz[i] = this.thz[i] / l;
+      this.ty[i] = ty[i] / l;
+      // normal: right (with bank) crossed with the tangent
+      const ax = -this.thz[i], ay = this.tb[i], az = this.thx[i];
+      const bx = this.tx[i], by = this.ty[i], bz = this.tz[i];
+      let nx = ay * bz - az * by;
+      let ny = az * bx - ax * bz;
+      let nz = ax * by - ay * bx;
+      if (ny < 0) {
+        nx = -nx;
+        ny = -ny;
+        nz = -nz;
+      }
+      const nl = Math.hypot(nx, ny, nz) || 1;
+      this.nx[i] = nx / nl;
+      this.ny[i] = ny / nl;
+      this.nz[i] = nz / nl;
+    }
   }
 
   wrap(i) {
@@ -256,6 +302,7 @@ export class TrackWorld {
     if (opts.preview) return;
     this.buildRoads();
     this.buildFeatures();
+    this.buildWater();
     this.buildStart();
     buildDecor(this);
     this.storms = layStorms(this);
@@ -275,7 +322,13 @@ export class TrackWorld {
 
   buildMain() {
     const pts = this.def.points.map(([x, z, y = 0]) => new THREE.Vector3(x, y, z));
-    const p = new Path('main', pts, true, this.halfWidth, { bankFactor: this.def.bankFactor });
+    const p = new Path('main', pts, true, this.halfWidth, { bankFactor: this.def.bankFactor, profile: this.def.profile });
+    // water: stretches the Skimmer rides over and wheels bog down in
+    p.water = new Uint8Array(p.N);
+    for (const w of this.def.water || []) {
+      const i0 = p.index(w.at);
+      for (let k = 0; k < Math.round(w.len / p.ds); k++) p.water[p.wrap(i0 + k)] = 1;
+    }
     this.paths.push(p);
   }
 
@@ -384,6 +437,52 @@ export class TrackWorld {
   }
 
   // ------------------------------------------------------------------ road visuals
+  // Water on the road: rows of rippling lines across it, animated, so it reads as a surface the Skimmer rides.
+  buildWater() {
+    const main = this.main;
+    for (const w of this.def.water || []) {
+      const i0 = main.index(w.at);
+      const n = Math.round(w.len / main.ds);
+      const pos = [];
+      const rows = Math.max(4, Math.round(n / 1.5));
+      const cols = 14;
+      for (let r = 0; r < rows; r++) {
+        const i = main.wrap(i0 + Math.round((r / rows) * n));
+        for (let c = 0; c < cols; c++) {
+          const a = main.point(i, -main.halfW + (c / cols) * main.halfW * 2, 0.08, new THREE.Vector3());
+          const b = main.point(i, -main.halfW + ((c + 1) / cols) * main.halfW * 2, 0.08, new THREE.Vector3());
+          pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+        }
+      }
+      const g = new THREE.BufferGeometry();
+      const P = new THREE.Float32BufferAttribute(pos, 3);
+      g.setAttribute('position', P);
+      const base = Float32Array.from(pos);
+      const mat = new THREE.LineBasicMaterial({ color: 0x4ad8ff, transparent: true, opacity: 0.75, depthWrite: false, blending: THREE.AdditiveBlending });
+      const lines = new THREE.LineSegments(g, mat);
+      lines.frustumCulled = false;
+      lines.renderOrder = 2;
+      this.group.add(lines);
+      // a dark, glassy sheet under the ripples
+      const L = this.layers;
+      for (let k = 0; k < n; k++) {
+        const i = main.wrap(i0 + k);
+        const j = main.wrap(i + 1);
+        L.lineXYZ(M.ALL, ...main.point(i, -main.halfW, 0.06).toArray(), ...main.point(j, -main.halfW, 0.06).toArray(), 0x4ad8ff);
+        L.lineXYZ(M.ALL, ...main.point(i, main.halfW, 0.06).toArray(), ...main.point(j, main.halfW, 0.06).toArray(), 0x4ad8ff);
+      }
+      this.animated.push((t) => {
+        for (let q = 0; q < P.count; q++) {
+          const x = base[q * 3];
+          const z = base[q * 3 + 2];
+          P.setY(q, base[q * 3 + 1] + Math.sin(x * 0.7 + t * 3) * 0.06 + Math.sin(z * 0.9 + t * 2.3) * 0.05);
+        }
+        P.needsUpdate = true;
+        mat.opacity = 0.55 + 0.2 * Math.sin(t * 2);
+      });
+    }
+  }
+
   buildRoads() {
     const L = this.layers;
     const v = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
@@ -701,7 +800,8 @@ export class TrackWorld {
       hints[path.id] = f.i;
       // a little grace past the edge of the strip you're on: at speed a hard corner can carry you past its rail for
       // a step before the rail pushes you back, and that step shouldn't drop you through the world
-      if (Math.abs(f.lat) > path.halfW + (path.id === cur ? 1.4 : 0.35)) continue;
+      // (a wide craft is still on the road with its middle a little past the edge)
+      if (Math.abs(f.lat) > path.halfW + (path.id === cur ? 1.4 : 0.35) + (hints._w || 0)) continue;
       if (!solidIn(f.mask, mode)) continue;
       if (f.y > y + 1.6 || f.y < y - 7) continue;
       // a strip climbing out of the road beneath you (a ramp laid over it) takes you up

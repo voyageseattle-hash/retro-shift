@@ -119,6 +119,12 @@ export function buildSigns(world) {
     const name = o.mask === M.X ? 'OVERLAP' : lensWords(o.mask, false) || 'WHITE';
     addSign(world, main, back(main, o.at, 60), 0, `${name} WALL`, `PASSES IN ${pass}`, o.mask);
   }
+  // the form features: what each machine makes of them
+  for (const f of def.profile || []) {
+    if (f.kind === 'drop') addSign(world, main, back(main, f.at, 70), 0, 'DROP AHEAD', 'RED CLINGS · BLUE GLIDES', M.ALL);
+    else addSign(world, main, back(main, f.at, 70), 0, 'CREST', 'RED STAYS DOWN · BLUE FLIES', M.ALL);
+  }
+  for (const w of def.water || []) addSign(world, main, back(main, w.at, 70), 0, 'WATER', 'BLUE SKIMS IT', M.B);
   // a storm ahead, in its world's colour (it goes with that world, like the storm)
   for (const z of world.storms || []) {
     addSign(world, main, back(main, z.u0 + 0.035, 120), 0, z.name, z.kind === 'meteor' ? 'RED WORLD · GO BLUE OR RIDE IT OUT' : 'BLUE WORLD · GO RED OR RIDE IT OUT', z.mask);

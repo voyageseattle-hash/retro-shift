@@ -60,6 +60,7 @@ export const TRACKS = [
     ],
     features: (P) => ({
       branches: [{ from: P(5, 0.2), to: P(9, 0.1), mask: M.BO, side: 1, lift: 7, label: 'BLUE SHORTCUT' }],
+      profile: [{ at: P(7, 0.15), kind: 'drop', depth: 9, down: 24, up: 115 }],
       gaps: [{ at: P(10, 0.3), len: 46, mask: M.R, noRails: true }],
       obstacles: [wall(P(1, 0.45), M.B), wall(P(3, 0.3), M.R), ...field(P(11, 0.1), 0.05, 6, 3)],
       boosts: [{ at: P(0, 0.5), lat: 0 }, { at: P(7, 0.6), lat: -0.4 }, { at: P(12, 0.2), lat: 0.4, mask: M.RO }, { at: P(13, 0.4), mask: M.RO }],
@@ -178,6 +179,8 @@ export const TRACKS = [
         { from: P(5, 0.6), to: P(7, 0.6), mask: M.BO, side: -1, lift: 14, label: 'BLUE ROOFTOPS', facade: M.R, shards: [{ at: 0.36 }, { at: 0.64 }] },
       ],
       gaps: [{ at: P(9, 0.2), len: 36, mask: M.R, noRails: true }, { at: P(19, 0.1), len: 36, mask: M.B, noRails: true }],
+      profile: [{ at: P(12, 0.45), kind: 'crest', height: 3, len: 70 }],
+      water: [{ at: P(10, 0.35), len: 60 }],
       obstacles: [
         ...field(P(3, 0.1), 0.03, 6, 23), wall(P(5, 0.4), M.B), ...chicane(P(13, 0.2), 0.012, 4),
         { type: 'block', at: P(15, 0.5), lat: 0, mask: M.R, size: 4, sweep: 0.6 },

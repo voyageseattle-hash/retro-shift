@@ -7,6 +7,7 @@ import * as THREE from '../../vendor/three.js';
 import { clamp, damp, sign } from '../core/util.js';
 import { BOTH, RED, BLUE, SHIFT, LENS, solidIn, COLORS } from '../world/shift.js';
 import { buildBody, Trail } from './bodies.js';
+import { FORMS, addForms, updateForms } from './forms.js';
 
 const G_AIR = 27;
 const G_SLOPE = 14;
@@ -65,6 +66,7 @@ export class Racer {
     this.livery = resolveLivery(car, opts.livery);
     this.model = buildBody(car.body || car.id, hexOf(this.livery.paint), hexOf(this.livery.glow));
     this.root = this.model.root;
+    addForms(this.model);
     this.mass = car.mass || 1;
     this.trail = new Trail(hexOf(this.livery.trail));
     this.trailOn = this.livery.trail !== 'off';
@@ -199,6 +201,10 @@ export class Racer {
 
     const g = world.ground(this.pos.x, this.pos.y, this.pos.z, this.hints, this.mode);
     this.copyGround(g);
+    // the lens's form: its width (walls, rails, slits), how it holds the road, gliding, water
+    const F = FORMS[this.mode] || FORMS[BOTH];
+    this.halfW = F.halfW;
+    this.hints._w = Math.max(0, F.halfW - 1.2);
     const n = _up.set(g.nx, g.ny, g.nz);
     const fwdH = this.forwardVec(_v);
     const fwd = _fwd;
@@ -226,6 +232,8 @@ export class Racer {
       if (vF > top) vF += (top - vF) * 1.4 * dt;
       vF -= vF * (throttle > 0 ? 0.04 : 0.35) * dt;
       if (throttle === 0 && brake === 0 && Math.abs(vF) < 0.6) vF *= 0.9;
+      // water: wheels and hover pads bog down in it; the Skimmer rides on top
+      if (g.path?.water?.[g.i]) vF -= vF * F.water * dt;
 
       const d = this.drift;
       if (!d.active && ctl.drift && Math.abs(steer) > 0.3 && vF > 14 && this.spinTime <= 0) {
@@ -269,10 +277,19 @@ export class Racer {
       this.vel.addScaledVector(_v2, dt);
     } else {
       this.slip = 0;
-      this.yawRate = damp(this.yawRate, -steer * 0.9, 3, dt);
-      this.vel.y -= G_AIR * dt;
-      this.vel.x *= 1 - 0.05 * dt;
-      this.vel.z *= 1 - 0.05 * dt;
+      // the Skimmer glides: light gravity for a while after it leaves the road, and it steers in the air
+      const gliding = F.glide && this.airTime > 0.12 && this.airTime < 1.3 && this.speed > 25 && !this.controlLocked;
+      this.yawRate = damp(this.yawRate, -steer * (gliding ? 1.6 : 0.9), 3, dt);
+      this.vel.y -= G_AIR * (gliding ? (this.vel.y > 0 ? 0.6 : 0.36) : 1) * dt;
+      if (gliding) {
+        // turn the travel with the nose, so steering in the air bends the glide
+        const hs = Math.hypot(this.vel.x, this.vel.z);
+        this.vel.x = Math.sin(this.yaw) * hs;
+        this.vel.z = Math.cos(this.yaw) * hs;
+      } else {
+        this.vel.x *= 1 - 0.05 * dt;
+        this.vel.z *= 1 - 0.05 * dt;
+      }
       if (this.drift.active && this.airTime > 0.6) this.drift.active = false;
     }
     this.yaw += this.yawRate * dt;
@@ -299,7 +316,7 @@ export class Racer {
         if (vIntoN < 0) this.vel.addScaledVector(nn, -vIntoN);
         this.grounded = true;
         this.airTime = 0;
-      } else if (this.grounded && h < 0.45 + stick * 0.008 && vIntoN < 1.2 + stick * 0.05) {
+      } else if (this.grounded && h < 0.45 + stick * 0.008 + F.cling && (F.cling > 0 || vIntoN < 1.2 + stick * 0.05)) {
         this.pos.y = g2.y;
         if (vIntoN > 0) this.vel.addScaledVector(nn, -vIntoN);
         this.grounded = true;
@@ -373,6 +390,7 @@ export class Racer {
     this.bob = (this.bob || this.index) + dt;
     body.position.y = 0.35 + this.suspension * 0.6 + Math.sin(this.bob * 4) * 0.05;
     body.rotation.set(0, this.drift.active ? this.drift.dir * -0.28 : 0, this.bodyRoll);
+    updateForms(this.model, this.mode, dt, this.speed, this.bob, body);
     // lens colour: the wedge glows the colour of the world it's in
     const m = this.model;
     const col = this.mode === RED ? COLORS.red : this.mode === BLUE ? COLORS.blue : 0xffffff;
