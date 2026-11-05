@@ -4,6 +4,7 @@
 import * as THREE from '../../vendor/three.js';
 import { Racer } from '../vehicles/racer.js';
 import { BOTH, RED, BLUE } from '../world/shift.js';
+import { disposeTree } from '../core/renderer.js';
 
 export class Showroom {
   constructor() {
@@ -35,12 +36,20 @@ export class Showroom {
     this.offsetY = 0;
   }
   setCar(car, livery) {
-    if (this.racer) this.scene.remove(this.racer.root, this.racer.trail.mesh);
+    if (this.racer) {
+      this.scene.remove(this.racer.root, this.racer.trail.mesh);
+      disposeTree(this.racer.root);
+      disposeTree(this.racer.trail.mesh);
+    }
     const r = new Racer(car, { livery });
     r.grounded = true;
     r.mode = this.mode;
     this.racer = r;
     this.scene.add(r.root);
+  }
+  dispose() {
+    disposeTree(this.scene);
+    if (this.racer) disposeTree(this.racer.trail.mesh);
   }
   setAspect(a) {
     this.camera.aspect = a;

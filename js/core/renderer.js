@@ -71,6 +71,24 @@ const GRADE_SHADER = {
     }`,
 };
 
+// Frees the GPU side of a scene graph: every geometry, material and the textures the materials hold. A texture
+// flagged userData.shared (the car glow sprite) is kept, since the next scene uses the same one.
+export function disposeTree(root) {
+  const mats = new Set();
+  root.traverse((o) => {
+    o.geometry?.dispose();
+    const m = o.material;
+    if (m) for (const x of Array.isArray(m) ? m : [m]) mats.add(x);
+  });
+  const tex = (t) => t?.isTexture && !t.userData.shared && t.dispose();
+  for (const m of mats) {
+    tex(m.map);
+    tex(m.alphaMap);
+    if (m.uniforms) for (const u of Object.values(m.uniforms)) tex(u.value);
+    m.dispose();
+  }
+}
+
 const PRESETS = {
   high: { pixelRatio: 1.75, shadows: 0, bloom: true, fx: 1 },
   medium: { pixelRatio: 1.1, shadows: 0, bloom: true, fx: 0.7 },

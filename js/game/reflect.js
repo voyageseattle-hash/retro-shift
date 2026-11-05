@@ -22,6 +22,13 @@ export class Reflection {
     this.y = 0;
   }
 
+  // The target is half the screen in half floats: a race that leaves it behind keeps ~2 MB of GPU memory.
+  dispose() {
+    if (REFL.uRefl.value === this.rt.texture || REFL.uRefl.value === this.blank) REFL.uRefl.value = null;
+    this.rt.dispose();
+    this.blank.dispose();
+  }
+
   // y0: the road height under the car. strength 0 turns it off.
   render(gl, scene, camera, y0, strength, w, h, time) {
     REFL.uTime.value = time;

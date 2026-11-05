@@ -3,7 +3,7 @@
 
 import { showSplash } from './ui/splash.js';
 import * as THREE from '../vendor/three.js';
-import { Renderer } from './core/renderer.js';
+import { Renderer, disposeTree } from './core/renderer.js';
 import { Input } from './core/input.js';
 import { Audio } from './core/audio.js';
 import { storage } from './core/util.js';
@@ -94,6 +94,7 @@ class App {
     this.showroom.setCar(car, livery);
   }
   hideCar() {
+    this.showroom?.dispose();
     this.showroom = null;
   }
   // Unlocks earned since this race started (kept so a rebuilt results screen still shows them).
@@ -103,8 +104,10 @@ class App {
   }
 
   showAttract(on) {
-    this.showroom = null;
+    this.hideCar();
     if (!on) {
+      // (a title visit builds a whole course for the backdrop: freed here, or every race left one behind)
+      if (this.attract) disposeTree(this.attract.scene);
       this.attract = null;
       return;
     }

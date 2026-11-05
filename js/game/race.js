@@ -20,6 +20,7 @@ import { Police } from './police.js';
 import { Reflection } from './reflect.js';
 import { Construction } from './construction.js';
 import { Quake } from './quake.js';
+import { disposeTree } from '../core/renderer.js';
 
 const _v = new THREE.Vector3();
 const _a = new THREE.Vector3();
@@ -958,10 +959,11 @@ export class Race {
     return this.standings().indexOf(r) + 1;
   }
 
+  // Everything the race put on the GPU: the course, the cars, the hazards, the sign boards' canvas textures and the
+  // wet-road reflection target. (Geometry alone left ~140 geometries and ~20 textures behind per race.)
   dispose() {
-    this.scene.traverse((o) => {
-      if (o.geometry) o.geometry.dispose();
-    });
+    disposeTree(this.scene);
+    this.reflection.dispose();
   }
 }
 

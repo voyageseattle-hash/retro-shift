@@ -332,6 +332,8 @@ function glowTexture() {
   g.fillStyle = grd;
   g.fillRect(0, 0, 64, 128);
   _glowTex = new THREE.CanvasTexture(c);
+  // one sprite for every car in every race: a scene being torn down must leave it alone (renderer.disposeTree)
+  _glowTex.userData.shared = true;
   return _glowTex;
 }
 export function buildBody(bodyId, paint, glowColor) {
