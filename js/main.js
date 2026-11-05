@@ -305,7 +305,9 @@ class App {
     if (this.race) {
       if (!this.paused && this.input.menu('pause') && this.race.state !== 'finished') this.pause();
       else if (this.paused) this.ui.update();
-      if (!this.paused || this.race.online) {
+      // (the pause menu above can have quit the race this frame: a keyboard or pad press runs inside this loop, and
+      // an exception here would end the animation frame chain and freeze the title under the menu)
+      if (this.race && (!this.paused || this.race.online)) {
         this.race.update(dt);
         this.net.tick(dt, this.race);
         this.ui.updateHud(this.race, dt);
