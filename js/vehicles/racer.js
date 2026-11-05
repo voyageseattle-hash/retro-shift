@@ -268,7 +268,8 @@ export class Racer {
       vR *= Math.exp(-grip * dt);
       this.slip = clamp(Math.abs(vR) / 8 + (d.active ? 0.5 : 0), 0, 1);
 
-      const speedK = clamp(Math.abs(vF) / 7, 0, 1);
+      // hover pads can pivot a craft that's on the gas with no speed (nose into a rail), so it never sits stuck there
+      const speedK = Math.max(clamp(Math.abs(vF) / 7, 0, 1), throttle > 0 ? 0.45 : 0);
       const highK = 1 - 0.4 * clamp(Math.abs(vF) / P.topSpeed, 0, 1);
       let target = -steer * P.steer * speedK * highK * (vF < -0.5 ? -1 : 1);
       if (d.active) target = -(d.dir * P.steer * 0.62 + steer * P.steer * 0.42) * speedK;
