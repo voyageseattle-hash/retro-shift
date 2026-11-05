@@ -600,7 +600,7 @@ export class Quake {
       c.mat.color.set(0xffffff).lerp(_c.set(LAVA_HOT), hot);
       // (kept dim: the glow pass stacks fast at a distance, and a dozen cracks would wash the road out)
       c.mat.opacity = (0.42 + 0.3 * env + 0.18 * hot) * far;
-      const go = (hot ? hot * (0.1 + lv * (0.22 + 0.12 * Math.sin(t * 3 + c.pts[0][0]))) : 0.16 + 0.3 * env) * far;
+      const go = (hot ? hot * (0.08 + lv * (0.16 + 0.1 * Math.sin(t * 3 + c.pts[0][0]))) : 0.16 + 0.3 * env) * far;
       _c.set(hot ? LAVA : 0xb04cff).lerp(_c2.set(CRUST), hot * (1 - lv));
       for (const g of [c.glow, c.glow2]) {
         g.material.opacity = go;
@@ -670,9 +670,9 @@ export class Quake {
     // heat: full through RED and BOTH, cooled crust through BLUE
     const heat = lv;
     pool.ripMat.color.set(LAVA).lerp(_c.set(CRUST), 1 - heat);
-    pool.ripMat.opacity = on * far * (0.15 + 0.45 * heat) * (0.75 + 0.25 * Math.sin(t * 2.6 + pool.s0));
+    pool.ripMat.opacity = on * far * (0.1 + 0.25 * heat) * (0.75 + 0.25 * Math.sin(t * 2.6 + pool.s0));
     pool.rimMat.color.set(LAVA_HOT).lerp(_c.set(0x5a3048), 1 - heat);
-    pool.rimMat.opacity = on * far * (0.15 + 0.55 * heat);
+    pool.rimMat.opacity = on * far * (0.12 + 0.33 * heat);
     // the sheet is plain glass, not additive: it can be a strong orange without blooming
     pool.fillMat.color.set(0xd04a10).lerp(_c.set(0x0a0408), 1 - heat);
     pool.fillMat.opacity = on * 0.85;
