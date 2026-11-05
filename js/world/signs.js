@@ -123,6 +123,9 @@ export function buildSigns(world) {
   for (const z of world.storms || []) {
     addSign(world, main, back(main, z.u0 + 0.035, 120), 0, z.name, z.kind === 'meteor' ? 'RED WORLD · GO BLUE OR RIDE IT OUT' : 'BLUE WORLD · GO RED OR RIDE IT OUT', z.mask);
   }
+  // the road hazards (game/traffic.js, game/police.js): a board a way before each
+  if (def.traffic) addSign(world, main, back(main, def.traffic.at, 60), 0, 'HEAVY TRAFFIC', 'SHIFT TO CLEAR A WORLD', M.ALL);
+  if (def.chase) addSign(world, main, back(main, def.chase.sign, 60), 0, 'POLICE CHASE', 'IN BOTH ONLY · HOLD A LENS', M.X);
   for (const g of def.gaps || []) {
     const path = g.path ? world.paths.find((q) => q.id === g.path) : main;
     if (!path || g.secret) continue;

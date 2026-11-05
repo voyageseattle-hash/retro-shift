@@ -134,6 +134,7 @@ export class UI {
       </div>
       <p class="rule">Shift into a wall at the last moment for a CLOSE PHASE boost. A road that only your lens can see doesn't drain SHIFT. Watch the road: if the strip under you is the colour you shifted away from, it's gone. Grab white shards for SHIFT, phase through walls for a little more.</p>
       <p class="rule"><b>STORMS</b>: meteors fall in the red world, lightning strikes in the blue. Dodge the rings, or shift to the other lens, where the storm isn't, and lose that lens's shortcuts.</p>
+      <p class="rule"><b>HEAVY TRAFFIC</b> (Grid City): every car on the road is in one world. Weave through it in BOTH, or shift to a lens to clear half the road and give up that lens's routes. Rear-end one flat out and you both come apart. <b>POLICE CHASE</b> (Void Field): once a lap a getaway car and three cruisers tear through the field. Cruisers ram and fire lasers, each shot marked by rings a beat before it lands. The chase only exists in BOTH: hold a lens to drive straight through it, and mind that lens's holes in the road.</p>
       <p class="rule"><b>MONO RUN</b> takes BOTH away: your BOTH button swaps RED and BLUE, each swap costs SHIFT, and nothing refills it but shards and phasing.</p>
       <table class="keys">
         <tr><td>Drive</td><td>${g('W')} ${g('A')} ${g('S')} ${g('D')} / arrows</td><td>RT · LT · stick</td></tr>

@@ -15,6 +15,8 @@ import { driverOf, pick } from './story.js';
 import { Debris } from './wreck.js';
 import { SpeedLines } from './speedlines.js';
 import { Storms } from './storms.js';
+import { Traffic } from './traffic.js';
+import { Police } from './police.js';
 import { Reflection } from './reflect.js';
 
 const _v = new THREE.Vector3();
@@ -64,8 +66,10 @@ export class Race {
     this.speedLines = new SpeedLines();
     this.scene.add(this.speedLines.mesh);
     this.storms = new Storms(this);
+    this.traffic = new Traffic(this);
+    this.police = new Police(this);
     this.reflection = new Reflection();
-    this.scene.add(this.storms.group);
+    this.scene.add(this.storms.group, this.traffic.group, this.police.group);
     this.slowT = 0;
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
     // browser simulates only its own racers (the host also runs the AI); everyone else is a puppet fed by the network.
@@ -411,6 +415,8 @@ export class Race {
     for (const g of this.ghosts) g.update(this.raceTime, p.mode);
     this.debris.update(sim);
     this.storms.update(sim, p);
+    this.traffic.update(sim, p);
+    this.police.update(sim, p);
 
     // visuals
     this.app.net?.applyPuppets(this);
@@ -567,6 +573,8 @@ export class Race {
         this.world.layers.update(0, pl.mode, this.t);
         this.env.useView(k);
         this.env.update(this.dtLast || 0, this.t, this.cams[k].camera);
+        this.traffic.render(pl.mode);
+        this.police.render(pl.mode);
       },
     }));
   }

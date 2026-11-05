@@ -103,6 +103,9 @@ export class RaceAI {
       if (d < -2 || d > n) continue;
       obs.push(o);
     }
+    // traffic and the police convoy read like obstacles (each in its own world), see game/traffic.js, game/police.js
+    for (const o of r.session?.traffic?.near(P, pi, n) || []) obs.push(o);
+    for (const o of r.session?.police?.near(P, pi, n) || []) obs.push(o);
     // For each world, the best single lane through everything solid in it.
     const LANES = [-0.65, -0.35, 0, 0.35, 0.65].map((f) => f * P.halfW);
     // Obstacles inside the reaction distance can't be dodged by a lane change any more, so they are checked
@@ -146,6 +149,8 @@ export class RaceAI {
       if (m === r.mode) s -= 1.5;
       // a storm in this lens: worth dodging, unless it's the one guarding the shortcut we're going for
       if (r.session?.storms?.threat(r, m) && !(saving && m !== BOTH)) s += 5;
+      // the police chase is only in BOTH: worth a lens to get through it
+      if (r.session?.police?.threat(r, m)) s += 5;
       return s;
     };
     this.think -= dt;
@@ -214,6 +219,12 @@ export class RaceAI {
     ctl.throttle = lat > limit ? 0.35 : 1;
     ctl.brake = lat > limit * 1.45 && r.speed > 22 ? 0.5 : 0;
     ctl.drift = false;
+    // traffic or a cruiser dead ahead in our lens and slower: ease off (the hazard says how hard)
+    const hz = r.session?.traffic?.brakeFor(r, this.wantMode) || r.session?.police?.brakeFor(r, this.wantMode);
+    if (hz) {
+      ctl.throttle = Math.min(ctl.throttle, hz.throttle);
+      ctl.brake = Math.max(ctl.brake, hz.brake);
+    }
     // stuck facing the wrong way: a three-point turn, reversing with the wheel one way, then driving out
     if (this.turn > 0) {
       this.turn -= dt;
