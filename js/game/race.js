@@ -15,6 +15,8 @@ import { driverOf, pick } from './story.js';
 import { Debris } from './wreck.js';
 import { SpeedLines } from './speedlines.js';
 import { Storms } from './storms.js';
+import { Traffic } from './traffic.js';
+import { Police } from './police.js';
 import { Reflection } from './reflect.js';
 import { Construction } from './construction.js';
 import { Quake } from './quake.js';
@@ -66,6 +68,8 @@ export class Race {
     this.speedLines = new SpeedLines();
     this.scene.add(this.speedLines.mesh);
     this.storms = new Storms(this);
+    this.traffic = new Traffic(this);
+    this.police = new Police(this);
     this.reflection = new Reflection();
     this.scene.add(this.storms.group);
     // the course hazards that change lap by lap: road works (Fractal Route), the quake (Echo Ruins)
@@ -437,6 +441,8 @@ export class Race {
     this.storms.update(sim, p);
     this.works.update(sim);
     this.quake.update(sim, p);
+    this.traffic.update(sim, p);
+    this.police.update(sim, p);
 
     // visuals
     this.app.net?.applyPuppets(this);
@@ -594,6 +600,8 @@ export class Race {
         this.world.layers.update(0, pl.mode, this.t);
         this.env.useView(k);
         this.env.update(this.dtLast || 0, this.t, this.cams[k].camera);
+        this.traffic.render(pl.mode);
+        this.police.render(pl.mode);
       },
     }));
   }

@@ -188,6 +188,8 @@ export const TRACKS = [
       ],
       boosts: [{ at: P(0, 0.4) }, { at: P(10, 0.5), lat: 0.4 }, { at: P(18, 0.6), mask: M.BO }, { at: P(20, 0.5), mask: M.BO }],
       shards: [{ at: P(2, 0.4), n: 3 }, { at: P(11, 0.4), n: 3 }, { at: P(16, 0.1), n: 3, mask: M.R }],
+      // heavy traffic (game/traffic.js) all round the loop, signed just past the line
+      traffic: { n: 18, at: P(0, 0.6) },
     }),
   }),
 
@@ -217,6 +219,8 @@ export const TRACKS = [
       obstacles: [...field(P(2, 0.2), 0.1, 12, 31), ...field(P(5, 0.1), 0.09, 10, 37), ...field(P(8, 0.4), 0.05, 6, 41)],
       boosts: [{ at: P(0, 0.4) }, { at: P(4, 0.3), mask: M.BO }, { at: P(6, 0.2), mask: M.RO }],
       shards: [{ at: P(0, 0.7), n: 3 }, { at: P(4, 0.6), n: 4 }, { at: P(6, 0.9), n: 3, mask: M.R }],
+      // the police chase (game/police.js): set off as you cross `at`, off the edge at `out`, signed at `sign`
+      chase: { at: P(0, 0.1), out: P(6, 0.75), sign: P(0, 0.5) },
     }),
   }),
 
