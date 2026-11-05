@@ -245,6 +245,20 @@ export class Race {
     }
   }
 
+  // A respawned car traces its lines back in over half a second; its hull fills in once the frame is mostly there.
+  drawIn(r, dt) {
+    r.drawIn = Math.min(1, r.drawIn + dt / 0.55);
+    const f = r.drawIn;
+    const done = f >= 1;
+    r.root.traverse((o) => {
+      if (o.isLineSegments && o.geometry?.getAttribute('position')) {
+        const n = o.geometry.getAttribute('position').count;
+        o.geometry.setDrawRange(0, done ? Infinity : Math.ceil((n * f * f) / 2) * 2);
+      } else if (o.isMesh && o.userData.hull) o.visible = done || f > 0.65;
+    });
+    if (done) r.drawIn = undefined;
+  }
+
   // Is this racer close enough to the camera for its debris to be worth drawing?
   near(r) {
     return this.players.some((p) => p.pos.distanceToSquared(r.pos) < 260 * 260);
@@ -329,7 +343,11 @@ export class Race {
     r.invuln = 1.5;
     r.vel.set(Math.sin(sp.yaw), 0, Math.cos(sp.yaw)).multiplyScalar(12);
     if (r.ai) Object.assign(r.ai, { path: this.world.main, _branch: null, turn: 0, pinned: 0, planT: 0 });
+    // the car draws itself back in, line by line, with a flash where it lands
+    r.drawIn = 0;
+    if (this.near(r)) this.debris.sparks(r.pos, _v.set(0, 0, 0), 28, 0xffffff, 12, r.pos.y - 0.3);
     if (r.isPlayer) {
+      this.app.audio.play('phase');
       this.lensChanged(r);
       this.cam.snap(r);
     }
@@ -415,6 +433,7 @@ export class Race {
     // visuals
     this.app.net?.applyPuppets(this);
     for (const r of this.racers) if (r.puppet ? r.root.visible : r.respawnT <= 0) r.syncVisual(dt);
+    for (const r of this.racers) if (r.drawIn !== undefined && r.respawnT <= 0) this.drawIn(r, dt);
     if (this.split) {
       // the obstacles move once; each view then fades the worlds for its own player's lens (see views())
       for (const fn of this.world.animated) fn(this.t, dt);

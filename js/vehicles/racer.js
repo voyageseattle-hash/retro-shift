@@ -410,7 +410,7 @@ export class Racer {
     }
     m.glowMat.opacity = 0.34 + (this.drift.active ? 0.2 : 0);
     // spinning out after a hit
-    if (this.invuln > 0) root.visible = Math.floor(this.invuln * 14) % 2 === 0 || this.invuln < 0.2;
+    if (this.invuln > 0 && this.drawIn === undefined) root.visible = Math.floor(this.invuln * 14) % 2 === 0 || this.invuln < 0.2;
     else root.visible = true;
   }
 }
