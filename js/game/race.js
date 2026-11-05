@@ -71,7 +71,7 @@ export class Race {
     this.traffic = new Traffic(this);
     this.police = new Police(this);
     this.reflection = new Reflection();
-    this.scene.add(this.storms.group);
+    this.scene.add(this.storms.group, this.traffic.group, this.police.group);
     // the course hazards that change lap by lap: road works (Fractal Route), the quake (Echo Ruins)
     this.works = new Construction(this);
     this.quake = new Quake(this);
