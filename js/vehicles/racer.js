@@ -284,7 +284,9 @@ export class Racer {
       // the Skimmer glides: once it has really left the road at speed its pads carry it, sinking no faster than a
       // few metres a second for a second and a half, and it steers in the air. Enough to cross a glide gap the
       // others drop into, and to float the far side of a drop while the Blade clings down it.
-      const gliding = F.glide && this.airTime > 0.08 && this.airTime < 1.6 && this.speed > 25 && !this.controlLocked;
+      // (only over a real drop: skimming a downhill road with the road just underneath is driving, not gliding)
+      const high = !this.gnd.onRoad || this.pos.y - this.gnd.y > 2;
+      const gliding = F.glide && high && this.airTime > 0.08 && this.airTime < 1.6 && this.speed > 25 && !this.controlLocked;
       this.yawRate = damp(this.yawRate, -steer * (gliding ? 1.6 : 0.9), 3, dt);
       if (gliding) {
         this.vel.y -= G_AIR * (this.vel.y > 0 ? 0.55 : 0.22) * dt;

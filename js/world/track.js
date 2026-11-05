@@ -404,6 +404,7 @@ export class TrackWorld {
       // No rails where it overlaps the main road (where it leaves and rejoins it); rails everywhere else.
       const fr = {};
       const fr2 = {};
+      const open = [];
       let hint = iA;
       for (let i = 0; i < path.N; i++) {
         if (!main.frame(path.px[i], path.pz[i], hint, fr)) continue;
@@ -419,9 +420,20 @@ export class TrackWorld {
         const r = latOf(path.px[i] + ex, path.pz[i] + ez);
         // the edge nearer the road's middle opens; the outer one stays unless it's well inside the road too (a
         // strip laid flush along the road's edge keeps its outer rail, which is the road's edge there)
-        if (l < r) path.railL[i] = 0;
+        open.push([i, l < r ? 'L' : 'R', Math.max(l, r) < this.halfWidth - 0.5]);
+      }
+      // apply only in runs of 3+ neighbouring samples: a lone sample where the branch brushes the main road's frame
+      // would leave a notch in the rail that a craft riding it catches on
+      for (let k = 0; k < open.length; k++) {
+        const [i, side, both] = open[k];
+        const prev = k > 0 && open[k - 1][0] === i - 1;
+        const next = k < open.length - 1 && open[k + 1][0] === i + 1;
+        const prev2 = k > 1 && open[k - 2][0] === i - 2;
+        const next2 = k < open.length - 2 && open[k + 2][0] === i + 2;
+        if (!((prev && next) || (prev && prev2) || (next && next2))) continue;
+        if (side === 'L') path.railL[i] = 0;
         else path.railR[i] = 0;
-        if (Math.max(l, r) < this.halfWidth - 0.5) path.railL[i] = path.railR[i] = 0;
+        if (both) path.railL[i] = path.railR[i] = 0;
       }
       // And no main rail on that side at the junctions.
       const w = Math.ceil((lead * 1.3) / main.ds);
