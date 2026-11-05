@@ -27,6 +27,8 @@ const _v = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _q = new THREE.Vector3();
+const _t0 = new THREE.Vector3();
+const _t1 = new THREE.Vector3();
 const _c = new THREE.Color();
 const _c2 = new THREE.Color();
 const ADD = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending };
@@ -572,9 +574,10 @@ export class Quake {
       const x = s / main.ds;
       const i = Math.floor(x);
       const f = x - i;
-      main.point(z.i0 + i, lat, h, _p);
-      main.point(z.i0 + i + 1, lat, h, _q);
-      return out.copy(_p).lerp(_q, f);
+      // (own scratch vectors: callers hold results in _p/_q/_v/_d across calls)
+      main.point(z.i0 + i, lat, h, _t0);
+      main.point(z.i0 + i + 1, lat, h, _t1);
+      return out.copy(_t0).lerp(_t1, f);
     };
     // cracks: drawn as far as they've grown; white in the quake, orange and glowing once the lava is up
     const hot = z.hotStart !== undefined ? clamp((t - z.hotStart) / 2.5, 0, 1) : 0;
