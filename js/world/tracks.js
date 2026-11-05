@@ -269,6 +269,7 @@ export const TRACKS = [
     blurb: 'A mind-bending track of repeating, shifting structures.',
     decor: 'fractal',
     seed: 88,
+    works: true, // the road works crew (game/construction.js)
     laps: 3,
     sun: 0,
     points: [
