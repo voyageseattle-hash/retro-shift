@@ -548,6 +548,17 @@ export class Audio extends Engine {
         super.play('thunder', 0.9);
         super.play('bolt');
         break;
+      case 'quake':
+        // the ground rolling: a long low thump under a slow filtered rumble
+        this.thump(t, 52, 24, 1.8, 0.6);
+        this.swell(t, 2.2, 0.28, W, 'lowpass', 420, 110, 0.9);
+        break;
+      case 'crack':
+        // a plate letting go: a snap and a falling groan
+        super.play('crunch');
+        this.tone('sawtooth', 180, t, 1.1, 0.12, W, { slideTo: 36, filter: 700 });
+        this.thump(t + 0.05, 70, 26, 1.2, 0.7);
+        break;
       case 'smash':
         super.play('crunch');
         super.play('spark');

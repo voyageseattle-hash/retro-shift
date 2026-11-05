@@ -328,6 +328,7 @@ export const TRACKS = [
     blurb: 'The remnants of a larger structure, with alternate paths across worlds.',
     decor: 'ruins',
     seed: 1010,
+    quake: true, // the three-act quake (game/quake.js)
     laps: 3,
     sun: 1,
     points: [

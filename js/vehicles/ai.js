@@ -146,6 +146,8 @@ export class RaceAI {
       if (m === r.mode) s -= 1.5;
       // a storm in this lens: worth dodging, unless it's the one guarding the shortcut we're going for
       if (r.session?.storms?.threat(r, m) && !(saving && m !== BOTH)) s += 5;
+      // lava ahead in this lens (the quake course): blue cools it
+      if (r.session?.quake?.threat(r, m)) s += 6;
       return s;
     };
     this.think -= dt;
@@ -180,6 +182,7 @@ export class RaceAI {
       for (const lat of LANES) {
         let c = Math.abs(lat - (r.track ? r.track.lat : 0)) * 0.05 + Math.abs(lat - this.prefLat) * 0.02;
         c += hits(this.wantMode, lat, true) * 10;
+        c += (r.session?.quake?.laneCost(r, this.wantMode, lat) || 0) * 6;
         for (const p of w.pads) if (p.path === P && solidIn(p.mask, this.wantMode) && Math.abs(p.i - pi) < n && Math.abs(lat - p.lat) < 2) c -= 0.6;
         if (c < bestCost) {
           bestCost = c;
