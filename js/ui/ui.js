@@ -134,6 +134,7 @@ export class UI {
       </div>
       <p class="rule">Shift into a wall at the last moment for a CLOSE PHASE boost. A road that only your lens can see doesn't drain SHIFT. Watch the road: if the strip under you is the colour you shifted away from, it's gone. Grab white shards for SHIFT, phase through walls for a little more.</p>
       <p class="rule"><b>STORMS</b>: meteors fall in the red world, lightning strikes in the blue. Dodge the rings, or shift to the other lens, where the storm isn't, and lose that lens's shortcuts.</p>
+      <p class="rule"><b>ROAD WORKS</b> on Fractal Route move to a new stretch every lap: blue barriers shut the left lane, a red digger shuts the right, and the crane's load swings over the slit between. RED opens the left lane, BLUE the right. <b>ECHO RUINS</b> shakes itself apart over three laps: a quake, then lava (BLUE cools it, RED and BOTH burn), then the plates split and the road you learned is gone. Hold speed for the rift; RED clings down the drop and the slab, BLUE glides.</p>
       <p class="rule"><b>MONO RUN</b> takes BOTH away: your BOTH button swaps RED and BLUE, each swap costs SHIFT, and nothing refills it but shards and phasing.</p>
       <table class="keys">
         <tr><td>Drive</td><td>${g('W')} ${g('A')} ${g('S')} ${g('D')} / arrows</td><td>RT · LT · stick</td></tr>
