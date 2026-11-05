@@ -34,8 +34,9 @@ export function circle(r, seg, jag = 0) {
 // ------------------------------------------------------------------ vehicle templates
 // A template is a few line segments, hull triangles (dark, so the road doesn't show through) and glow triangles
 // (light cones and halos). Every segment and glow carries a tag, and the fleet colours tags per vehicle when it
-// draws: body lines in the world's colour, glass paler, lamps hot, a light bar flashing.
-export const TAG = { body: 0, glass: 1, head: 2, tail: 3, barL: 4, barR: 5, under: 6, marker: 7 };
+// draws: body lines in the world's colour, glass paler, lamps hot, a light bar flashing. A tag coloured black
+// draws nothing (everything is additive), which is how brake lamps and halos switch off.
+export const TAG = { body: 0, glass: 1, head: 2, tail: 3, barL: 4, barR: 5, under: 6, marker: 7, brake: 8, stripe: 9, halo: 10 };
 
 export const trap = (z, w, h, y0 = 0.25, top = 0.8) => ({ z, pts: [[-w, y0], [w, y0], [w * top, y0 + h], [-w * top, y0 + h]] });
 
@@ -82,6 +83,16 @@ export class Kit {
   lamp(x, y, z, w, tag) {
     this.seg([x - w, y, z], [x + w, y, z], tag);
     this.seg([x, y - 0.09, z], [x, y + 0.09, z], tag);
+  }
+  // a lamp that reads at a distance: the lit bar, and a soft square of glow facing the way it shines (dir: +1 for
+  // a headlamp, -1 for a tail lamp)
+  lampGlow(x, y, z, w, dir, tag, alpha) {
+    this.lamp(x, y, z, w, tag);
+    const zz = z + dir * 0.03;
+    // a bright core and a wider, fainter halo, so the lamp falls off instead of reading as a flat square
+    const quad = (kw, kh, a) => this.glowQuad([x - w * kw, y - w * kh, zz], [x + w * kw, y - w * kh, zz], [x + w * kw, y + w * kh, zz], [x - w * kw, y + w * kh, zz], tag, a);
+    quad(1.3, 0.8, alpha);
+    quad(2.6, 1.7, alpha * 0.3);
   }
   glowTri(a, b, c, tag, alpha) {
     this.G.push(...a, ...b, ...c);
@@ -158,8 +169,9 @@ export class Fleet {
     this.ng = 0;
   }
   // m: the vehicle's world matrix; pal: a THREE.Color per tag; alpha scales every colour (additive, so it fades);
-  // ghost draws the lines only (a vehicle in a world the viewer isn't looking at)
-  draw(tpl, m, alpha, pal, ghost = false) {
+  // ghost draws the lines only (a vehicle in a world the viewer isn't looking at); glowK scales the glows alone
+  // (lamps are pushed up with distance, so a vehicle far down the road still reads as a pair of lights)
+  draw(tpl, m, alpha, pal, ghost = false, glowK = 1) {
     const e = m.elements;
     const X = (x, y, z) => e[0] * x + e[4] * y + e[8] * z + e[12];
     const Y = (x, y, z) => e[1] * x + e[5] * y + e[9] * z + e[13];
@@ -200,7 +212,7 @@ export class Fleet {
     if (o + G.length <= this.gp.length) {
       for (let t = 0; t < tpl.glows; t++) {
         const c = pal[tpl.Gt[t]];
-        const a = tpl.Ga[t] * alpha;
+        const a = tpl.Ga[t] * alpha * glowK;
         for (let v = 0; v < 3; v++) {
           const i = t * 9 + v * 3;
           const x = G[i], y = G[i + 1], z = G[i + 2];
@@ -300,53 +312,144 @@ export function hitRacer(veh, r) {
 }
 
 // ------------------------------------------------------------------ the telegraph
-// The storms' warning on the road, then the hit: a shockwave rolls out and a scorch cools. The group sits on the
-// spot; call update(t, warn, radius) each frame, dispose() when done() says so.
+// The strikes' warning on the road, then the hit: a shockwave rolls out and a scorch cools. The group sits on the
+// spot; call update(t, warn) each frame, dispose() when done() says so. Built to read from a chase cam as much as
+// from above: the rings are thick, a low cage of ticks stands on the inner one, and a pillar of light climbs out
+// of the spot as the hit comes. Every line of the warning is one piece, laid out each frame.
 const RING = 28;
+const CAGE = 16;
+const TICKS = 10;
+const SEGS = RING * 6 + CAGE + TICKS + 8;
+const dyn = (a, n) => new THREE.BufferAttribute(a, n).setUsage(THREE.DynamicDrawUsage);
 export class Telegraph {
   constructor(color, waveColor, scorchColor, radius) {
+    this.radius = radius;
+    this.color = new THREE.Color(color);
     this.fx = new THREE.Group();
     this.warnFx = new THREE.Group();
-    this.rings = [0, 1, 2].map(() => lines(circle(1, RING), color));
+    this.lp = new Float32Array(SEGS * 6);
+    this.lc = new Float32Array(SEGS * 6);
+    const lg = new THREE.BufferGeometry();
+    lg.setAttribute('position', dyn(this.lp, 3));
+    lg.setAttribute('color', dyn(this.lc, 3));
+    this.lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ vertexColors: true, ...ADD }));
+    this.lines.frustumCulled = false;
+    this.lines.renderOrder = 6;
     this.disc = new THREE.Mesh(new THREE.CircleGeometry(1, 32), new THREE.MeshBasicMaterial({ color, ...ADD, side: THREE.DoubleSide }));
     this.disc.rotation.x = -Math.PI / 2;
     this.disc.renderOrder = 5;
-    const tk = [];
-    for (let q = 0; q < 4; q++) {
-      const a = (q / 4) * Math.PI * 2;
-      const c = Math.cos(a);
-      const sn = Math.sin(a);
-      tk.push(c * 1.3 - sn * 0.25, 0, sn * 1.3 + c * 0.25, c * 1.05, 0, sn * 1.05, c * 1.05, 0, sn * 1.05, c * 1.3 + sn * 0.25, 0, sn * 1.3 - c * 0.25);
+    // the pillar: two crossed quads, bright at the foot and gone at the top
+    const pg = new THREE.BufferGeometry();
+    const pp = [];
+    const pc = [];
+    const c = this.color;
+    const w = radius * 0.3;
+    for (const [ux, uz] of [[1, 0], [0, 1]]) {
+      pp.push(-ux * w, 0, -uz * w, ux * w, 0, uz * w, ux * w, 1, uz * w, -ux * w, 0, -uz * w, ux * w, 1, uz * w, -ux * w, 1, -uz * w);
+      pc.push(c.r, c.g, c.b, c.r, c.g, c.b, 0, 0, 0, c.r, c.g, c.b, 0, 0, 0, 0, 0, 0);
     }
-    this.ticks = lines(tk, 0xffffff);
-    this.warnFx.add(...this.rings, this.disc, this.ticks);
+    pg.setAttribute('position', new THREE.Float32BufferAttribute(pp, 3));
+    pg.setAttribute('color', new THREE.Float32BufferAttribute(pc, 3));
+    this.pillar = new THREE.Mesh(pg, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, ...ADD }));
+    this.pillar.frustumCulled = false;
+    this.pillar.renderOrder = 5;
+    this.warnFx.add(this.lines, this.disc, this.pillar);
     this.wave = lines(circle(1, 40), waveColor);
     this.wave.visible = false;
     this.scorch = lines(circle(radius * 0.55, 18, 0.4).concat(circle(radius * 0.3, 12, 0.6)), scorchColor);
     this.scorch.visible = false;
     this.fx.add(this.warnFx, this.wave, this.scorch);
-    this.radius = radius;
+  }
+  // a ring of radius r at height y, n segments, brightness k, turned by rot; returns the next float offset
+  ring(o, r, y, n, k, rot = 0) {
+    const P = this.lp;
+    const C = this.lc;
+    const c = this.color;
+    for (let i = 0; i < n; i++) {
+      const a0 = (i / n) * Math.PI * 2 + rot;
+      const a1 = ((i + 1) / n) * Math.PI * 2 + rot;
+      P[o] = Math.cos(a0) * r;
+      P[o + 1] = y;
+      P[o + 2] = Math.sin(a0) * r;
+      P[o + 3] = Math.cos(a1) * r;
+      P[o + 4] = y;
+      P[o + 5] = Math.sin(a1) * r;
+      for (let v = 0; v < 6; v += 3) {
+        C[o + v] = c.r * k;
+        C[o + v + 1] = c.g * k;
+        C[o + v + 2] = c.b * k;
+      }
+      o += 6;
+    }
+    return o;
+  }
+  seg(o, ax, ay, az, bx, by, bz, k, white = false) {
+    const P = this.lp;
+    const C = this.lc;
+    const c = this.color;
+    P[o] = ax;
+    P[o + 1] = ay;
+    P[o + 2] = az;
+    P[o + 3] = bx;
+    P[o + 4] = by;
+    P[o + 5] = bz;
+    for (let v = 0; v < 6; v += 3) {
+      C[o + v] = (white ? 1 : c.r) * k;
+      C[o + v + 1] = (white ? 1 : c.g) * k;
+      C[o + v + 2] = (white ? 1 : c.b) * k;
+    }
+    return o + 6;
   }
   update(t, warn) {
     const f = Math.min(1, t / warn);
     const w = t < warn;
     this.warnFx.visible = w;
+    const R = this.radius;
     if (w) {
       const pulse = 0.65 + 0.35 * Math.sin(t * (14 + 26 * f));
-      this.rings.forEach((rg, n) => {
-        rg.scale.setScalar(this.radius * (1 + (1 - f) * (0.9 + n * 0.5)));
-        rg.material.opacity = (0.55 + 0.45 * f) * pulse * (1 - n * 0.2);
-      });
-      this.disc.scale.setScalar(this.radius * (0.15 + 0.85 * f));
-      this.disc.material.opacity = 0.14 + 0.5 * f * f;
-      this.ticks.rotation.y = t * (1.5 + 5 * f);
-      this.ticks.scale.setScalar(this.radius * (1.25 - 0.25 * f));
-      this.ticks.material.opacity = 0.5 + 0.5 * f;
+      let o = 0;
+      // three rings closing in, each drawn twice a hand apart so it reads thick
+      for (let n = 0; n < 3; n++) {
+        const r = R * (1 + (1 - f) * (0.9 + n * 0.5));
+        const k = (0.55 + 0.45 * f) * pulse * (1 - n * 0.22);
+        o = this.ring(o, r * 0.97, 0, RING, k);
+        o = this.ring(o, r * 1.03, 0.04, RING, k);
+      }
+      // the cage: a ring standing a little off the road on the inner edge, on ticks that turn
+      const cr = R * 0.8;
+      const ch = R * 0.16 + 0.15;
+      const ck = (0.4 + 0.6 * f) * pulse;
+      o = this.ring(o, cr, ch, CAGE, ck);
+      for (let i = 0; i < TICKS; i++) {
+        const a = (i / TICKS) * Math.PI * 2 - t * 0.8;
+        o = this.seg(o, Math.cos(a) * cr, 0, Math.sin(a) * cr, Math.cos(a) * cr, ch, Math.sin(a) * cr, ck * 0.8);
+      }
+      // four chevrons pointing in, turning faster as it comes
+      const rot = t * (1.5 + 5 * f);
+      const tr = R * (1.25 - 0.25 * f);
+      for (let q = 0; q < 4; q++) {
+        const a = (q / 4) * Math.PI * 2 + rot;
+        const c = Math.cos(a);
+        const sn = Math.sin(a);
+        const k = 0.5 + 0.5 * f;
+        o = this.seg(o, (c * 1.3 - sn * 0.25) * tr, 0.05, (sn * 1.3 + c * 0.25) * tr, c * 1.05 * tr, 0.05, sn * 1.05 * tr, k, true);
+        o = this.seg(o, c * 1.05 * tr, 0.05, sn * 1.05 * tr, (c * 1.3 + sn * 0.25) * tr, 0.05, (sn * 1.3 - c * 0.25) * tr, k, true);
+      }
+      const G = this.lines.geometry;
+      G.setDrawRange(0, o / 3);
+      G.attributes.position.needsUpdate = G.attributes.color.needsUpdate = true;
+      this.disc.scale.setScalar(R * (0.15 + 0.85 * f));
+      this.disc.material.opacity = 0.06 + 0.3 * f * f;
+      // the pillar climbs out of the spot over the last two thirds of the warning
+      const ph = Math.max(0, f - 0.35) / 0.65;
+      this.pillar.visible = ph > 0;
+      this.pillar.scale.set(1, R * (1.5 + 3.5 * ph), 1);
+      this.pillar.material.opacity = 0.75 * ph * pulse;
       return;
     }
     const a = t - warn;
     this.wave.visible = a < 0.55;
-    this.wave.scale.setScalar(this.radius * (0.4 + a * 7));
+    this.wave.scale.setScalar(R * (0.4 + a * 7));
     this.wave.material.opacity = Math.max(0, 1 - a / 0.55);
     this.scorch.visible = true;
     this.scorch.material.opacity = Math.max(0, 1 - a / 3.2) * (0.75 + 0.25 * Math.sin(a * 40) * Math.max(0, 1 - a));

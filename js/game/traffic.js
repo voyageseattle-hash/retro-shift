@@ -16,6 +16,20 @@ const PACE = 64; // m/s: roughly race pace; traffic cruises at a fraction of it
 const WRECK_INTO = 20; // closing speed (m/s) that wrecks a rival into the back of a vehicle (the player takes a bit more)
 
 // ------------------------------------------------------------------ the vehicles
+// Each one is a boxy silhouette you can tell apart at a glance (a low car, a tall van, a long truck), with the
+// lamps every car on a night road has: white headlamps throwing a cone, a pair of red tail lamps, amber markers
+// along the big ones, and brake lamps that flare (TAG.brake is black until the vehicle brakes). The lamps are what
+// read from the chase cam, so they carry most of the glow; the body lines carry the world's colour.
+// A rear lamp cluster: tail lamps either side, a brake flare behind them and a spill of red on the road behind.
+function tailLamps(K, x, y, z, w, hw, under) {
+  for (const s of [-1, 1]) {
+    K.lampGlow(s * x, y, z, w, -1, TAG.tail, 0.75);
+    K.glowQuad([s * x - w * 2, y - w, z - 0.02], [s * x + w * 2, y - w, z - 0.02], [s * x + w * 2, y + w, z - 0.02], [s * x - w * 2, y + w, z - 0.02], TAG.brake, 0.6);
+  }
+  // the lit strip between them, and the brake spill behind
+  K.seg([-x + w, y, z], [x - w, y, z], TAG.tail);
+  K.glowQuad([-hw, 0.05, z - 0.3], [hw, 0.05, z - 0.3], [hw * 0.7, 0.05, z - under], [-hw * 0.7, 0.05, z - under], TAG.brake, 0.16);
+}
 function carTpl() {
   const K = new Kit();
   K.loft([trap(-2.2, 0.82, 0.55, 0.3, 0.9), trap(-1.4, 0.9, 0.62, 0.25, 0.95), trap(-0.9, 0.9, 1.2, 0.25, 0.78), trap(0.5, 0.9, 1.2, 0.25, 0.78), trap(1.1, 0.9, 0.68, 0.25, 0.95), trap(2.2, 0.82, 0.5, 0.3, 0.9)]);
@@ -25,12 +39,11 @@ function carTpl() {
   K.seg([-0.78, 1.19, 0.8], [0.78, 1.19, 0.8], TAG.glass);
   K.seg([0, 1.45, -0.9], [0, 0.87, -1.4], TAG.glass);
   for (const s of [-1, 1]) {
-    K.lamp(s * 0.5, 0.6, 2.21, 0.22, TAG.head);
-    K.cone(s * 0.5, 0.55, 2.2, 9, 1.4, TAG.head, 0.06);
-    K.seg([s * 0.75, 0.68, -2.21], [s * 0.2, 0.68, -2.21], TAG.tail);
+    K.lampGlow(s * 0.52, 0.6, 2.21, 0.22, 1, TAG.head, 0.7);
+    K.cone(s * 0.52, 0.55, 2.2, 10, 1.5, TAG.head, 0.07);
   }
-  K.glowQuad([-0.8, 0.5, -2.28], [0.8, 0.5, -2.28], [0.8, 0.86, -2.28], [-0.8, 0.86, -2.28], TAG.tail, 0.22);
-  K.glowQuad([-1.1, 0.06, -2.4], [1.1, 0.06, -2.4], [1.1, 0.06, 2.4], [-1.1, 0.06, 2.4], TAG.under, 0.1);
+  tailLamps(K, 0.58, 0.68, -2.22, 0.2, 1.0, 3.2);
+  K.glowQuad([-1.3, 0.06, -2.5], [1.3, 0.06, -2.5], [1.3, 0.06, 2.5], [-1.3, 0.06, 2.5], TAG.under, 0.14);
   return K.build({ w: 0.95, len: 2.3, h: 1.5 });
 }
 function vanTpl() {
@@ -40,13 +53,17 @@ function vanTpl() {
   for (const s of [-1, 1]) {
     K.path([[s * 0.99, 1.1, 0.7], [s * 0.99, 1.1, 1.45], [s * 0.99, 1.8, 1.45], [s * 0.99, 1.8, 0.7]], true, TAG.glass);
     K.seg([s * 1.0, 0.9, -2.6], [s * 1.0, 0.9, 0.6]);
-    K.lamp(s * 0.6, 0.85, 2.61, 0.22, TAG.head);
-    K.cone(s * 0.6, 0.8, 2.6, 9.5, 1.5, TAG.head, 0.06);
-    K.seg([s * 0.85, 0.5, -2.61], [s * 0.85, 1.2, -2.61], TAG.tail);
+    K.lampGlow(s * 0.6, 0.85, 2.61, 0.22, 1, TAG.head, 0.7);
+    K.cone(s * 0.6, 0.8, 2.6, 10.5, 1.6, TAG.head, 0.07);
+    // amber markers on the roof corners
+    K.lampGlow(s * 0.8, 2.02, 1.2, 0.1, 1, TAG.marker, 0.5);
+    K.lampGlow(s * 0.8, 2.02, -2.4, 0.1, -1, TAG.marker, 0.5);
+    // the tall tail lamps of a van
+    K.seg([s * 0.85, 0.5, -2.61], [s * 0.85, 1.25, -2.61], TAG.tail);
   }
   K.seg([0, 0.3, -2.6], [0, 2.0, -2.6]);
-  K.glowQuad([-1.0, 0.4, -2.68], [1.0, 0.4, -2.68], [1.0, 1.3, -2.68], [-1.0, 1.3, -2.68], TAG.tail, 0.2);
-  K.glowQuad([-1.15, 0.06, -2.8], [1.15, 0.06, -2.8], [1.15, 0.06, 2.8], [-1.15, 0.06, 2.8], TAG.under, 0.1);
+  tailLamps(K, 0.85, 0.85, -2.62, 0.2, 1.1, 3.4);
+  K.glowQuad([-1.35, 0.06, -2.9], [1.35, 0.06, -2.9], [1.35, 0.06, 2.9], [-1.35, 0.06, 2.9], TAG.under, 0.14);
   return K.build({ w: 1.05, len: 2.7, h: 2.1 });
 }
 function truckTpl() {
@@ -59,13 +76,14 @@ function truckTpl() {
   for (const s of [-1, 1]) {
     K.path([[s * 1.19, 1.5, 3.0], [s * 1.19, 1.5, 3.8], [s * 1.19, 2.4, 3.8], [s * 1.19, 2.4, 3.0]], true, TAG.glass);
     for (const y of [1.4, 2.4]) K.seg([s * 1.3, y, -4.7], [s * 1.3, y, 1.6]);
-    for (const z of [-3.5, -1.5, 0.5]) K.seg([s * 1.31, 3.35, z - 0.15], [s * 1.31, 3.35, z + 0.15], TAG.marker);
-    K.lamp(s * 0.75, 1.0, 4.71, 0.25, TAG.head);
-    K.cone(s * 0.75, 0.9, 4.7, 11, 1.7, TAG.head, 0.06);
-    K.seg([s * 1.0, 0.8, -4.71], [s * 1.0, 1.5, -4.71], TAG.tail);
+    for (const z of [-4.2, -2.4, -0.6, 1.2]) K.lampGlow(s * 1.31, 3.35, z, 0.12, s, TAG.marker, 0.45);
+    K.lampGlow(s * 0.95, 2.72, 2.1, 0.1, 1, TAG.marker, 0.5);
+    K.lampGlow(s * 0.78, 1.0, 4.71, 0.26, 1, TAG.head, 0.75);
+    K.cone(s * 0.78, 0.9, 4.7, 12, 1.8, TAG.head, 0.07);
+    K.seg([s * 1.05, 0.8, -4.71], [s * 1.05, 1.6, -4.71], TAG.tail);
   }
-  K.glowQuad([-1.2, 0.6, -4.78], [1.2, 0.6, -4.78], [1.2, 1.7, -4.78], [-1.2, 1.7, -4.78], TAG.tail, 0.2);
-  K.glowQuad([-1.5, 0.06, -4.9], [1.5, 0.06, -4.9], [1.5, 0.06, 4.9], [-1.5, 0.06, 4.9], TAG.under, 0.1);
+  tailLamps(K, 1.05, 1.1, -4.72, 0.22, 1.4, 4.2);
+  K.glowQuad([-1.7, 0.06, -5.0], [1.7, 0.06, -5.0], [1.7, 0.06, 5.0], [-1.7, 0.06, 5.0], TAG.under, 0.14);
   return K.build({ w: 1.35, len: 4.8, h: 3.4 });
 }
 const KINDS = {
@@ -75,20 +93,23 @@ const KINDS = {
 };
 let TPL = null;
 
-// Each world's palette by tag: body lines in the world's colour, glass paler, lamps warm or cool white, lights hot.
+// Each world's palette by tag: body lines in the world's colour, glass paler; the lamps are a night road's own
+// (white heads, red tails, amber markers) whichever world the vehicle is in, so it reads as traffic against a
+// city that is already red and blue.
 function palette(mask) {
   const red = mask === M.R;
   const body = new THREE.Color(red ? COLORS.red : COLORS.blue);
-  const hot = new THREE.Color(red ? COLORS.redHot : COLORS.blueHot);
   const pal = [];
   // (lines are pushed over the bloom threshold, so a car glows like the road does)
-  pal[TAG.body] = body.clone().multiplyScalar(2.2);
+  pal[TAG.body] = body.clone().multiplyScalar(1.6);
   pal[TAG.glass] = body.clone().lerp(new THREE.Color(0xffffff), 0.55).multiplyScalar(1.5);
-  pal[TAG.head] = new THREE.Color(red ? 0xfff0e4 : 0xe6f4ff).multiplyScalar(1.4);
-  pal[TAG.tail] = hot.clone().multiplyScalar(1.3);
-  pal[TAG.under] = body;
-  pal[TAG.marker] = hot.clone().multiplyScalar(1.5);
-  pal.braking = hot.clone().multiplyScalar(2.4);
+  pal[TAG.head] = new THREE.Color(0xfff4e2).multiplyScalar(2.0);
+  pal[TAG.tail] = new THREE.Color(0xff2030).multiplyScalar(2.4);
+  pal[TAG.under] = body.clone().multiplyScalar(1.1);
+  pal[TAG.marker] = new THREE.Color(0xffa030).multiplyScalar(1.6);
+  pal[TAG.brake] = new THREE.Color(0x000000);
+  pal.braking = new THREE.Color(0xff3040).multiplyScalar(2.2);
+  pal.off = pal[TAG.brake];
   return pal;
 }
 
@@ -283,6 +304,7 @@ export class Traffic {
     const w = R.world;
     const N = P.N;
     this.t = (this.t || 0) + dt;
+    this.viewer = viewer;
     for (const r of R.racers) r.trafCd = Math.max(0, (r.trafCd || 0) - dt);
     for (const car of this.cars) {
       if (car.gone > 0) {
@@ -465,10 +487,11 @@ export class Traffic {
   }
 
   // Draw everything for a viewer looking through this lens (split-screen draws once per view).
-  render(mode) {
+  render(mode, viewer = this.viewer) {
     if (!this.on) return;
     const F = this.fleet;
     const shimmer = 0.85 + 0.15 * Math.sin((this.t || 0) * 9);
+    const eye = viewer?.pos;
     F.begin();
     for (const car of this.cars) {
       if (car.alpha <= 0.01) continue;
@@ -476,10 +499,10 @@ export class Traffic {
       let a = car.alpha * (seen ? 1 : GHOST * shimmer);
       if (car.fade > 0 && Math.random() < 0.3) a *= 0.3; // flickers in
       const pal = this.pal[car.mask];
-      const tail = pal[TAG.tail];
-      if (car.braking) pal[TAG.tail] = pal.braking;
-      F.draw(car.tpl, car.m, a, pal, !seen);
-      pal[TAG.tail] = tail;
+      pal[TAG.brake] = car.braking ? pal.braking : pal.off;
+      // far down the road a vehicle is a few pixels of line: its lamps are turned up so it stays a pair of lights
+      const glowK = eye ? Math.min(3, Math.max(1, eye.distanceTo(car.pos) / 25)) : 1;
+      F.draw(car.tpl, car.m, a, pal, !seen, glowK);
     }
     F.end();
   }
