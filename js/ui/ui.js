@@ -598,6 +598,7 @@ export class UI {
         lines: [
           'Red walls vanish through the blue lens. Blue walls vanish through the red.',
           'Hold a lens and SHIFT drains. BOTH fills it back up.',
+          'RED is the Blade: it clings to drops and crests, fits a slit, rides a wall run. BLUE is the Skimmer: it skims water and glides a gap.',
           'Every course hides shortcuts and boost pads that only one lens can see. Watch for the signs.',
           'Grand Prix is waiting. HOW TO PLAY has every button.',
         ],
