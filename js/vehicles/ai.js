@@ -214,10 +214,10 @@ export class RaceAI {
     if (Math.random() < (1 - this.skill) * dt * 0.4) this.mistake = 0.4;
     ctl.steer = clamp(-err * 2.4, -1, 1) * (this.mistake > 0 ? 0.3 : 1);
     // threading a slit: the aim-point steering settles too slowly at speed to be sure of the gap, so hold the
-    // line with the lateral error and its rate as well
+    // line with the lateral error and its rate as well (positive steer carries the car toward positive lat)
     if (P.slit && this.formOf(P) === r.mode) {
       const latV = r.vel.x * P.rightX(pi) + r.vel.z * P.rightZ(pi);
-      ctl.steer = clamp(ctl.steer + (this.targetLat - curLat) * 0.15 - latV * 0.06, -1, 1);
+      ctl.steer = clamp(-err * 2.4 + (this.targetLat - curLat) * 0.2 - latV * 0.12, -1, 1);
     }
     // ---- throttle and brakes from the curvature ahead
     let kmax = 0;

@@ -35,7 +35,7 @@ export function layFormRoutes(world) {
 // The slit: two wall pieces with a gap between them.
 export function addSlit(world, o) {
   const path = world.pathOf(o);
-  const gap = o.gap ?? FORMS[RED].halfW + 0.45;
+  const gap = o.gap ?? FORMS[RED].halfW + 0.55;
   const w = (path.halfW + 0.5 - gap) / 2;
   const pieces = [];
   for (const s of [-1, 1]) {
