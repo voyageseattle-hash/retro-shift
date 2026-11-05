@@ -3,6 +3,7 @@
 
 import * as THREE from '../../vendor/three.js';
 import { buildModel } from '../vehicles/racer.js';
+import { addForms, updateForms } from '../vehicles/forms.js';
 import { BOTH, RED, BLUE, COLORS } from '../world/shift.js';
 import { storage } from '../core/util.js';
 
@@ -64,6 +65,8 @@ export class GhostCar {
     this.g = decodeGhost(data);
     this.label = label;
     this.model = buildModel(color, data?.body || data?.car || 'vector');
+    // the ghost is the docked pair too, dimmed, and it splits with its lens like the car did
+    addForms(this.model, data?.body || data?.car || 'vector', color, 0.45);
     this.root = this.model.root;
     const m = this.model;
     m.lineMat.opacity = 0.55;
@@ -113,5 +116,6 @@ export class GhostCar {
     }
     this.animT = (this.animT || 0) + 1 / 60;
     for (const fn of this.model.anim) fn(1 / 60, this.animT, null);
+    updateForms(this.model, this.mode, 1 / 60, 40, this.animT, this.model.body);
   }
 }

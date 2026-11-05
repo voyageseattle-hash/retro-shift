@@ -129,9 +129,10 @@ export class UI {
     s.innerHTML = `<h2>HOW TO PLAY</h2>
       <div class="cols">
         <div class="card both"><h3>BOTH WORLDS</h3><p>The safe lens. Everything's there and your SHIFT bar refills, but you're a step slower.</p></div>
-        <div class="card red"><h3>RED ONLY</h3><p>Raw speed: the highest top speed and hardest launch, with a loose back end. The blue world is gone, red-only shortcuts and boost pads appear. Drains SHIFT.</p></div>
-        <div class="card blue"><h3>BLUE ONLY</h3><p>Grip: the car sticks in corners and drifts charge their turbo faster. The red world is gone, blue-only routes appear. Drains SHIFT.</p></div>
+        <div class="card red"><h3>RED ONLY</h3><p>The BLADE: the deck drops away and you ride the bike. Raw speed with a loose back end, and the wheel clings to the road: it holds a drop or a crest and accelerates down it, fits through a SLIT and rides a WALL RUN. The blue world is gone, red-only shortcuts appear. Drains SHIFT.</p></div>
+        <div class="card blue"><h3>BLUE ONLY</h3><p>The SKIMMER: the bike folds away and you fly the hover deck. Grip in corners, drifts charge their turbo faster, it skims water, and at speed it glides off a drop or across a GLIDE GAP. The red world is gone, blue-only routes appear. Drains SHIFT.</p></div>
       </div>
+      <p class="rule"><b>TWO MACHINES IN ONE</b>: every craft is a red Blade docked in a blue Skimmer, and BOTH drives the pair, which jumps what the Blade clings to and the Skimmer glides. The boards before a drop, a crest, water, a slit, a wall run or a glide gap say which form reads it; pick the form, take the route, and watch your SHIFT.</p>
       <p class="rule">Shift into a wall at the last moment for a CLOSE PHASE boost. A road that only your lens can see doesn't drain SHIFT. Watch the road: if the strip under you is the colour you shifted away from, it's gone. Grab white shards for SHIFT, phase through walls for a little more.</p>
       <p class="rule"><b>STORMS</b>: meteors fall in the red world, lightning strikes in the blue. Dodge the rings, or shift to the other lens, where the storm isn't, and lose that lens's shortcuts.</p>
       <p class="rule"><b>ROAD WORKS</b> on Fractal Route move to a new stretch every lap: blue barriers shut the left lane, a red digger shuts the right, and the crane's load swings over the slit between. RED opens the left lane, BLUE the right. <b>ECHO RUINS</b> shakes itself apart over three laps: a quake, then lava (BLUE cools it, RED and BOTH burn), then the plates split and the road you learned is gone. Hold speed for the rift; RED clings down the drop and the slab, BLUE glides.</p>
@@ -599,6 +600,7 @@ export class UI {
         lines: [
           'Red walls vanish through the blue lens. Blue walls vanish through the red.',
           'Hold a lens and SHIFT drains. BOTH fills it back up.',
+          'RED is the Blade: it clings to drops and crests, fits a slit, rides a wall run. BLUE is the Skimmer: it skims water and glides a gap.',
           'Every course hides shortcuts and boost pads that only one lens can see. Watch for the signs.',
           'Grand Prix is waiting. HOW TO PLAY has every button.',
         ],

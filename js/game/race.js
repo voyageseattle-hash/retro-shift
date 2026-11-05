@@ -524,6 +524,7 @@ export class Race {
   coachLessons(p, dt) {
     if (p.finished || p.coachWall) return;
     this.lessonT = (this.lessonT || 0) + dt;
+    if (this.coachDrop(p)) return;
     const say = (text, key, hold = 0) => {
       this.emitP(p, 'tip', { text, key, hold });
       this.lessonT = 0;
@@ -546,6 +547,33 @@ export class Race {
         if (this.lessonT > 6) say('RED IS THE FAST LENS · BLUE GRIPS AND DRIFTS', 'red', 4);
         return;
     }
+  }
+
+  // The forms, on the first course's drop: a call before it, and what the form you were in made of it after.
+  // Returns true while it has the tip line.
+  coachDrop(p) {
+    const drop = this.def.profile?.find((f) => f.kind === 'drop');
+    if (!drop || p.lap > 1 || this.dropLesson === 3) return false;
+    let d = drop.at - p.lastU;
+    if (d < -0.5) d += 1;
+    if (!this.dropLesson && d > 0 && d < 0.08) {
+      this.dropLesson = 1;
+      this.emitP(p, 'tip', { text: 'DROP AHEAD · RED CLINGS DOWN IT · BLUE GLIDES OVER IT', key: 'both', hold: 4 });
+      return true;
+    }
+    if (this.dropLesson === 1 && d < 0.004) {
+      this.dropLesson = 2;
+      this.dropMode = p.mode;
+    }
+    if (this.dropLesson === 2 && d < -0.03) {
+      this.dropLesson = 3;
+      const m = this.dropMode;
+      const text = m === RED ? 'THE BLADE CLUNG TO THE DROP AND PICKED UP SPEED' : m === BLUE ? 'THE SKIMMER GLIDED THE DROP · EACH FORM READS THE ROAD ITS OWN WAY' : 'THE PAIR JUMPED IT · NEXT LAP TRY RED TO CLING OR BLUE TO GLIDE';
+      this.emitP(p, 'tip', { text, key: m === RED ? 'red' : m === BLUE ? 'blue' : 'both', hold: 4.5 });
+      this.lessonT = 0;
+      return true;
+    }
+    return this.dropLesson === 1 || this.dropLesson === 2;
   }
 
   coachWalls(r) {
