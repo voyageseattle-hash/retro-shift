@@ -403,7 +403,8 @@ function deckSide(H, v, s) {
     H.cap(tail);
     // one big fan: a pod on the centreline behind the Blade's tail, carried by the right half
     if (s > 0) {
-      fan = { x: 0, y: yt - 0.08, r: 0.42, z: zb - 0.42 };
+      const R = 0.3 + (v.h - 0.3) * 0.8; // sized to the deck, so the low Dash isn't all pod
+      fan = { x: 0, y: yt - 0.08, r: R, z: zb - R };
       const m0 = circle(0, fan.y, fan.z, fan.r);
       const m1 = circle(0, fan.y, zb + 0.2, fan.r);
       H.loop(H.R, m0);
@@ -432,7 +433,7 @@ function duct(H, fan, z0, z1, pod = false) {
   }
   H.cap(m1, 0.2);
   // the core: a lit disc deep enough to sit in shadow, shallow enough to show from the chase camera, ringed dimly
-  H.lamp(circle(fan.x, fan.y, lerp(z0, z1, 0.35), fan.r * 0.52), true);
+  H.lamp(circle(fan.x, fan.y, lerp(z0, z1, 0.35), fan.r * (pod ? 0.42 : 0.52)), true);
   H.loop(H.A2, circle(fan.x, fan.y, lerp(z0, z1, 0.3), fan.r * 0.78));
 }
 
