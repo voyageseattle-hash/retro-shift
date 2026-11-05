@@ -114,7 +114,8 @@ const GLYPHS = {
   ps: { confirm: '✕', back: '○', pause: 'OPTIONS', gas: 'R2', brake: 'L2', steer: 'L-STICK', drift: '□', red: 'L1', blue: 'R1', both: '△', item: 'L1', special: 'R1', look: 'R3', reset: 'SHARE', jump: 'D-PAD ▲', rear: 'D-PAD ▼', horn: 'L3', paint: '▲ ▼', choose: '◀ ▶' },
 };
 GLYPHS.generic = GLYPHS.xbox;
-GLYPHS.touch = { ...GLYPHS.keyboard, gas: 'GAS', brake: 'BRK', steer: '◀ ▶', drift: 'DRIFT', confirm: 'TAP', back: '✕', pause: '❚❚', reset: '↺', look: 'REAR', red: 'RED', blue: 'BLUE', both: 'BOTH' };
+// (the lens buttons are already labelled RED, BOTH and BLUE, so their chips and tips carry no extra glyph)
+GLYPHS.touch = { ...GLYPHS.keyboard, gas: 'GAS', brake: 'BRK', steer: '◀ ▶', drift: 'DRIFT', confirm: 'TAP', back: '✕', pause: '❚❚', reset: '↺', look: 'REAR', red: '', blue: '', both: '' };
 
 function normalizePad(p) {
   const buttons = p.buttons.map((b) => (typeof b === 'number' ? b : b.value || (b.pressed ? 1 : 0)));
@@ -261,7 +262,7 @@ export class Input {
   // Label for an action on the device the player last touched ('A', '✕', 'ENTER'...).
   glyph(action) {
     const set = this.lastDevice === 'gamepad' ? GLYPHS[this.padStyle] : this.lastDevice === 'touch' ? GLYPHS.touch : GLYPHS.keyboard;
-    return set[action] || action.toUpperCase();
+    return set[action] ?? action.toUpperCase();
   }
   promptStyle() {
     return this.lastDevice === 'gamepad' ? this.padStyle : 'keyboard';

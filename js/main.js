@@ -357,6 +357,8 @@ class App {
     if (!isTouch) return;
     const T = document.getElementById('touch');
     T.hidden = false;
+    // the first prompts on a phone name the touch buttons, not W A S D (a key press switches them back)
+    this.input.lastDevice = 'touch';
     T.innerHTML = `
       <div class="t-steer"><button data-k="left">◀</button><button data-k="right">▶</button></div>
       <div class="t-right">
