@@ -10,6 +10,16 @@ Race in **BOTH** worlds (red + blue), **RED only**, or **BLUE only**. Every piec
 
 Shift into a wall in the last moment before it and you get a CLOSE PHASE: a boost and some SHIFT back.
 
+## Two machines in one
+
+Every craft is two vehicles locked together: the **BLADE**, a narrow red monowheel bike, docked in the channel of the **SKIMMER**, a wide blue hover deck. BOTH drives the pair. Shift to RED and the deck halves unlatch and fall away, leaving the Blade; shift to BLUE and the bike folds flat into the deck and a cover slides over it, leaving the Skimmer. Each form reads the road its own way:
+
+- **The pair** (BOTH) takes a sloped drop as a small jump, and is too wide for a slit.
+- **The Blade** (RED) is narrow and its wheel clings: it holds a drop or a crest and accelerates down it, fits through a **SLIT** (a wall with a gap only the bike fits), and rides a **WALL RUN** (a strip banked up into a wall that throws everyone else off). Water bogs it down.
+- **The Skimmer** (BLUE) is wide and light: it skims water at full speed, and once it has really left the road at speed its pads carry it on a glide, over the far side of a drop or across a **GLIDE GAP** (a missing stretch of road everyone else drops into).
+
+Overhead boards call each of these before you reach it (`DROP AHEAD · RED CLINGS · BLUE GLIDES`, `WALL RUN · RED CLINGS · OTHERS FALL`, ...). Core Circuit has a drop, a glide gap and a wall run; Grid City has a crest, water and the slit. A route only your form can take holds your lens for you, so a wall run doesn't drain SHIFT.
+
 If the strip under you belongs to the world you shifted away from, it's gone. Grab white shards for SHIFT, and phase through walls for a little more.
 
 It runs in any modern browser with WebGL. There is no build step: every line on screen, every engine and effect and all the music is generated live in code. The only recorded assets are the announcer's voice (`audio/voice/`, rendered offline with the open Kokoro TTS model) and the studio logo on the splash card (`assets/splash/`).
@@ -86,7 +96,8 @@ Some roads only exist in one world. Grid City's BLUE ROOFTOPS rise out of the ro
 
 - `js/world/shift.js`: the three lenses and world masks. The rule comes from LAST LINE's red/blue 3-D matinee: a thing drawn for one eye only is there only while that eye is looking.
 - `js/world/track.js`: a closed main loop plus branch paths, each sample, wall, pad and shard tagged with the worlds it's solid in. The ground query is per racer and per lens.
-- `js/vehicles/racer.js`: the driving model is Absurd Combat Racing's truck physics (throttle curve, drift and mini-turbos, grip, slope gravity, suspension).
+- `js/vehicles/racer.js`: the driving model is Absurd Combat Racing's truck physics (throttle curve, drift and mini-turbos, grip, slope gravity, suspension), plus each form's width, cling, glide and water drag.
+- `js/vehicles/forms.js`: the Blade and the Skimmer, how they dock and split, and the FORMS table. `js/world/formroutes.js`: the glide gaps, wall runs and slits.
 - `js/vehicles/ai.js`: rivals read the road ahead in all three worlds and pick a lens, a lane and a fork.
 - `js/core/audio.js`: synthesized synthwave split into a red band and a blue band; shifting drops the other band behind a filter.
 - `js/core/input.js`, `js/core/renderer.js`, `js/game/camera.js`: carried over from Absurd Combat Racing.

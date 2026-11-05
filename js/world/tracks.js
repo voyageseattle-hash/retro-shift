@@ -71,8 +71,10 @@ export const TRACKS = [
       boosts: [{ at: P(0, 0.5), lat: 0 }, { at: P(7, 0.6), lat: -0.4 }, { at: P(12, 0.2), lat: 0.4, mask: M.RO }, { at: P(13, 0.4), mask: M.RO }, { path: 'b1', at: 0.8 }],
       shards: [{ at: P(1, 0.15), lat: 0, n: 3 }, { at: P(6, 0.3), lat: -0.4, n: 3 }, { at: P(12, 0.6), lat: 0, n: 3, mask: M.B }],
       tips: [
+        { at: P(1, 0.25), text: 'GLIDE GAP ON THE LEFT: ONLY THE BLUE SKIMMER FLOATS IT', key: 'blue' },
         { at: P(5, 0.0), text: 'A BLUE-ONLY SHORTCUT ON THE RIGHT: SHIFT TO BLUE', key: 'blue' },
         { at: P(10, 0.1), text: 'RED BRIDGE: DON’T BE IN BLUE', key: 'both' },
+        { at: P(10, 0.5), text: 'WALL RUN ON THE LEFT: ONLY THE RED BLADE RIDES IT', key: 'red' },
       ],
     }),
   }),
