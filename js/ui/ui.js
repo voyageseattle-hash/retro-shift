@@ -917,13 +917,21 @@ export class UI {
     const place = race.placeOf(p);
     const n = race.racers.length;
     const ord = ordinal(place);
-    h.place.textContent = place;
-    h.placeSup.textContent = ord.slice(String(place).length);
-    h.placeOf.textContent = `/${n}`;
-    h.lap.innerHTML = `LAP <b>${Math.min(race.laps, p.lap + 1)}</b>/${race.laps}`;
-    h.time.textContent = formatTime(p.finished ? p.finishTime : race.raceTime);
-    h.speed.textContent = Math.round(Math.abs(p.speed) * 3.6);
-    h.drift.className = `h-drift l${p.drift.active ? p.drift.level : 0}`;
+    // (every write below dirties layout and style, so a value that hasn't changed is left alone)
+    const set = (node, key, v) => {
+      if (h[`_${key}`] === v) return;
+      h[`_${key}`] = v;
+      if (key === 'lap') node.innerHTML = v;
+      else if (key === 'driftCls' || key === 'energyCls') node.className = v;
+      else node.textContent = v;
+    };
+    set(h.place, 'place', String(place));
+    set(h.placeSup, 'placeSup', ord.slice(String(place).length));
+    set(h.placeOf, 'placeOf', `/${n}`);
+    set(h.lap, 'lap', `LAP <b>${Math.min(race.laps, p.lap + 1)}</b>/${race.laps}`);
+    set(h.time, 'time', formatTime(p.finished ? p.finishTime : race.raceTime));
+    set(h.speed, 'speed', String(Math.round(Math.abs(p.speed) * 3.6)));
+    set(h.drift, 'driftCls', `h-drift l${p.drift.active ? p.drift.level : 0}`);
     for (const c of h.chips) {
       const m = +c.dataset.m;
       c.classList.toggle('active', m === p.mode);
@@ -931,10 +939,12 @@ export class UI {
       const g = this.lensGlyph(race, k, m === RED ? 'red' : m === BLUE ? 'blue' : 'both');
       if (kb.textContent !== g) kb.textContent = g;
     }
-    h.energy.style.width = `${(p.energy * 100).toFixed(1)}%`;
-    h.energyBox.className = `h-energy m${p.mode}${p.energy < 0.25 ? ' low' : ''}${h.energyBox.classList.contains('deny') ? ' deny' : ''}`;
+    const width = `${(p.energy * 100).toFixed(1)}%`;
+    if (h._width !== width) h.energy.style.width = h._width = width;
+    set(h.energyBox, 'energyCls', `h-energy m${p.mode}${p.energy < 0.25 ? ' low' : ''}${h.energyBox.classList.contains('deny') ? ' deny' : ''}`);
     h.wrong.classList.toggle('on', (p.wrongWay || 0) > 0.8 && race.state === 'race' && !p.finished);
-    h.root.dataset.mode = MODE_NAME[p.mode];
+    const mode = MODE_NAME[p.mode];
+    if (h.root.dataset.mode !== mode) h.root.dataset.mode = mode;
     // the controls, on the device in hand, while the grid waits for GO
     const pre = race.state === 'intro' || race.state === 'countdown';
     h.controls.classList.toggle('on', pre);
