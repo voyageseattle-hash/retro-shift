@@ -58,8 +58,10 @@ class Menu {
     const I = this.app.input;
     const c = this.cols;
     if (document.activeElement?.tagName === 'INPUT') return;
-    if (I.menu('down')) this.setFocus(this.focus + c);
-    if (I.menu('up')) this.setFocus(this.focus - c);
+    // in a single-row menu the arrows left and right walk the row, so up and down turn a ◀ ▶ item (the lobby's course)
+    const row = c > 1 && this.items.length <= c && this.items[this.focus].cycle;
+    if (I.menu('down')) row ? this.items[this.focus].cycle(1) : this.setFocus(this.focus + c);
+    if (I.menu('up')) row ? this.items[this.focus].cycle(-1) : this.setFocus(this.focus - c);
     if (c > 1 && I.menu('right')) this.setFocus(this.focus + 1);
     if (c > 1 && I.menu('left')) this.setFocus(this.focus - 1);
     if (c === 1 && (I.menu('left') || I.menu('right'))) this.items[this.focus].cycle?.(I.menu('right') ? 1 : -1);
