@@ -444,9 +444,14 @@ export class Police {
       if (hit.into < 2.5 && !ram) return;
       if (r.copCd > 0) return;
       r.copCd = ram ? 0.6 : 0.3;
-      // shoved across the road
-      r.vel.x += c.rx * hit.s * (ram ? 5 : 2.5);
-      r.vel.z += c.rz * hit.s * (ram ? 5 : 2.5);
+      // shoved across the road, but never off an open edge: near the side with no rail the shove only slows you
+      const t = r.track;
+      const P = t?.path;
+      const edge = P && Math.abs(t.lat) > P.halfW - 3 && Math.sign(t.lat) === Math.sign(hit.s) && !(t.lat < 0 ? P.railL[t.i] : P.railR[t.i]);
+      const push = edge ? 0 : ram ? 5 : 2.5;
+      r.vel.x += c.rx * hit.s * push;
+      r.vel.z += c.rz * hit.s * push;
+      if (edge) r.vel.multiplyScalar(0.85);
       if (ram) {
         this.stats.ram++;
         r.spinOut(0.55, hit.s);
