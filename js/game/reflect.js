@@ -16,6 +16,9 @@ export class Reflection {
     this.cam = new THREE.PerspectiveCamera();
     this.plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     REFL.uRefl.value = this.rt.texture;
+    // bound while the reflection itself is drawn, so the road never samples the target it's drawing into
+    this.blank = new THREE.DataTexture(new Uint8Array(4), 1, 1);
+    this.blank.needsUpdate = true;
     this.y = 0;
   }
 
@@ -51,6 +54,7 @@ export class Reflection {
     this.plane.constant = -(y - 0.05);
     const k = REFL.uReflK.value;
     REFL.uReflK.value = 0;
+    REFL.uRefl.value = this.blank;
     const prevTarget = gl.getRenderTarget();
     const prevClip = gl.clippingPlanes;
     gl.getClearColor(this.clear ||= new THREE.Color());
@@ -63,6 +67,7 @@ export class Reflection {
     gl.setRenderTarget(prevTarget);
     gl.clippingPlanes = prevClip;
     gl.setClearColor(this.clear, prevAlpha);
+    REFL.uRefl.value = this.rt.texture;
     REFL.uReflK.value = k;
   }
 }

@@ -58,7 +58,9 @@ export function boardTexture(title, sub, color, arrow) {
     if (sub) {
       g.shadowBlur = 0;
       g.fillStyle = '#f2ecff';
-      g.font = `700 30px 'Chakra Petch', sans-serif`;
+      let ss = 30;
+      g.font = `700 ${ss}px 'Chakra Petch', sans-serif`;
+      while (g.measureText(sub).width > 470 && ss > 16) g.font = `700 ${(ss -= 2)}px 'Chakra Petch', sans-serif`;
       g.fillText(sub, 256, 134);
     }
     tex.needsUpdate = true;

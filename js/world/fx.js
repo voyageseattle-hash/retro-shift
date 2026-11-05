@@ -66,9 +66,11 @@ export function patchWet(mat) {
           // a slow ripple, and streaks along the road like water on tarmac
           uv.x += sin(vWetP.z * 0.35 + uTime * 1.7) * 0.004 + sin(vWetP.x * 0.9 + uTime * 0.6) * 0.002;
           uv.y += sin(vWetP.x * 0.3 + uTime * 1.3) * 0.006;
+          // strongest close to the car, gone by the middle distance, so busy streets don't double up
+          float near = uReflK * (1.0 - smoothstep(25.0, 130.0, distance(vWetP, cameraPosition)));
           vec3 rc = texture2D(uRefl, uv).rgb;
-          gl_FragColor.rgb += rc * uReflK;
-          gl_FragColor.a = max(gl_FragColor.a, min(1.0, dot(rc, vec3(0.33)) * uReflK * 2.0));
+          gl_FragColor.rgb += rc * near;
+          gl_FragColor.a = max(gl_FragColor.a, min(1.0, dot(rc, vec3(0.33)) * near * 2.0));
         }`,
       );
   };

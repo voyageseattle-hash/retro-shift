@@ -446,7 +446,7 @@ export class Race {
       this.speedLines.update(dt, this.cam.camera, k, _c.set(p.mode === RED ? 0xff4a6a : p.mode === BLUE ? 0x4ab0ff : 0xe8dcff));
     } else this.speedLines.mesh.visible = false;
     this.aberr = Math.max(0, (this.aberr || 0) - dt * 3);
-    this.app.renderer.setGrade('neon', this.aberr * 1.6 + (p.boostTime > 0 ? 0.3 : 0), 0);
+    this.app.renderer.setGrade('neon', this.aberr * 1.6 + (p.boostTime > 0 ? 0.3 : 0), this.storms.flash || 0);
     const A = this.app.audio;
     A.playerEngine(p.speed, p.phys.topSpeed, p.ctl.throttle, p.boostTime > 0, p.slip || 0, p.respawnT <= 0);
     const cam = this.cam.camera;
@@ -777,7 +777,8 @@ export class Race {
           if (rel < -4 && this.near(A)) this.debris.sparks(_a.copy(A.pos).lerp(B.pos, 0.5).setY(A.pos.y + 0.5), _v, Math.round(-rel), 0xffffff, 10, A.gnd.y);
           // Rammed: the car that got hit from behind (or T-boned) comes apart. Online it's left alone: each
           // browser owns its own car.
-          if (rel < -TAKEDOWN_SPEED && this.state === 'race' && !this.online) {
+          // (not in the first seconds off the grid, where the whole field is nose to tail)
+          if (rel < -TAKEDOWN_SPEED && this.state === 'race' && this.raceTime > 4 && !this.online) {
             // the one moving slower along the hit is the one being hit
             const va = A.vel.x * _v.x + A.vel.z * _v.z;
             const vb = B.vel.x * _v.x + B.vel.z * _v.z;
