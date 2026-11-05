@@ -33,6 +33,9 @@ kbd { font-family: 'Chakra Petch', monospace; font-weight: 700; font-size: 0.8em
 /* ---------------------------------------------------------------- screens */
 #ui { position: fixed; inset: 0; pointer-events: none; z-index: 20; }
 .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px 16px; pointer-events: auto; background: radial-gradient(ellipse at center, rgba(5, 2, 12, 0.25), rgba(5, 2, 12, 0.85)); overflow-y: auto; }
+/* a screen taller than the window (HOW TO PLAY at 720p, phones) scrolls from its top: plain centring pushes the
+   heading above the scrollable area where nothing can reach it */
+.screen { justify-content: safe center; }
 .screen h2 { font-family: 'Russo One', sans-serif; font-style: italic; font-size: clamp(26px, 4vw, 44px); margin: 0; letter-spacing: 0.06em; text-shadow: 0 0 18px var(--violet); }
 .tagline { letter-spacing: 0.6em; color: #c8b8ff; font-weight: 600; font-size: clamp(11px, 1.6vw, 16px); text-shadow: 0 0 10px #6a2cff; }
 .lens-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
