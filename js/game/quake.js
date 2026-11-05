@@ -956,10 +956,12 @@ export class Quake {
     const t = this.t;
     for (const [k, V] of this.volcanoes.entries()) {
       const glow = 0.5 + 0.5 * Math.sin(t * 2.2 + k * 2);
-      V.crater.material.opacity = 0.5 + 0.5 * glow;
+      // (the volcanoes are the red world's: through the blue lens they dim to an outline, like the lava)
+      const seen = 0.25 + 0.75 * (this.heat ?? 1);
+      V.crater.material.opacity = (0.5 + 0.5 * glow) * seen;
       V.crater.material.color.set(LAVA).lerp(_c.set(LAVA_HOT), glow);
       V.crater.scale.setScalar(1 + 0.08 * glow);
-      V.body.material.opacity = 0.55 + 0.3 * glow;
+      V.body.material.opacity = (0.55 + 0.3 * glow) * seen;
       // embers out of the crater while anyone's close enough to see them
       const d2 = Math.min(...R.players.map((p) => (p.pos.x - V.x) ** 2 + (p.pos.z - V.z) ** 2));
       if (d2 < 520 * 520 && Math.random() < 0.6) {
