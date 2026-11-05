@@ -5,6 +5,7 @@
 
 import { clamp, wrapAngle, rand } from '../core/util.js';
 import { BOTH, RED, BLUE, MODES, solidIn, SHIFT } from '../world/shift.js';
+import { FORMS } from './forms.js';
 
 export class RaceAI {
   constructor(racer, world, skill = 0.8) {
@@ -93,7 +94,11 @@ export class RaceAI {
     for (let k = -1; k < n; k++) {
       const j = P.closed ? P.wrap(pi + k) : Math.min(P.N - 1, pi + k);
       const mk = P.mask[j];
-      for (const m of MODES) if (!solidIn(mk, m)) ok[m] = false;
+      for (const m of MODES) {
+        // a glide gap is road enough for the form that glides; a wall-run only for the one that clings
+        if (!solidIn(mk, m) && !(P.glide?.[j] && FORMS[m].glide)) ok[m] = false;
+        if (P.cling?.[j] && !FORMS[m].cling) ok[m] = false;
+      }
     }
     const obs = [];
     for (const o of w.obstacles) {
@@ -116,7 +121,13 @@ export class RaceAI {
         let d = o.i - pi;
         if (P.closed && d < -P.N / 2) d += P.N;
         const at = !lane && d * P.ds < react ? curLat : lat;
-        if (o.type === 'wall') c += 10;
+        if (o.slit) {
+          // a slit's pieces are walls with a gap between them: a wall to any form too wide for the gap, and a
+          // line to hold for the one that fits (a small correction is still on until the last few metres)
+          const hw = FORMS[m].halfW;
+          if (hw >= o.slit - 0.05) c += 10;
+          else if (Math.abs((!lane && d * P.ds < react * 0.35 ? curLat : lat) - o.lat) < o.w + hw + 0.12) c += 1;
+        } else if (o.type === 'wall') c += 10;
         else if (Math.abs(at - o.lat) < o.w + r.halfW + 0.8 + Math.abs(o.sweep || 0) * P.halfW) c += 1;
       }
       return c;
@@ -128,7 +139,7 @@ export class RaceAI {
     const secs = look / speed;
     const afford = r.mono ? r.energy >= SHIFT.monoCost : r.energy - SHIFT.drain * secs * 0.6 > 0.02;
     // heading for a lens-only branch: keep the meter for it, and give the branch up if it can no longer be held
-    const saving = !r.mono && this._branch && this.path === w.main && this.singleLen(this._branch) > 0;
+    const saving = !r.mono && this._branch && this.path === w.main && (this.singleLen(this._branch) > 0 || this.formOf(this._branch));
     if (saving && !this.canTakeBranch(this._branch)) {
       let d = w.main.index(this._branch.mainFrom) - pi;
       if (d < -w.main.N / 2) d += w.main.N;
@@ -180,6 +191,8 @@ export class RaceAI {
       for (const lat of LANES) {
         let c = Math.abs(lat - (r.track ? r.track.lat : 0)) * 0.05 + Math.abs(lat - this.prefLat) * 0.02;
         c += hits(this.wantMode, lat, true) * 10;
+        // a route with a slit: get on the middle line early, so there's no last-moment swerve to thread it
+        if (P.slit) c += Math.abs(lat) * 0.4;
         for (const p of w.pads) if (p.path === P && solidIn(p.mask, this.wantMode) && Math.abs(p.i - pi) < n && Math.abs(lat - p.lat) < 2) c -= 0.6;
         if (c < bestCost) {
           bestCost = c;
@@ -200,6 +213,12 @@ export class RaceAI {
     this.mistake = Math.max(0, this.mistake - dt);
     if (Math.random() < (1 - this.skill) * dt * 0.4) this.mistake = 0.4;
     ctl.steer = clamp(-err * 2.4, -1, 1) * (this.mistake > 0 ? 0.3 : 1);
+    // threading a slit: the aim-point steering settles too slowly at speed to be sure of the gap, so hold the
+    // line with the lateral error and its rate as well
+    if (P.slit && this.formOf(P) === r.mode) {
+      const latV = r.vel.x * P.rightX(pi) + r.vel.z * P.rightZ(pi);
+      ctl.steer = clamp(ctl.steer + (this.targetLat - curLat) * 0.15 - latV * 0.06, -1, 1);
+    }
     // ---- throttle and brakes from the curvature ahead
     let kmax = 0;
     for (let k = 2; k < Math.ceil(look / P.ds); k += 2) {
@@ -240,9 +259,24 @@ export class RaceAI {
     return b._single;
   }
 
+  // The form a route needs (formroutes.js): RED for a wall-run or a slit, BLUE for a glide gap, else null.
+  formOf(b) {
+    if (b._form === undefined) {
+      const slit = this.world.slits?.some((s) => s.path === b);
+      b._form = b.wallrun || slit ? RED : b.glide ? BLUE : null;
+    }
+    return b._form;
+  }
+
   // Can we hold a lens all the way along it? Running dry halfway over a lens-only road drops you through it.
   canTakeBranch(b) {
     const r = this.r;
+    const form = this.formOf(b);
+    if (form) {
+      // a form route drains on the way in (and a slit or glide gap all the way): keep a good half bar for it
+      if (r.mono) return r.mode === form || r.energy >= SHIFT.monoCost * 2;
+      return r.energy >= 0.45;
+    }
     const len = this.singleLen(b);
     if (!len) return true;
     if (r.mono) {

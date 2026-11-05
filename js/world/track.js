@@ -11,6 +11,7 @@ import { buildDecor } from './decor.js';
 import { buildSigns } from './signs.js';
 import { buildCovers } from './covers.js';
 import { layStorms } from './storms-def.js';
+import { layFormRoutes, addSlit } from './formroutes.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -103,10 +104,25 @@ export class Path {
   // Drops and crests laid into the road after it's built: heights move, the tangents follow.
   //   drop: { at, kind: 'drop', depth, down, up }: a sharp lip, a steep fall, and a long climb back
   //   crest: { at, kind: 'crest', height, len }: a sharp rise and fall
+  //   step: { at, kind: 'step', drop, len, back }: the road falls by `drop` over `len` (level at both ends) and
+  //         climbs back over `back` metres before the path ends (open paths: a glide gap's far side sits lower)
   reshape(profile) {
     const N = this.N;
     for (const f of profile) {
-      const i0 = Math.round(f.at * N);
+      const i0 = this.index(f.at);
+      if (f.kind === 'step') {
+        const back = f.back ?? 60;
+        const n1 = Math.round(f.len / this.ds);
+        const iEnd = this.closed ? i0 + Math.round((f.len + 2 * back) / this.ds) : Math.round(N * (f.end ?? 0.85));
+        const n2 = Math.round(back / this.ds);
+        for (let i = i0; i <= iEnd; i++) {
+          const k = i - i0;
+          const down = smoothstep(0, 1, Math.min(1, k / n1));
+          const up = i > iEnd - n2 ? smoothstep(0, 1, (i - (iEnd - n2)) / n2) : 0;
+          this.py[this.wrap(i)] -= f.drop * down * (1 - up);
+        }
+        continue;
+      }
       const span = f.kind === 'drop' ? f.down + f.up : f.len;
       const n = Math.round(span / this.ds);
       for (let k = 0; k <= n; k++) {
@@ -119,7 +135,13 @@ export class Path {
         this.py[this.wrap(i0 + k)] += off;
       }
     }
-    // tangents from the new heights (horizontal heading is unchanged)
+    this.reframe();
+  }
+
+  // Tangents from the heights (the horizontal heading is unchanged) and normals from the bank: run again after
+  // anything moves the heights or the bank.
+  reframe() {
+    const N = this.N;
     const ty = new Float32Array(N);
     for (let i = 0; i < N; i++) ty[i] = (this.py[this.wrap(i + 1)] - this.py[this.wrap(i - 1)]) / (2 * this.ds);
     for (let i = 0; i < N; i++) {
@@ -127,6 +149,7 @@ export class Path {
       this.tx[i] = this.thx[i] / l;
       this.tz[i] = this.thz[i] / l;
       this.ty[i] = ty[i] / l;
+      this.tb[i] = Math.tan(this.bank[i]);
       // normal: right (with bank) crossed with the tangent
       const ax = -this.thz[i], ay = this.tb[i], az = this.thx[i];
       const bx = this.tx[i], by = this.ty[i], bz = this.tz[i];
@@ -296,6 +319,7 @@ export class TrackWorld {
     this.buildMain();
     this.buildBranches();
     this.applyGaps();
+    layFormRoutes(this);
     this.minY = Math.min(...this.paths.map((p) => p.minY));
     this.maxY = Math.max(...this.paths.map((p) => p.maxY));
     this.floorY = this.minY - (def.floorDrop ?? 26);
@@ -373,7 +397,7 @@ export class TrackWorld {
         }
       }
       pts.push(E, B.clone().addScaledVector(tB, -lead * 0.5).addScaledVector(RB, (out - off) * 0.35), B, B.clone().addScaledVector(tB, 4));
-      const path = new Path(`b${k}`, pts, false, hw, { bankFactor: 3, mainFrom: b.from, mainTo: b.to });
+      const path = new Path(`b${k}`, pts, false, hw, { bankFactor: 3, mainFrom: b.from, mainTo: b.to, profile: b.profile });
       path.mask.fill(b.mask ?? M.ALL);
       path.def = b;
       path.side = side;
@@ -423,7 +447,12 @@ export class TrackWorld {
       const path = g.path ? this.paths.find((p) => p.id === g.path) : main;
       const i0 = path.index(g.at);
       const n = Math.max(2, Math.round((g.len ?? 40) / path.ds));
-      for (let k = 0; k < n; k++) path.mask[path.wrap(i0 + k)] = g.mask;
+      for (let k = 0; k < n; k++) path.mask[path.wrap(i0 + k)] = g.mask ?? 0;
+      // a glide gap: no road in any world; the Skimmer floats it (ai.js reads the flag)
+      if (g.glide) {
+        path.glide ||= new Uint8Array(path.N);
+        for (let k = 0; k < n; k++) path.glide[path.wrap(i0 + k)] = 1;
+      }
       if (g.noRails) for (let k = 0; k < n; k++) path.railL[path.wrap(i0 + k)] = path.railR[path.wrap(i0 + k)] = 0;
     }
     for (const r of this.def.noRails || []) {
@@ -492,6 +521,7 @@ export class TrackWorld {
       for (let i = 0; i < last; i++) {
         const j = path.wrap(i + 1);
         const mask = path.mask[i];
+        if (!mask) continue; // a glide gap: nothing there in any world
         const neutral = mask === M.ALL;
         const lc = neutral ? COLORS.red : colorForMask(mask);
         const rc = neutral ? COLORS.blue : colorForMask(mask);
@@ -611,7 +641,10 @@ export class TrackWorld {
   // ------------------------------------------------------------------ obstacles, pads, shards
   buildFeatures() {
     const def = this.def;
-    for (const o of def.obstacles || []) this.addObstacle(o);
+    for (const o of def.obstacles || []) {
+      if (o.type === 'slit') addSlit(this, o);
+      else this.addObstacle(o);
+    }
     for (const b of def.boosts || []) this.addPad(b);
     for (const s of def.shards || []) {
       const n = s.n ?? 3;
@@ -645,10 +678,11 @@ export class TrackWorld {
     let h;
     let lat = (o.lat ?? 0) * hw;
     if (type === 'wall') {
-      w = hw + 0.5;
+      // (a slit's two wall pieces give their own width and offset, in metres)
+      w = o.w ?? hw + 0.5;
       len = 1.2;
       h = 4.2;
-      lat = 0;
+      lat = o.latM ?? 0;
     } else if (type === 'gate') {
       // half the road blocked, side by sign of lat
       w = hw * 0.5;
@@ -803,6 +837,8 @@ export class TrackWorld {
       // (a wide craft is still on the road with its middle a little past the edge)
       if (Math.abs(f.lat) > path.halfW + (path.id === cur ? 1.4 : 0.35) + (hints._w || 0)) continue;
       if (!solidIn(f.mask, mode)) continue;
+      // a wall-run holds only a craft that clings (the Blade); the others find nothing under them
+      if (path.cling?.[f.i] && !hints._cling) continue;
       if (f.y > y + 1.6 || f.y < y - 7) continue;
       // a strip climbing out of the road beneath you (a ramp laid over it) takes you up
       const j = Math.min(path.N - 1, f.i + 3);

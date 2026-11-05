@@ -4,6 +4,7 @@
 
 import * as THREE from '../../vendor/three.js';
 import { M, RED, BLUE, solidIn, colorForMask } from './shift.js';
+import { signFormRoutes } from './formroutes.js';
 
 const hexCss = (c) => `#${c.toString(16).padStart(6, '0')}`;
 
@@ -109,7 +110,8 @@ export function buildSigns(world) {
     // lens-only routes are secrets, hidden behind the other world's billboards and buildings (covers.js)
     if (p === main || !b?.label || b.hatch || b.facade || b.mask === M.RO || b.mask === M.BO) continue;
     const where = lensWords(b.mask ?? M.ALL, false);
-    const sub = b.mask === M.RO || b.mask === M.BO ? `${where} LENS ONLY` : where ? `${where} ROAD` : b.mask === M.X ? 'BOTH WORLDS ONLY' : '';
+    // (a form route says which machine it takes)
+    const sub = b.sub ?? (b.mask === M.RO || b.mask === M.BO ? `${where} LENS ONLY` : where ? `${where} ROAD` : b.mask === M.X ? 'BOTH WORLDS ONLY' : '');
     addSign(world, main, back(main, b.from, 75), p.side, b.label, sub, b.mask ?? M.ALL, p.side);
   }
   for (const o of def.obstacles || []) {
@@ -131,9 +133,10 @@ export function buildSigns(world) {
   }
   for (const g of def.gaps || []) {
     const path = g.path ? world.paths.find((q) => q.id === g.path) : main;
-    if (!path || g.secret) continue;
+    if (!path || g.secret || g.glide) continue;
     const there = lensWords(g.mask, false);
     const name = there === 'RED' ? 'RED' : there === 'BLUE' ? 'BLUE' : 'OVERLAP';
     addSign(world, path, back(path, g.at, 60), 0, `${name} BRIDGE`, there === 'RED OR BLUE' || !there ? 'STAY IN BOTH' : `NO ROAD IN ${there === 'RED' ? 'BLUE' : 'RED'}`, g.mask);
   }
+  signFormRoutes(world, addSign);
 }

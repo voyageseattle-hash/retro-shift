@@ -59,11 +59,16 @@ export const TRACKS = [
       [230, 70, 2], [320, 10, 4], [350, -120, 8], [270, -230, 6], [120, -250, 2], [20, -150, 0],
     ],
     features: (P) => ({
-      branches: [{ from: P(5, 0.2), to: P(9, 0.1), mask: M.BO, side: 1, lift: 7, label: 'BLUE SHORTCUT' }],
+      branches: [
+        { from: P(5, 0.2), to: P(9, 0.1), mask: M.BO, side: 1, lift: 7, label: 'BLUE SHORTCUT' },
+        // the form routes (formroutes.js): a gap only the Skimmer glides, and a wall only the Blade rides
+        { from: P(1, 0.55), to: P(4, 0.15), mask: M.ALL, side: -1, lift: 2, label: 'GLIDE GAP', sub: 'BLUE FLOATS IT', profile: [{ at: 0.5, kind: 'step', drop: 3.5, len: 55, end: 0.82 }] },
+        { from: P(10, 0.8), to: P(13, 0.6), mask: M.ALL, side: -1, lift: 9, label: 'WALL RUN', sub: 'RED CLINGS · OTHERS FALL', wallrun: { from: 0.28, to: 0.78, bank: 0.95 } },
+      ],
       profile: [{ at: P(7, 0.15), kind: 'drop', depth: 9, down: 24, up: 115 }],
-      gaps: [{ at: P(10, 0.3), len: 46, mask: M.R, noRails: true }],
+      gaps: [{ at: P(10, 0.3), len: 46, mask: M.R, noRails: true }, { path: 'b1', at: 0.5, len: 50, glide: true, noRails: true }],
       obstacles: [wall(P(1, 0.45), M.B), wall(P(3, 0.3), M.R), ...field(P(11, 0.1), 0.05, 6, 3)],
-      boosts: [{ at: P(0, 0.5), lat: 0 }, { at: P(7, 0.6), lat: -0.4 }, { at: P(12, 0.2), lat: 0.4, mask: M.RO }, { at: P(13, 0.4), mask: M.RO }],
+      boosts: [{ at: P(0, 0.5), lat: 0 }, { at: P(7, 0.6), lat: -0.4 }, { at: P(12, 0.2), lat: 0.4, mask: M.RO }, { at: P(13, 0.4), mask: M.RO }, { path: 'b1', at: 0.8 }],
       shards: [{ at: P(1, 0.15), lat: 0, n: 3 }, { at: P(6, 0.3), lat: -0.4, n: 3 }, { at: P(12, 0.6), lat: 0, n: 3, mask: M.B }],
       tips: [
         { at: P(5, 0.0), text: 'A BLUE-ONLY SHORTCUT ON THE RIGHT: SHIFT TO BLUE', key: 'blue' },
@@ -177,6 +182,8 @@ export const TRACKS = [
         { from: P(1, 0.4), to: P(8, 0.45), mask: M.RO, side: 1, lift: 16, label: 'RED SKYBRIDGE' },
         { from: P(12, 0.25), to: P(16, 0.5), mask: M.BO, side: 1, lift: 12, label: 'BLUE FLYOVER' },
         { from: P(5, 0.6), to: P(7, 0.6), mask: M.BO, side: -1, lift: 14, label: 'BLUE ROOFTOPS', facade: M.R, shards: [{ at: 0.36 }, { at: 0.64 }] },
+        // the form route (formroutes.js): the red line past the blue bridge, through a slit only the Blade fits
+        { from: P(16, 0.7), to: P(21, 0.2), mask: M.ALL, side: -1, lift: 3, label: 'THE SLIT', sub: 'ONLY THE RED BLADE FITS' },
       ],
       gaps: [{ at: P(9, 0.2), len: 36, mask: M.R, noRails: true }, { at: P(19, 0.1), len: 36, mask: M.B, noRails: true }],
       profile: [{ at: P(12, 0.45), kind: 'crest', height: 3, len: 70 }],
@@ -185,8 +192,9 @@ export const TRACKS = [
         ...field(P(3, 0.1), 0.03, 6, 23), wall(P(5, 0.4), M.B), ...chicane(P(13, 0.2), 0.012, 4),
         { type: 'block', at: P(15, 0.5), lat: 0, mask: M.R, size: 4, sweep: 0.6 },
         { type: 'block', at: P(16, 0.5), lat: 0, mask: M.B, size: 4, sweep: 0.6, phase: 2 },
+        { type: 'slit', path: 'b3', at: 0.5 },
       ],
-      boosts: [{ at: P(0, 0.4) }, { at: P(10, 0.5), lat: 0.4 }, { at: P(18, 0.6), mask: M.BO }, { at: P(20, 0.5), mask: M.BO }],
+      boosts: [{ at: P(0, 0.4) }, { at: P(10, 0.5), lat: 0.4 }, { at: P(18, 0.6), mask: M.BO }, { at: P(20, 0.5), mask: M.BO }, { path: 'b3', at: 0.72 }],
       shards: [{ at: P(2, 0.4), n: 3 }, { at: P(11, 0.4), n: 3 }, { at: P(16, 0.1), n: 3, mask: M.R }],
     }),
   }),

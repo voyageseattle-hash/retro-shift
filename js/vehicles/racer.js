@@ -151,7 +151,9 @@ export class Racer {
     if (this.mono) return;
     // A road that only exists in your lens holds the lens for you: SHIFT doesn't drain on it (or in a short hop
     // off it), so a secret route is a reward to find, not a bar to ration.
-    if (this.gnd.onRoad && !solidIn(this.gnd.mask, BOTH)) this.lensRoadT = 0.6;
+    // (a wall-run holds RED the same way: only the Blade can ride it)
+    const held = this.gnd.onRoad && (!solidIn(this.gnd.mask, BOTH) || (this.gnd.path?.cling?.[this.gnd.i] && this.mode === RED));
+    if (held) this.lensRoadT = 0.6;
     else this.lensRoadT = Math.max(0, (this.lensRoadT || 0) - dt);
     if (this.mode === BOTH) this.energy = Math.min(1, this.energy + SHIFT.recharge * dt);
     else if (this.lensRoadT > 0 && solidIn(this.gnd.mask, this.mode)) {
@@ -205,6 +207,8 @@ export class Racer {
     const F = FORMS[this.mode] || FORMS[BOTH];
     this.halfW = F.halfW;
     this.hints._w = Math.max(0, F.halfW - 1.2);
+    // a wall-run only holds a craft that clings (track.js ground skips it for the others)
+    this.hints._cling = F.cling > 0 ? 1 : 0;
     const n = _up.set(g.nx, g.ny, g.nz);
     const fwdH = this.forwardVec(_v);
     const fwd = _fwd;
@@ -277,10 +281,15 @@ export class Racer {
       this.vel.addScaledVector(_v2, dt);
     } else {
       this.slip = 0;
-      // the Skimmer glides: light gravity for a while after it leaves the road, and it steers in the air
-      const gliding = F.glide && this.airTime > 0.12 && this.airTime < 1.3 && this.speed > 25 && !this.controlLocked;
+      // the Skimmer glides: once it has really left the road at speed its pads carry it, sinking no faster than a
+      // few metres a second for a second and a half, and it steers in the air. Enough to cross a glide gap the
+      // others drop into, and to float the far side of a drop while the Blade clings down it.
+      const gliding = F.glide && this.airTime > 0.08 && this.airTime < 1.6 && this.speed > 25 && !this.controlLocked;
       this.yawRate = damp(this.yawRate, -steer * (gliding ? 1.6 : 0.9), 3, dt);
-      this.vel.y -= G_AIR * (gliding ? (this.vel.y > 0 ? 0.6 : 0.36) : 1) * dt;
+      if (gliding) {
+        this.vel.y -= G_AIR * (this.vel.y > 0 ? 0.55 : 0.22) * dt;
+        this.vel.y = Math.max(this.vel.y, -3.5);
+      } else this.vel.y -= G_AIR * dt;
       if (gliding) {
         // turn the travel with the nose, so steering in the air bends the glide
         const hs = Math.hypot(this.vel.x, this.vel.z);
