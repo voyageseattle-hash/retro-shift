@@ -84,6 +84,7 @@ export class UI {
     this.previews = new Map();
     this.sceneQueue = [];
     this.scenesShown = new Set();
+    this.netAttempt = 0;
   }
 
   clear() {
@@ -319,13 +320,18 @@ export class UI {
       status.textContent = e?.message || 'Could not connect';
       status.classList.add('bad');
     };
+    // A failed attempt only tears down the connection if it is still the latest one: a join that times out
+    // after the player has gone on to host would otherwise close their new room under them.
+    const attempt = () => ++this.netAttempt;
     const hostIt = async () => {
+      const my = attempt();
       status.textContent = 'Opening a room...';
       status.classList.remove('bad');
       try {
         await net.host(profile());
         this.lobby();
       } catch (e) {
+        if (my !== this.netAttempt) return;
         net.close();
         fail(e);
       }
@@ -336,12 +342,14 @@ export class UI {
         codeIn.focus();
         return fail(new Error('Type the 4-letter room code first'));
       }
+      const my = attempt();
       status.textContent = `Looking for room ${c.toUpperCase()}...`;
       status.classList.remove('bad');
       try {
         await net.join(c, profile());
-        this.lobby();
+        if (my === this.netAttempt) this.lobby();
       } catch (e) {
+        if (my !== this.netAttempt) return;
         net.close();
         fail(e);
       }
