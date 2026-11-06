@@ -126,14 +126,17 @@ export const TRACKS = [
         // (leaves from inside the third tunnel, skips the overlap-only gap and the block field)
         { from: 830 / 1007, to: 960 / 1007, mask: M.RO, side: 1, lift: 3, label: 'SECRET BORE', hatch: true, shards: [{ at: 0.3 }, { at: 0.55 }, { at: 0.8 }] },
       ],
+      // the FULL PIPE (warp.js): the road curls up into a tube; the Blade rides its walls and roof, past the floor's boost
+      pipes: [{ at: P(1, 0.04), len: 175, ramp: 26 }],
       gaps: [
         { at: P(2, 0.3), len: 34, mask: M.R, noRails: true },
         { at: P(3, 0.5), len: 34, mask: M.B, noRails: true },
         { at: P(9, 0.4), len: 30, mask: M.X, noRails: true },
       ],
       obstacles: [...chicane(P(0, 0.4), 0.01, 6), wall(P(6, 0.2), M.B), ...field(P(10, 0.1), 0.05, 6, 11)],
-      boosts: [{ at: P(1, 0.6) }, { at: P(7, 0.2), mask: M.BO }, { at: P(11, 0.3) }, { at: P(6, 0.7), mask: M.BO }],
-      shards: [{ at: P(1, 0.1), n: 4 }, { at: P(5, 0.1), n: 3, lat: 0.4 }, { at: P(8, 0.6), n: 3, mask: M.B }],
+      boosts: [{ at: P(1, 0.6) }, { at: P(7, 0.2), mask: M.BO }, { at: P(11, 0.3) }, { at: P(6, 0.7), mask: M.BO }, { at: P(1, 0.45), lat: 2.95, mask: M.RO }, { at: P(1, 0.45), lat: -2.95, mask: M.RO }],
+      shards: [{ at: P(1, 0.1), n: 4 }, { at: P(5, 0.1), n: 3, lat: 0.4 }, { at: P(8, 0.6), n: 3, mask: M.B }, { at: P(1, 0.25), lat: 2.2, n: 3, gap: 0.004, mask: M.RO }, { at: P(1, 0.3), lat: -2.6, n: 3, gap: 0.004, mask: M.RO }],
+      tips: [{ at: P(0, 0.85), text: 'FULL PIPE AHEAD: THE RED BLADE RIDES THE WALLS AND ROOF', key: 'red' }],
     }),
   }),
 
@@ -271,7 +274,10 @@ export const TRACKS = [
         block(P(3, 0.5), 0.5, M.R), block(P(4, 0.5), -0.5, M.B), wall(P(10, 0.5), M.B),
         block(P(26, 0.2), 0.5, M.B), block(P(27, 0.2), -0.5, M.R),
       ],
-      boosts: [{ at: P(1, 0.5) }, { at: P(12, 0.5) }, { at: P(24, 0.5) }, { at: P(34, 0.4), mask: M.RO }, { at: P(18, 0.5), mask: M.BO }, { at: P(35, 0.5), mask: M.BO }],
+      // the CORKSCREW (warp.js): the road rolls a full turn; the Blade rides it upside down, BOTH and BLUE launch through it
+      screws: [{ at: P(34, 0.2), len: 140 }],
+      boosts: [{ at: P(1, 0.5) }, { at: P(12, 0.5) }, { at: P(24, 0.5) }, { at: P(34, 0.05), mask: M.RO }, { at: P(18, 0.5), mask: M.BO }, { at: P(35, 0.5), mask: M.BO }],
+      tips: [{ at: P(33, 0.7), text: 'CORKSCREW: RED RIDES IT UPSIDE DOWN · BOTH AND BLUE TAKE THE LAUNCHER', key: 'red' }],
       shards: [{ at: P(8, 0.2), n: 3 }, { at: P(20, 0.2), n: 3 }, { at: P(36, 0.6), n: 3, mask: M.R }],
     }),
   }),

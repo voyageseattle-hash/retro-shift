@@ -4,6 +4,7 @@ import { clamp, damp, lerp } from '../core/util.js';
 const _d = new THREE.Vector3();
 const _l = new THREE.Vector3();
 const _w = new THREE.Vector3();
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
 // Spring-follow chase camera with speed FOV, look-back, trauma shake, kicks, FOV punches
 // and cinematic modes.
@@ -30,10 +31,15 @@ export class ChaseCamera {
     this.mode = 'chase';
     this.orbitT = 0;
     this.cinematic = null;
+    // which way is up on screen: the world's, except on a bent road (a pipe wall, a corkscrew), where it's the road's
+    this.upV = new THREE.Vector3(0, 1, 0);
+    this.bent = 0;
   }
 
   snap(v) {
     this.heading = v.yaw;
+    this.upV.copy(WORLD_UP);
+    this.bent = 0;
     const f = _d.set(Math.sin(v.yaw), 0, Math.cos(v.yaw));
     const dist = 5.8 * v.scale;
     this.rel.copy(f).multiplyScalar(-dist);
@@ -84,6 +90,9 @@ export class ChaseCamera {
       return;
     }
     this.orbitT = 0;
+    if (v.vis?.on || this.bent > 0) {
+      if (this.followBent(dt, v, lookBack)) return;
+    }
     // Follow a blend of facing and travel direction so drifts stay framed.
     const hs = Math.hypot(v.vel.x, v.vel.z);
     let target = v.yaw;
@@ -138,6 +147,36 @@ export class ChaseCamera {
     this.apply(dt);
   }
 
+  // On a bent road: sit behind and above the craft in the road's own frame, and turn the view with the road, so a pipe
+  // wall or a corkscrew rolls the world round you. Eases back to the world's up as the road straightens out.
+  followBent(dt, v, lookBack) {
+    const on = !!v.vis?.on;
+    this.bent = on ? 1 : Math.max(0, this.bent - dt * 2.5);
+    if (!on) {
+      if (this.bent <= 0) this.upV.copy(WORLD_UP);
+      else this.upV.lerp(WORLD_UP, 1 - Math.exp(-6 * dt)).normalize();
+      return false;
+    }
+    const V = v.vis;
+    this.upV.lerp(V.up, 1 - Math.exp(-9 * dt));
+    if (this.upV.lengthSq() < 0.01) this.upV.copy(V.up);
+    this.upV.normalize();
+    const sp = clamp(Math.abs(v.speed) / (v.phys?.topSpeed || 60), 0, 1.5);
+    const dir = lookBack ? -1 : 1;
+    const dist = (5.6 - sp * 0.5) * v.scale;
+    const height = (2.25 - sp * 0.35) * v.scale;
+    const want = _w.copy(V.pos).addScaledVector(V.fwd, -dist * dir).addScaledVector(this.upV, height);
+    this.pos.lerp(want, 1 - Math.exp(-40 * dt));
+    this.rel.set(this.pos.x - v.pos.x, 0, this.pos.z - v.pos.z);
+    this.heading = v.yaw;
+    const lookTarget = _l.copy(V.pos).addScaledVector(V.fwd, 6 * dir * v.scale).addScaledVector(this.upV, 1.4 * v.scale);
+    this.look.lerp(lookTarget, 1 - Math.exp(-30 * dt));
+    this.fov = damp(this.fov, 62 + sp * 20 + (v.boostTime > 0 ? 12 : 0), 3, dt);
+    this.roll = damp(this.roll, 0, 5, dt);
+    this.apply(dt);
+    return true;
+  }
+
   springs(dt) {
     // Slightly underdamped springs for kicks and FOV punches, sub-stepped so long frames stay stable.
     while (dt > 1e-5) {
@@ -165,6 +204,7 @@ export class ChaseCamera {
       rollShake = Math.sin(t * 0.7 + 4.2) * s * 0.07;
       this.shake = Math.max(0, this.shake - dt * 1.7);
     }
+    c.up.copy(this.upV);
     c.lookAt(this.look);
     const roll = this.roll + rollShake;
     if (roll) c.rotateZ(roll);

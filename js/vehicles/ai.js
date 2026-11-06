@@ -91,13 +91,17 @@ export class RaceAI {
     const ok = { [BOTH]: true, [RED]: true, [BLUE]: true };
     const blocked = { [BOTH]: 0, [RED]: 0, [BLUE]: 0 };
     const near = Math.ceil(12 / P.ds);
+    let rideAhead = false;
     for (let k = -1; k < n; k++) {
       const j = P.closed ? P.wrap(pi + k) : Math.min(P.N - 1, pi + k);
       const mk = P.mask[j];
+      if (P.leap?.[j]) rideAhead = true;
+      if (P.warpKind?.[j] === 1 && P.warpK[j] > 0.9) rideAhead = true;
       for (const m of MODES) {
         // a glide gap is road enough for the form that glides; a wall-run only for the one that clings
         if (!solidIn(mk, m) && !(P.glide?.[j] && FORMS[m].glide)) ok[m] = false;
-        if (P.cling?.[j] && !FORMS[m].cling) ok[m] = false;
+        // (a corkscrew has a launcher in front of it for the forms that can't ride it: they jump it)
+        if (P.cling?.[j] && !FORMS[m].cling && !(P.leap?.[j] && solidIn(P.leap[j], m))) ok[m] = false;
       }
     }
     const obs = [];
@@ -158,6 +162,8 @@ export class RaceAI {
       if (m !== BOTH) s += afford ? 3 : 200;
       if (m !== BOTH && saving) s += 6;
       if (m === r.mode) s -= 1.5;
+      // a corkscrew ahead: the Blade rides it, which is the show; most rivals go for it if they can hold RED
+      if (rideAhead && m === RED && afford && this.skill > 0.45) s -= 4;
       // a storm in this lens: worth dodging, unless it's the one guarding the shortcut we're going for
       if (r.session?.storms?.threat(r, m) && !(saving && m !== BOTH)) s += 5;
       // lava ahead in this lens (the quake course): blue cools it
@@ -230,6 +236,11 @@ export class RaceAI {
     // ---- steer at a point down the road
     const aheadN = Math.ceil((7 + speed * 0.45) / P.ds);
     const ja = P.closed ? P.wrap(pi + aheadN) : Math.min(P.N - 1, pi + aheadN);
+    // a full pipe in RED: up the wall and along the roof, where its pads and shards are (a side picked each time in)
+    if (P.warpKind?.[ja] === 1 && r.mode === RED && this.skill > 0.45) {
+      if (!this.pipeSide) this.pipeSide = Math.random() < 0.5 ? -1 : 1;
+      if (P.warpK[ja] > 0.9) this.targetLat = this.pipeSide * P.ext[ja] * 0.93;
+    } else if (!P.warpKind?.[pi]) this.pipeSide = 0;
     const tp = P.point(ja, this.targetLat, 0);
     const dx = tp.x - r.pos.x;
     const dz = tp.z - r.pos.z;

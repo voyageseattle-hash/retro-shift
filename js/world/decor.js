@@ -106,7 +106,8 @@ const DECOR = {
     let prevR = null;
     let prevB = null;
     for (let i = 0; i < main.N; i += 5) {
-      const inTunnel = Math.sin((i / main.N) * Math.PI * 2 * 3) > -0.3;
+      // (not round a full pipe: that's its own tube, warp.js)
+      const inTunnel = Math.sin((i / main.N) * Math.PI * 2 * 3) > -0.3 && !(main.warpK?.[i] > 0 || main.warpK?.[main.wrap(i + 2)] > 0);
       if (!inTunnel) {
         prevR = prevB = null;
         continue;

@@ -1066,7 +1066,7 @@ export class Race {
     }
     for (const sh of w.shards) {
       if (sh.taken > 0 || !solidIn(sh.mask, r.mode)) continue;
-      if (sh.root.position.distanceToSquared(r.pos) > 4 * 4) continue;
+      if ((sh.at || sh.root.position).distanceToSquared(r.pos) > 4 * 4) continue;
       sh.taken = 2.5; // back quickly: six racers share them
       sh.root.visible = false;
       if (this.online) this.app.net?.shard(w.shards.indexOf(sh));

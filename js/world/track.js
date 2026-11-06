@@ -12,6 +12,7 @@ import { buildSigns } from './signs.js';
 import { buildCovers } from './covers.js';
 import { layStorms } from './storms-def.js';
 import { layFormRoutes, addSlit } from './formroutes.js';
+import { layWarps, buildWarps, PIPE } from './warp.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -198,6 +199,64 @@ export class Path {
     const b = this.point(i + 1, lat, h, _b);
     return out.copy(a).lerp(b, t);
   }
+  // The road as it's drawn: point(), bent where a pipe curls it up or a corkscrew rolls it (warp.js). Off those it
+  // is point() exactly.
+  wpoint(i, lat, h = 0, out = new THREE.Vector3()) {
+    const j = this.wrap(Math.round(i));
+    if (!this.warpK?.[j] && !this.warpK?.[this.wrap(j + 1)]) return this.point(i, lat, h, out);
+    return this.bend(i, lat, h, out);
+  }
+  // Bent point at (fractional) sample fi: out = the place, nOut = the surface's up there, rOut = the way across it.
+  bend(fi, lat, h, out, nOut, rOut) {
+    let i0 = Math.floor(fi);
+    const t = this.closed ? fi - i0 : clamp(fi - i0, 0, 1);
+    i0 = this.wrap(i0);
+    const i1 = this.wrap(i0 + 1);
+    const L = (a) => a[i0] + (a[i1] - a[i0]) * t;
+    const cx = L(this.px);
+    const cy = L(this.py);
+    const cz = L(this.pz);
+    let rx = L(this.thz) * -1;
+    let rz = L(this.thx);
+    const rl = Math.hypot(rx, rz) || 1;
+    rx /= rl;
+    rz /= rl;
+    let nx = L(this.nx);
+    let ny = L(this.ny);
+    let nz = L(this.nz);
+    const nl = Math.hypot(nx, ny, nz) || 1;
+    nx /= nl;
+    ny /= nl;
+    nz /= nl;
+    const k = this.warpK ? L(this.warpK) : 0;
+    const kind = this.warpKind ? this.warpKind[i0] || this.warpKind[i1] : 0;
+    let x = lat;
+    let y = h;
+    let sn = 0; // surface normal and across, as (right, up) parts
+    let cs = 1;
+    if (kind === 1 && k > 1e-4) {
+      // pipe: the strip wrapped round a circle of radius R/k sitting on the road (k = 1: the tube itself)
+      const Re = (this.warpR[i0] || this.warpR[i1]) / k;
+      const th = lat / Re;
+      sn = Math.sin(th);
+      cs = Math.cos(th);
+      x = Re * sn - sn * h;
+      y = Re * (1 - cs) + cs * h;
+    } else if (kind === 2) {
+      // corkscrew: the strip rolled by `roll` about a line rc above the road
+      const rc = this.warpR[i0] || this.warpR[i1];
+      const a = L(this.roll);
+      sn = Math.sin(a);
+      cs = Math.cos(a);
+      const y0 = h - rc;
+      x = lat * cs - y0 * sn;
+      y = lat * sn + y0 * cs + rc;
+    }
+    out.set(cx + rx * x + nx * y, cy + ny * y, cz + rz * x + nz * y);
+    if (nOut) nOut.set(-rx * sn + nx * cs, ny * cs, -rz * sn + nz * cs).normalize();
+    if (rOut) rOut.set(rx * cs + nx * sn, ny * sn, rz * cs + nz * sn).normalize();
+    return out;
+  }
   index(f) {
     return this.wrap(Math.round(f * (this.closed ? this.N : this.N - 1)));
   }
@@ -321,11 +380,13 @@ export class TrackWorld {
     this.buildBranches();
     this.applyGaps();
     layFormRoutes(this);
+    layWarps(this);
     this.minY = Math.min(...this.paths.map((p) => p.minY));
     this.maxY = Math.max(...this.paths.map((p) => p.maxY));
     this.floorY = this.minY - (def.floorDrop ?? 26);
     if (opts.preview) return;
     this.buildRoads();
+    buildWarps(this);
     this.buildFeatures();
     this.buildWater();
     this.buildStart();
@@ -545,58 +606,60 @@ export class TrackWorld {
         const ml = mid ?? COLORS.red;
         const mr = mid ?? COLORS.blue;
         // fill
-        L.roadQuad(mask, path.point(i, -hw, -0.02, v[0]), path.point(j, -hw, -0.02, v[1]), path.point(j, hw, -0.02, v[2]), path.point(i, hw, -0.02, v[3]));
+        L.roadQuad(mask, path.wpoint(i, -hw, -0.02, v[0]), path.wpoint(j, -hw, -0.02, v[1]), path.wpoint(j, hw, -0.02, v[2]), path.wpoint(i, hw, -0.02, v[3]));
         // glowing edges (ribbons a little in from the edge, lying on the road)
         for (const [side, col] of [[-1, lc], [1, rc]]) {
-          const a = path.point(i, side * hw, 0.04, new THREE.Vector3());
-          const b = path.point(j, side * hw, 0.04, new THREE.Vector3());
-          const c = path.point(j, side * (hw - 0.45), 0.04, new THREE.Vector3());
-          const d = path.point(i, side * (hw - 0.45), 0.04, new THREE.Vector3());
+          const a = path.wpoint(i, side * hw, 0.04, new THREE.Vector3());
+          const b = path.wpoint(j, side * hw, 0.04, new THREE.Vector3());
+          const c = path.wpoint(j, side * (hw - 0.45), 0.04, new THREE.Vector3());
+          const d = path.wpoint(i, side * (hw - 0.45), 0.04, new THREE.Vector3());
           L.quad(mask, a, b, c, d, col);
           // the edge light spilling across the wet-black road, like the key art's reflections
-          const e = path.point(j, side * (hw - 3.2), 0.035, new THREE.Vector3());
-          const f = path.point(i, side * (hw - 3.2), 0.035, new THREE.Vector3());
+          const e = path.wpoint(j, side * (hw - 3.2), 0.035, new THREE.Vector3());
+          const f = path.wpoint(i, side * (hw - 3.2), 0.035, new THREE.Vector3());
           L.quadFade(mask, d, c, e, f, col, 0.07, 0);
           // rails: a curved lip rising out of the road's edge into a bumper (a course with an open look, edge 'lip', has
           // only the lip: a bowl's rim, no fence)
-          const rail = side < 0 ? path.railL[i] : path.railR[i];
+          // (a pipe has no rails: its walls are the tube)
+          const rail = (side < 0 ? path.railL[i] : path.railR[i]) && !(path.warpKind?.[i] === PIPE && path.warpK[i] > 0.05);
           if (rail) {
             const lipH = this.def.edge === 'lip' ? 1.15 : 0.75;
-            let p0 = path.point(i, side * (hw - 0.5), 0.045, new THREE.Vector3());
-            let p1 = path.point(j, side * (hw - 0.5), 0.045, new THREE.Vector3());
+            let p0 = path.wpoint(i, side * (hw - 0.5), 0.045, new THREE.Vector3());
+            let p1 = path.wpoint(j, side * (hw - 0.5), 0.045, new THREE.Vector3());
             for (let s = 1; s <= 3; s++) {
               const a = (s / 3) * Math.PI * 0.5;
               const lat = hw - 0.5 + (1 - Math.cos(a)) * 0.7;
               const y = 0.045 + Math.sin(a) * lipH;
-              const q0 = path.point(i, side * lat, y, new THREE.Vector3());
-              const q1 = path.point(j, side * lat, y, new THREE.Vector3());
+              const q0 = path.wpoint(i, side * lat, y, new THREE.Vector3());
+              const q1 = path.wpoint(j, side * lat, y, new THREE.Vector3());
               L.quad(mask, p0, p1, q1, q0, col, 0.16 + s * 0.1);
               p0 = q0;
               p1 = q1;
             }
             if (this.def.edge === 'lip') {
-              if (i % 3 === 0) L.line(mask, path.point(i, side * (hw - 0.5), 0.05, _a), path.point(i, side * (hw + 0.2), lipH, _b), col);
+              if (i % 3 === 0) L.line(mask, path.wpoint(i, side * (hw - 0.5), 0.05, _a), path.wpoint(i, side * (hw + 0.2), lipH, _b), col);
               continue;
             }
-            const ra = path.point(i, side * (hw + 0.2), 1.1, new THREE.Vector3());
-            const rb = path.point(j, side * (hw + 0.2), 1.1, new THREE.Vector3());
-            const rd = path.point(i, side * (hw + 0.2), 0.75, new THREE.Vector3());
-            const rcp = path.point(j, side * (hw + 0.2), 0.75, new THREE.Vector3());
+            const ra = path.wpoint(i, side * (hw + 0.2), 1.1, new THREE.Vector3());
+            const rb = path.wpoint(j, side * (hw + 0.2), 1.1, new THREE.Vector3());
+            const rd = path.wpoint(i, side * (hw + 0.2), 0.75, new THREE.Vector3());
+            const rcp = path.wpoint(j, side * (hw + 0.2), 0.75, new THREE.Vector3());
             L.quad(mask, ra, rb, rcp, rd, col, 0.8);
-            if (i % 4 === 0) L.line(mask, path.point(i, side * (hw + 0.2), 0, _a), path.point(i, side * (hw + 0.2), 1.1, _b), col);
+            if (i % 4 === 0) L.line(mask, path.wpoint(i, side * (hw + 0.2), 0, _a), path.wpoint(i, side * (hw + 0.2), 1.1, _b), col);
           }
         }
         // grid: cross ribs and lane lines
-        if (i % 2 === 0) L.line(mask, path.point(i, -hw, 0.03, _a), path.point(i, hw, 0.03, _b), (i >> 1) % 2 ? ml : mr);
-        for (const f of [-1 / 3, 1 / 3]) L.line(mask, path.point(i, f * hw * 2 * 0.75, 0.03, _a), path.point(j, f * hw * 2 * 0.75, 0.03, _b), f < 0 ? ml : mr);
-        for (const f of [-2 / 3, 0, 2 / 3]) if (i % 3 !== 2 && f !== 0) L.line(mask, path.point(i, f * hw, 0.03, _a), path.point(j, f * hw, 0.03, _b), f < 0 ? ml : mr);
+        if (i % 2 === 0) L.line(mask, path.wpoint(i, -hw, 0.03, _a), path.wpoint(i, hw, 0.03, _b), (i >> 1) % 2 ? ml : mr);
+        for (const f of [-1 / 3, 1 / 3]) L.line(mask, path.wpoint(i, f * hw * 2 * 0.75, 0.03, _a), path.wpoint(j, f * hw * 2 * 0.75, 0.03, _b), f < 0 ? ml : mr);
+        for (const f of [-2 / 3, 0, 2 / 3]) if (i % 3 !== 2 && f !== 0) L.line(mask, path.wpoint(i, f * hw, 0.03, _a), path.wpoint(j, f * hw, 0.03, _b), f < 0 ? ml : mr);
         // underside and supports for raised road
-        if (i % 2 === 0) {
-          L.line(mask, path.point(i, -hw, -0.6, _a), path.point(j, -hw, -0.6, _b), lc);
-          L.line(mask, path.point(i, hw, -0.6, _a), path.point(j, hw, -0.6, _b), rc);
+        const bent = path.warpK?.[i] > 0;
+        if (i % 2 === 0 && !bent) {
+          L.line(mask, path.wpoint(i, -hw, -0.6, _a), path.wpoint(j, -hw, -0.6, _b), lc);
+          L.line(mask, path.wpoint(i, hw, -0.6, _a), path.wpoint(j, hw, -0.6, _b), rc);
         }
-        const p = path.point(i, 0, 0, _c);
-        if (i % 18 === 0 && p.y - this.floorY > 6 && !this.def.noPylons) {
+        const p = path.wpoint(i, 0, 0, _c);
+        if (i % 18 === 0 && p.y - this.floorY > 6 && !this.def.noPylons && !bent) {
           const pc = (i / 18) % 2 ? 0x6a1020 : 0x0c3a6a;
           L.lineXYZ(M.ALL, p.x, p.y - 0.6, p.z, p.x, this.floorY, p.z, pc);
           L.lineXYZ(M.ALL, p.x - 1.5, this.floorY, p.z, p.x + 1.5, this.floorY, p.z, pc);
@@ -691,6 +754,7 @@ export class TrackWorld {
       }
     }
     for (const l of def.launchers || []) this.addLauncher(l);
+    for (const l of this.warpLaunchers || []) this.addLauncher(l);
     for (const s of def.shards || []) {
       const n = s.n ?? 3;
       for (let k = 0; k < n; k++) this.addShard({ ...s, at: s.at + k * (s.gap ?? 0.006) });
@@ -804,12 +868,12 @@ export class TrackWorld {
     const w = 2.4;
     for (let k = 0; k < 3; k++) {
       const i0 = path.wrap(i + k * 2);
-      const tip = path.point(i0 + 2, lat, 0.06, new THREE.Vector3());
-      const l0 = path.point(i0, lat - w, 0.06, new THREE.Vector3());
-      const l1 = path.point(i0 + 1, lat - w, 0.06, new THREE.Vector3());
-      const r0 = path.point(i0, lat + w, 0.06, new THREE.Vector3());
-      const r1 = path.point(i0 + 1, lat + w, 0.06, new THREE.Vector3());
-      const tip2 = path.point(i0 + 1, lat, 0.06, new THREE.Vector3());
+      const tip = path.wpoint(i0 + 2, lat, 0.06, new THREE.Vector3());
+      const l0 = path.wpoint(i0, lat - w, 0.06, new THREE.Vector3());
+      const l1 = path.wpoint(i0 + 1, lat - w, 0.06, new THREE.Vector3());
+      const r0 = path.wpoint(i0, lat + w, 0.06, new THREE.Vector3());
+      const r1 = path.wpoint(i0 + 1, lat + w, 0.06, new THREE.Vector3());
+      const tip2 = path.wpoint(i0 + 1, lat, 0.06, new THREE.Vector3());
       L.quad(mask, l0, tip2, tip, l1, col, 1.2);
       L.quad(mask, r0, tip2, tip, r1, col, 1.2);
     }
@@ -868,9 +932,10 @@ export class TrackWorld {
     root.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), mats.wire));
     const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.45), mats.solid);
     root.add(core);
-    path.point(i, lat, 1.4, root.position);
+    path.wpoint(i, lat, 1.4, root.position);
     this.group.add(root);
-    const sh = { path, i, f: path.frac(i), lat, mask, root, taken: 0, y0: root.position.y };
+    // `at`: where it's picked up, on the flat strip the physics drives (the same place unless the road is bent there)
+    const sh = { path, i, f: path.frac(i), lat, mask, root, taken: 0, y0: root.position.y, at: path.point(i, lat, 1.4, new THREE.Vector3()) };
     this.shards.push(sh);
     this.animated.push((t, dt) => {
       root.rotation.y = t * 2.2 + i;
@@ -934,7 +999,11 @@ export class TrackWorld {
       // a little grace past the edge of the strip you're on: at speed a hard corner can carry you past its rail for
       // a step before the rail pushes you back, and that step shouldn't drop you through the world
       // (a wide craft is still on the road with its middle a little past the edge)
-      if (Math.abs(f.lat) > path.halfW + (path.id === cur ? 1.4 : 0.35) + (hints._w || 0)) continue;
+      // (a pipe's strip reaches up its walls and round its ceiling for a craft that clings)
+      // (+4: the mouth closes in quickly at speed, and the rails squeeze you back down it (collideWalls) only while
+      // you're still on it)
+      const wide = hints._cling && path.ext?.[f.i] > path.halfW ? path.ext[f.i] + 4 : path.halfW;
+      if (Math.abs(f.lat) > wide + (path.id === cur ? 1.4 : 0.35) + (hints._w || 0)) continue;
       if (!solidIn(f.mask, mode)) continue;
       // a wall-run holds only a craft that clings (the Blade); the others find nothing under them
       if (path.cling?.[f.i] && !hints._cling) continue;
@@ -977,7 +1046,10 @@ export class TrackWorld {
   collideWalls(r, g) {
     if (!g.onRoad) return 0;
     const path = g.path;
-    const hw = path.halfW - r.halfW;
+    const wide = r.hints._cling && path.ext?.[g.i] > path.halfW ? path.ext[g.i] : path.halfW;
+    // all the way round a pipe there's no wall to hit: racer.js carries you over the top
+    if (wide > path.halfW && path.warpK[g.i] > 0.97) return 0;
+    const hw = wide - r.halfW;
     const lat = g.lat;
     if (Math.abs(lat) <= hw) return 0;
     const side = Math.sign(lat);
@@ -1037,7 +1109,7 @@ export class TrackWorld {
     for (let k = 0; k < m.N; k++) {
       const j = m.wrap(i - k);
       let ok = true;
-      for (let q = -3; q <= 12; q++) if (!solidIn(m.mask[m.wrap(j + q)], mode)) ok = false;
+      for (let q = -3; q <= 12; q++) if (!solidIn(m.mask[m.wrap(j + q)], mode) || m.cling?.[m.wrap(j + q)] || m.warpK?.[m.wrap(j + q)] > 0) ok = false;
       for (const o of this.obstacles) if (o.path === m && Math.abs(o.i - j) < 10) ok = false;
       if (ok) {
         i = j;
