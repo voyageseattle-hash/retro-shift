@@ -771,6 +771,7 @@ export class UI {
           <span class="chip blue" data-m="4"><kbd></kbd>BLUE</span>
         </div>
         <div class="h-energy"><i></i><span>SHIFT</span></div>
+        <div class="h-form"><kbd></kbd><b></b><i><u></u></i></div>
         <div class="h-hull">${'<i></i>'.repeat(10)}<span>HULL</span></div>
       </div>
       <div class="h-item"><kbd></kbd><b></b><small></small></div>
@@ -808,6 +809,10 @@ export class UI {
         energy: q('.h-energy i'),
         energyBox: q('.h-energy'),
         hull: q('.h-hull'),
+        form: q('.h-form'),
+        formKey: q('.h-form kbd'),
+        formName: q('.h-form b'),
+        formBar: q('.h-form u'),
         item: q('.h-item'),
         itemKey: q('.h-item kbd'),
         itemName: q('.h-item b'),
@@ -965,7 +970,7 @@ export class UI {
       if (h[`_${key}`] === v) return;
       h[`_${key}`] = v;
       if (key === 'lap') node.innerHTML = v;
-      else if (key === 'driftCls' || key === 'energyCls' || key === 'hullCls' || key === 'itemCls') node.className = v;
+      else if (key === 'driftCls' || key === 'energyCls' || key === 'hullCls' || key === 'itemCls' || key === 'formCls') node.className = v;
       else node.textContent = v;
     };
     set(h.place, 'place', String(place));
@@ -985,6 +990,17 @@ export class UI {
     const width = `${(p.energy * 100).toFixed(1)}%`;
     if (h._width !== width) h.energy.style.width = h._width = width;
     set(h.energyBox, 'energyCls', `h-energy m${p.mode}${p.energy < 0.25 ? ' low' : ''}${h.energyBox.classList.contains('deny') ? ' deny' : ''}`);
+    // the form's move: its name in the lens colour, and a bar that fills as it recharges
+    {
+      const name = p.mode === BLUE ? 'LIFT' : p.mode === RED ? 'LANCE' : 'BRACE';
+      set(h.formName, 'formName', name);
+      set(h.formKey, 'formKey', this.lensGlyph(race, k, 'form'));
+      const cd = Math.max(0, p.formCd || 0);
+      const full = { LIFT: 5, LANCE: 6, BRACE: 8 }[name];
+      const w = `${Math.round((1 - Math.min(1, cd / full)) * 100)}%`;
+      if (h._formW !== w) h.formBar.style.width = h._formW = w;
+      set(h.form, 'formCls', `h-form m${p.mode}${cd <= 0 ? ' ready' : ''}`);
+    }
     // the SEAM CHARGE slot: spinning through the charges while it rolls, then the one you hold and its button
     if (race.items?.on) {
       let id = null;

@@ -36,6 +36,8 @@ const HULL_FLOOR = 60; // a hull above this survives any one hit (it's left hang
 const HULL_REPAIR = { wait: 2.5, rate: 3, both: 7 }; // hp/s once it's gone a while without a hit; BOTH patches it faster
 // each car's horn (core/engine.js's horn library)
 const HORNS = { vector: 'honk1', scanline: 'honk2', polygon: 'honk3', chroma: 'honk6', raster: 'honk4', glitch: 'honk5', dash: 'bell', greatwedge: 'shark' };
+// recharge time of each form's move (seconds)
+const FORM_CD = { lift: 5, lance: 6, brace: 8 };
 const NO_INPUT = { throttle: 0, brake: 0, steer: 0, drift: false, item: false, special: false, jump: false, reset: false, look: false };
 
 export class Race {
@@ -191,6 +193,100 @@ export class Race {
     return msg;
   }
 
+  // Each form's own move (Y / △, Z): the Skimmer LIFTs off the road and floats over whatever's there, the Blade
+  // LANCEs forward and runs straight through whoever's in front, the pair BRACEs behind a shield that sends a hit
+  // back at whoever threw it. One move, then a few seconds to recharge.
+  formMove(r) {
+    if (this.state !== 'race' || r.finished || r.respawnT > 0 || (r.formCd || 0) > 0 || r.empT > 0) return false;
+    const near = this.near(r);
+    if (r.mode === BLUE) {
+      if (!r.grounded) return false;
+      r.vel.addScaledVector(_v.set(r.gnd.nx, r.gnd.ny, r.gnd.nz), 12);
+      r.grounded = false;
+      r.airTime = 0.01;
+      r.liftT = 1.6;
+      r.formCd = FORM_CD.lift;
+      if (near) this.debris.sparks(r.pos, _a.set(0, -1, 0), 26, 0x4ab0ff, 12, r.gnd.y);
+      if (r.isPlayer) {
+        this.emitP(r, 'popup', { text: 'LIFT', color: '#4ab0ff', small: true });
+        this.app.audio.play('boost');
+      }
+    } else if (r.mode === RED) {
+      r.lanceT = 0.7;
+      r.giveBoost(0.7, 1.45);
+      r.formCd = FORM_CD.lance;
+      if (r.isPlayer) {
+        this.emitP(r, 'popup', { text: 'LANCE', color: '#ff4a6a', small: true });
+        this.app.audio.play('turbo', 2);
+        this.camOf(r).fovPunch(10);
+      }
+    } else {
+      r.braceT = 2.6;
+      r.formCd = FORM_CD.brace;
+      if (r.isPlayer) {
+        this.emitP(r, 'popup', { text: 'BRACE', color: '#d8c8ff', small: true });
+        this.app.audio.play('phase');
+      }
+    }
+    return true;
+  }
+
+  // the form moves ticking, and how they look
+  formTick(r, dt) {
+    if (r.formCd > 0) r.formCd -= dt;
+    if (r.liftT > 0) r.liftT -= dt;
+    if (r.lanceT > 0) {
+      r.lanceT -= dt;
+      if (this.near(r) && Math.random() < 0.7) this.debris.sparks(_v.copy(r.pos).setY(r.pos.y + 0.5), _a.set(Math.sin(r.yaw), 0, Math.cos(r.yaw)), 3, 0xff4a6a, 30, r.gnd.y);
+    }
+    if (r.braceT > 0) r.braceT -= dt;
+    // the shield: a violet lattice bubble, flickering out at the end
+    if (r.braceT > 0 && !r.shield) {
+      r.shield = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(2.7, 1)), new THREE.LineBasicMaterial({ color: 0xd8c8ff, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
+      this.scene.add(r.shield);
+    }
+    if (r.shield) {
+      r.shield.visible = r.braceT > 0 && (r.braceT > 0.5 || Math.floor(r.braceT * 16) % 2 === 0);
+      if (r.shield.visible) {
+        r.shield.position.copy(r.pos).setY(r.pos.y + 0.6);
+        r.shield.rotation.y += dt * 1.5;
+        r.shield.scale.set(1, 0.6, 1.25);
+      }
+    }
+  }
+
+  // Rivals use their form's move by a few simple rules.
+  formAI(r) {
+    if ((r.formCd || 0) > 0 || this.state !== 'race' || r.finished) return;
+    r.formThink = (r.formThink || 0) - 1;
+    if (r.formThink > 0) return;
+    r.formThink = 15;
+    if (Math.random() > (r.ai?.skill ?? 0.7)) return;
+    const tr = r.track;
+    if (!tr) return;
+    const P = tr.path;
+    const ahead = (o) => {
+      _a.subVectors(o.pos, r.pos);
+      return { d: _a.x * Math.sin(r.yaw) + _a.z * Math.cos(r.yaw), s: Math.abs(_a.x * Math.cos(r.yaw) - _a.z * Math.sin(r.yaw)) };
+    };
+    if (r.mode === BLUE && r.grounded && r.speed > 30) {
+      for (const o of this.world.obstacles) {
+        if (o.path !== P || o.broken || !solidIn(o.mask, BLUE) || o.type === 'wall' || o.door) continue;
+        let di = o.i - tr.i;
+        if (P.closed) di = ((di % P.N) + P.N + P.N / 2) % P.N - P.N / 2;
+        const d = di * P.ds;
+        if (d > 10 && d < 10 + r.speed * 0.45 && Math.abs(o.lat - tr.lat) < o.w + 1.5) {
+          this.formMove(r);
+          return;
+        }
+      }
+    } else if (r.mode === RED) {
+      if (this.racers.some((o) => o !== r && o.respawnT <= 0 && (({ d, s }) => d > 3 && d < 16 && s < 2.5)(ahead(o)))) this.formMove(r);
+    } else if (r.mode === BOTH) {
+      if (this.racers.some((o) => o !== r && o.respawnT <= 0 && o.pos.distanceToSquared(r.pos) < 9 * 9) && (r.hp < 75 || Math.random() < 0.3)) this.formMove(r);
+    }
+  }
+
   // The horn (L3 / H). Every car has its own. Honk at a rival close by and it's a taunt: they get on the radio, and
   // for a few seconds they come after you (they drive harder and ram), but a taunt that lands right after you've
   // passed them is worth a little SHIFT.
@@ -325,6 +421,12 @@ export class Race {
   // A healthy car always survives one hit: it's left hanging by a thread, smoking, with the next hit the last.
   hurt(r, dmg, by = null, text = null, steady = false) {
     if (r.respawnT > 0 || r.finished || dmg <= 0 || r.beamT > 0) return false;
+    // braced: the shield takes it (and a rammer gets it back)
+    if (r.braceT > 0) {
+      if (by && by !== r && !(by.braceT > 0)) this.hurt(by, dmg * 0.6, r, 'BOUNCED OFF A BRACE');
+      if (this.near(r)) this.debris.sparks(r.pos, _a.set(0, 1, 0), 10, 0xd8c8ff, 12, r.gnd.y);
+      return false;
+    }
     if (r.invuln > 0 && !by) return false;
     // heavier hulls take hits better (GREAT WEDGE is a tank); you're a little tougher than the field
     dmg *= Math.sqrt(1 / (r.mass || 1)) * (r.isPlayer ? 0.85 : 1);
@@ -479,6 +581,7 @@ export class Race {
       if (this.state !== 'race' || pl.finished) return;
       if (c.fire && !pl.fireHeld) this.items.use(pl);
       if (c.horn) this.honk(pl);
+      if (c.form) this.formMove(pl);
       pl.fireHeld = c.fire;
       if (c.item) pl.setMode(RED, this);
       if (c.special) pl.setMode(BLUE, this);
@@ -777,6 +880,8 @@ export class Race {
       r.update(dt, w, this);
       if (r.respawnT > 0) continue;
       this.hull(r, dt);
+      this.formTick(r, dt);
+      if (r.ai) this.formAI(r);
       // wedged against something: put rivals back on the road (the player has RESET)
       if (this.state === 'race' && !r.finished && Math.abs(r.speed) < 3) {
         r.stuckT = (r.stuckT || 0) + dt;
@@ -955,6 +1060,14 @@ export class Race {
             this.app.audio.play('hit');
             this.camOf(A.isPlayer ? A : B).addShake(0.2);
           }
+          // a LANCE runs straight through: whoever it hits takes a big piece of hull and spins
+          for (const [L, V] of [[A, B], [B, A]]) {
+            if (!(L.lanceT > 0) || (V.lancedBy === L && V.lancedT > this.t)) continue;
+            V.lancedBy = L;
+            V.lancedT = this.t + 1;
+            if (!this.hurt(V, 30, L, 'LANCED') && V.spinOut(0.9, Math.random() < 0.5 ? -1 : 1)) V.vel.multiplyScalar(0.6);
+            if (L.isPlayer) this.camOf(L).addShake(0.5);
+          }
           if (rel < -4 && this.near(A)) this.debris.sparks(_a.copy(A.pos).lerp(B.pos, 0.5).setY(A.pos.y + 0.5), _v, Math.round(-rel), 0xffffff, 10, A.gnd.y);
           // Rammed: the car that got hit from behind (or T-boned) comes apart. Online it's left alone: each
           // browser owns its own car.
@@ -967,7 +1080,7 @@ export class Race {
             const by = victim === A ? B : A;
             // the one rammed takes hull, the rammer a little; a car worn down by hits is the one that comes apart
             this.hurt(victim, (-rel - TAKEDOWN_SPEED * 0.5) * 2.6, by, 'RAMMED');
-            this.hurt(by, (-rel - TAKEDOWN_SPEED) * 0.5);
+            if (!(by.lanceT > 0)) this.hurt(by, (-rel - TAKEDOWN_SPEED) * 0.5);
           }
         }
       }

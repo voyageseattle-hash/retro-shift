@@ -108,6 +108,7 @@ export class Racer {
     this.hurtCd = 0;
     // charges (game/items.js): a held one survives a respawn, the effects don't
     this.cellT = this.empT = this.flipT = 0;
+    this.liftT = this.lanceT = this.braceT = 0;
     if (this.beamT > 0) this.setBeam(false);
     this.beamT = 0;
     this.suspension = 0;

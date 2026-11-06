@@ -241,6 +241,15 @@ kbd:empty { display: none; }
 .h-energy span { position: absolute; inset: 0; display: grid; place-content: center; font-size: 10px; letter-spacing: 0.4em; color: #fff; }
 .h-energy.low { animation: blink 0.4s steps(2) infinite; }
 .h-energy.deny { animation: shake 0.3s; }
+.h-form { display: flex; align-items: center; gap: 8px; font-size: 12px; letter-spacing: 0.2em; opacity: 0.55; margin: -2px 0 -2px; }
+.h-form.ready { opacity: 1; }
+.h-form kbd { font-size: 10px; }
+.h-form b { min-width: 52px; color: #d8c8ff; text-shadow: 0 0 8px currentColor; }
+.h-form.m2 b { color: #ff4a6a; } .h-form.m4 b { color: #4ab0ff; }
+.h-form i { display: block; width: 60px; height: 4px; background: rgba(255, 255, 255, 0.12); transform: skewX(-20deg); }
+.h-form u { display: block; height: 100%; background: currentColor; color: #d8c8ff; box-shadow: 0 0 6px currentColor; }
+.h-form.m2 u { color: #ff4a6a; } .h-form.m4 u { color: #4ab0ff; }
+#hud.split .h-form { font-size: 10px; }
 .h-hull { position: relative; display: flex; gap: 3px; width: 260px; max-width: 60vw; height: 10px; transform: skewX(-20deg); margin-top: -2px; }
 .h-hull i { flex: 1; background: #f4ecff; box-shadow: 0 0 6px rgba(244, 236, 255, 0.7); transition: background 0.2s, opacity 0.2s; }
 .h-hull i.off { background: rgba(255, 255, 255, 0.08); box-shadow: none; }

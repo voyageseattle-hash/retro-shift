@@ -16,6 +16,8 @@ const BIND_SOLO = {
   jump: ['KeyF', 'KeyK', 'Digit2'],
   rear: ['KeyI'],
   horn: ['KeyH', 'KeyV'],
+  // the form's own move: Skimmer LIFT, Blade LANCE, the pair's BRACE
+  form: ['KeyZ', 'ControlLeft'],
 };
 // Two players on one keyboard. Lens keys run left to right like the HUD: RED, BOTH, BLUE.
 const BIND_SPLIT = [
@@ -31,8 +33,9 @@ const BIND_SPLIT = [
     look: ['KeyC'],
     reset: ['KeyR'],
     jump: ['KeyF'],
-    rear: ['KeyZ'],
+    rear: [],
     horn: ['KeyV'],
+    form: ['KeyZ'],
   },
   {
     accel: ['ArrowUp'],
@@ -48,16 +51,17 @@ const BIND_SPLIT = [
     jump: ['Period', 'Numpad2'],
     rear: ['Numpad6'],
     horn: ['Numpad9', 'Backslash'],
+    form: ['Enter', 'NumpadEnter'],
   },
 ];
 // Keyboard key names for each player in split-screen.
 export const SPLIT_GLYPHS = [
-  { red: 'Q', both: 'F', blue: 'E', gas: 'W', brake: 'S', steer: 'A D', drift: 'SPACE', fire: 'X' },
-  { red: ',', both: '.', blue: '/', gas: '▲', brake: '▼', steer: '◀ ▶', drift: 'R-SHIFT', fire: "'" },
+  { red: 'Q', both: 'F', blue: 'E', gas: 'W', brake: 'S', steer: 'A D', drift: 'SPACE', fire: 'X', form: 'Z', horn: 'V' },
+  { red: ',', both: '.', blue: '/', gas: '▲', brake: '▼', steer: '◀ ▶', drift: 'R-SHIFT', fire: "'", form: 'ENTER', horn: '\\' },
 ];
 // Buttons that act once per press. The game latches them per rendered frame so a short tap is
 // never lost between fixed sim steps, and online joiners send them as running counts.
-export const PRESSES = ['item', 'special', 'jump', 'rear', 'horn'];
+export const PRESSES = ['item', 'special', 'jump', 'rear', 'horn', 'form'];
 
 const MENU = {
   up: ['ArrowUp', 'KeyW'],
@@ -109,9 +113,9 @@ export function padStyleOf(id = '') {
 
 // Button prompts per device family.
 const GLYPHS = {
-  keyboard: { confirm: 'ENTER', back: 'ESC', pause: 'ESC', gas: 'W', brake: 'S', steer: 'A D', drift: 'SPACE', fire: 'X', item: 'L⇧', special: 'R⇧', red: 'L⇧', blue: 'R⇧', both: 'L⇧+R⇧', look: 'C', reset: 'R', jump: 'U', rear: 'I', horn: 'H', paint: '▲ ▼', choose: '◀ ▶' },
-  xbox: { confirm: 'A', back: 'B', pause: 'MENU', gas: 'RT', brake: 'LT', steer: 'L-STICK', drift: 'X', fire: 'B', red: 'LB', blue: 'RB', both: 'Y', item: 'LB', special: 'RB', look: 'RS', reset: 'VIEW', jump: 'D-PAD ▲', rear: 'D-PAD ▼', horn: 'LS', paint: '▲ ▼', choose: '◀ ▶' },
-  ps: { confirm: '✕', back: '○', pause: 'OPTIONS', gas: 'R2', brake: 'L2', steer: 'L-STICK', drift: '□', fire: '○', red: 'L1', blue: 'R1', both: '△', item: 'L1', special: 'R1', look: 'R3', reset: 'SHARE', jump: 'D-PAD ▲', rear: 'D-PAD ▼', horn: 'L3', paint: '▲ ▼', choose: '◀ ▶' },
+  keyboard: { confirm: 'ENTER', back: 'ESC', pause: 'ESC', gas: 'W', brake: 'S', steer: 'A D', drift: 'SPACE', fire: 'X', form: 'Z', item: 'L⇧', special: 'R⇧', red: 'L⇧', blue: 'R⇧', both: 'L⇧+R⇧', look: 'C', reset: 'R', jump: 'U', rear: 'I', horn: 'H', paint: '▲ ▼', choose: '◀ ▶' },
+  xbox: { confirm: 'A', back: 'B', pause: 'MENU', gas: 'RT', brake: 'LT', steer: 'L-STICK', drift: 'X', fire: 'B', form: 'Y', red: 'LB', blue: 'RB', both: 'LB+RB', item: 'LB', special: 'RB', look: 'RS', reset: 'VIEW', jump: 'D-PAD ▲', rear: 'D-PAD ▼', horn: 'LS', paint: '▲ ▼', choose: '◀ ▶' },
+  ps: { confirm: '✕', back: '○', pause: 'OPTIONS', gas: 'R2', brake: 'L2', steer: 'L-STICK', drift: '□', fire: '○', form: '△', red: 'L1', blue: 'R1', both: 'L1+R1', item: 'L1', special: 'R1', look: 'R3', reset: 'SHARE', jump: 'D-PAD ▲', rear: 'D-PAD ▼', horn: 'L3', paint: '▲ ▼', choose: '◀ ▶' },
 };
 GLYPHS.generic = GLYPHS.xbox;
 // (the lens buttons are already labelled RED, BOTH and BLUE, so their chips and tips carry no extra glyph)
@@ -212,7 +216,7 @@ export class Input {
   blank() {
     // jump, rear and horn are presses (edges) like item and special.
     // pitch: -1 dive .. 1 climb, only used when flying (wing form).
-    return { throttle: 0, brake: 0, steer: 0, pitch: 0, drift: false, fire: false, item: false, special: false, look: false, reset: false, driftPressed: false, jump: false, rear: false, horn: false };
+    return { throttle: 0, brake: 0, steer: 0, pitch: 0, drift: false, fire: false, item: false, special: false, look: false, reset: false, driftPressed: false, jump: false, rear: false, horn: false, form: false };
   }
 
   key(codes) {
@@ -349,6 +353,7 @@ export class Input {
     let jump = false;
     let rear = false;
     let horn = false;
+    let form = false;
     // Flying: forward dives, back climbs (keys double as gas and brake, the stick's Y axis on pads).
     let pitch = 0;
     if (b) {
@@ -372,6 +377,7 @@ export class Input {
       }
       rear = this.keyEdge(b.rear);
       horn = this.keyEdge(b.horn);
+      form = this.keyEdge(b.form || []);
     }
     for (const i of this.padsFor(p)) {
       throttle = Math.max(throttle, this.padVal(i, PAD.RT), this.padBtn(i, PAD.A) ? 1 : 0);
@@ -389,13 +395,18 @@ export class Input {
       // Retro Shift: drift on X, LB shifts to RED, RB to BLUE, Y back to BOTH.
       drift = drift || this.padBtn(i, PAD.X);
       driftPressed = driftPressed || this.padEdge(i, PAD.X);
-      item = item || this.padEdge(i, PAD.LB);
-      special = special || this.padEdge(i, PAD.RB);
+      const shoulders = this.padBtn(i, PAD.LB) && this.padBtn(i, PAD.RB) && (this.padEdge(i, PAD.LB) || this.padEdge(i, PAD.RB));
+      if (!shoulders) {
+        item = item || this.padEdge(i, PAD.LB);
+        special = special || this.padEdge(i, PAD.RB);
+      }
       look = look || this.padBtn(i, PAD.RS);
       // View (Xbox) / Share (PS4), held, puts a stuck truck back on track.
       reset = reset || this.padBtn(i, PAD.BACK);
       // Twisted Metal style energy moves on the d-pad (left/right still steer).
-      jump = jump || this.padEdge(i, PAD.Y) || this.padEdge(i, PAD.UP);
+      // Y / △ is the form's own move; back to BOTH is D-pad up, both shoulders together, or the lens you're in again
+      form = form || this.padEdge(i, PAD.Y);
+      jump = jump || this.padEdge(i, PAD.UP) || shoulders;
       rear = rear || this.padEdge(i, PAD.DOWN);
       horn = horn || this.padEdge(i, PAD.LS);
     }
@@ -430,6 +441,7 @@ export class Input {
     c.jump = jump;
     c.rear = rear;
     c.horn = horn;
+    c.form = form;
   }
 
   controls(p) {
