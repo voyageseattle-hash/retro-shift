@@ -262,15 +262,27 @@ kbd:empty { display: none; }
 .h-hull span { position: absolute; right: calc(100% + 10px); top: -3px; font-size: 9px; letter-spacing: 0.3em; color: #cfc4e6; transform: skewX(20deg); }
 .h-hull.hit { animation: shake 0.3s; }
 @keyframes blink2 { 50% { opacity: 0.35; } }
-.h-item { position: absolute; left: 50%; top: max(14px, env(safe-area-inset-top)); transform: translateX(-50%) scale(0.8); display: flex; align-items: center; gap: 10px; padding: 8px 16px; background: var(--panel); border: 1.5px solid var(--ic, #fff); box-shadow: 0 0 18px color-mix(in srgb, var(--ic, #fff) 45%, transparent), inset 0 0 14px color-mix(in srgb, var(--ic, #fff) 25%, transparent); opacity: 0; transition: opacity 0.15s, transform 0.15s; }
-.h-item.on { opacity: 1; transform: translateX(-50%); }
-.h-item b { font-size: 20px; letter-spacing: 0.14em; color: var(--ic, #fff); text-shadow: 0 0 10px var(--ic, #fff); font-style: italic; }
-.h-item small { font-size: 11px; letter-spacing: 0.16em; color: #cfc4e6; }
-.h-item kbd { font-size: 13px; }
-.h-item.rolling kbd, .h-item.rolling small { display: none; }
-.h-item.rolling b { opacity: 0.8; }
-#hud.split .h-item { top: 8px; padding: 4px 10px; }
+.h-item { position: absolute; right: max(18px, env(safe-area-inset-right)); bottom: calc(max(14px, env(safe-area-inset-bottom)) + 108px); display: none; align-items: center; gap: 12px; padding: 8px 12px 8px 8px; min-width: 300px; background: var(--panel); border: 2px solid var(--ic, #fff); border-radius: 6px; box-shadow: 0 0 22px color-mix(in srgb, var(--ic, #fff) 45%, transparent), inset 0 0 16px color-mix(in srgb, var(--ic, #fff) 22%, transparent); transform-origin: right bottom; transition: transform 0.15s, opacity 0.2s; }
+.h-item.on { display: flex; }
+.h-item-ic { width: 64px; height: 64px; flex: none; border-radius: 4px; background: color-mix(in srgb, var(--ic, #fff) 14%, #07020f); filter: drop-shadow(0 0 8px var(--ic, #fff)); }
+.h-item-ic svg { width: 100%; height: 100%; display: block; }
+.h-item-tx { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.h-item b { font-size: 22px; letter-spacing: 0.1em; color: var(--ic, #fff); text-shadow: 0 0 10px var(--ic, #fff); font-style: italic; white-space: nowrap; }
+.h-item small { font-size: 12px; letter-spacing: 0.12em; color: #e4dcf5; }
+.h-item-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: none; }
+.h-item-btn kbd { font-size: 22px; min-width: 40px; height: 40px; display: grid; place-items: center; border: 2px solid var(--ic, #fff); color: #fff; border-radius: 50%; box-shadow: 0 0 12px var(--ic, #fff); }
+.h-item-btn span { font-size: 10px; letter-spacing: 0.2em; color: var(--ic, #fff); }
+.h-item.held .h-item-btn kbd { animation: itemPulse 0.9s ease-in-out infinite; }
+@keyframes itemPulse { 50% { box-shadow: 0 0 22px var(--ic, #fff), 0 0 4px #fff inset; transform: scale(1.08); } }
+.h-item.got { transform: scale(1.08); }
+.h-item.empty { opacity: 0.55; box-shadow: none; }
+.h-item.empty .h-item-btn, .h-item.rolling .h-item-btn, .h-item.rolling small { visibility: hidden; }
+.h-item.empty b { font-size: 16px; }
+#hud.split .h-item { bottom: 64px; right: 8px; min-width: 0; padding: 4px 8px 4px 4px; gap: 6px; }
+#hud.split .h-item-ic { width: 40px; height: 40px; }
 #hud.split .h-item b { font-size: 15px; }
+#hud.split .h-item small { display: none; }
+#hud.split .h-item-btn kbd { font-size: 15px; min-width: 28px; height: 28px; }
 .h-flash.hurt { background: radial-gradient(ellipse at center, transparent 45%, rgba(255, 60, 40, 0.5)); }
 @keyframes blink { 50% { border-color: #fff; } }
 @keyframes shake { 25% { transform: skewX(-20deg) translateX(-8px); } 75% { transform: skewX(-20deg) translateX(8px); } }

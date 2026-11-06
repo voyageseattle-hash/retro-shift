@@ -97,6 +97,7 @@ export class Race {
     const others = CARS.filter((c) => c !== playerCar && !c.secret);
     const others2 = this.split ? others.filter((c) => c.id !== opts.car2) : others;
     const diff = opts.difficulty ?? 1; // 0 easy, 1 normal, 2 hard
+    this.assist = !!opts.assist; // steering assist (steerAssist)
     for (let k = 0; k <= field; k++) {
       const S = this.online?.slots[k];
       // offline, the player starts at the back of the grid (in split-screen, player 2 just ahead of player 1)
@@ -403,11 +404,13 @@ export class Race {
     // the rails are bumpers: a glancing scrape costs nothing, a square hit a little hull, and they never finish a car
     if (impact > 16 && r.hp > 12) this.hurt(r, Math.min((impact - 16) * 0.6, r.hp - 10));
     if (impact > 6 && this.near(r)) this.debris.sparks(r.pos, _v.copy(r.vel).multiplyScalar(-0.03), Math.min(24, impact), 0xffd27a, 14, r.gnd.y);
-    if (r.isPlayer && impact > 6) {
+    // a scrape along the rail touches it frame after frame: only a fresh knock shakes the view and the pad
+    if (r.isPlayer && impact > 6 && this.t - (r.railT ?? -9) > 0.35) {
       this.app.audio.play('scrape');
-      this.camOf(r).addShake(Math.min(0.4, impact * 0.02));
+      if (impact > 10) this.camOf(r).addShake(Math.min(0.3, impact * 0.012));
       this.app.input.rumble(0, 0.3, 0.2, 80);
     }
+    if (impact > 6) r.railT = this.t;
   }
   onLand(r, impact) {
     if (r.isPlayer && impact > 6) {
@@ -593,6 +596,43 @@ export class Race {
     }
   }
 
+  // STEERING ASSIST (settings, on by default): a hand on the wheel for newer drivers. With no steering it straightens
+  // you up along the road; near a rail it eases off steering into it and draws you back off it, so a race isn't
+  // spent bouncing wall to wall. Hands-off in a drift, in the air, and on a bent road (a pipe wall is the point).
+  steerAssist(r, steer, drift) {
+    const tr = r.track;
+    if (!tr || !r.grounded || drift || r.drift.active || r.speed < 8) return steer;
+    const P = tr.path;
+    if (P.warpK?.[tr.i] > 0) return steer;
+    const j = P.wrap(tr.i + Math.round((6 + r.speed * 0.25) / P.ds));
+    let err = r.yaw - Math.atan2(P.thx[j], P.thz[j]);
+    err = Math.atan2(Math.sin(err), Math.cos(err));
+    if (Math.abs(err) > 1.2) return steer; // turned round: leave it to them
+    // (positive steer turns toward +lat, and lowers yaw)
+    const hands = 1 - Math.min(1, Math.abs(steer));
+    let s = steer + clamp(err * 1.6, -0.45, 0.45) * hands;
+    // never point too far across the road at speed: a beginner holding full lock at 200 km/h is the bounce wall to
+    // wall. (err < 0: heading toward +lat, which positive steer turns toward)
+    const maxDev = 0.2 + 0.5 * (1 - clamp(r.speed / 55, 0, 1));
+    const over = Math.abs(err) - maxDev;
+    if (over > 0) {
+      const head = -Math.sign(err);
+      if (Math.sign(s) === head) s *= Math.max(0, 1 - over * 10);
+      s -= head * Math.min(0.8, over * 5);
+    }
+    // where you'll be in half a second: heading for the rail, ease off and steer away before you hit it
+    const latV = r.vel.x * P.rightX(tr.i) + r.vel.z * P.rightZ(tr.i);
+    const pred = tr.lat + latV * 0.5;
+    const edge = Math.abs(pred) - (P.halfW - 3);
+    if (edge > 0) {
+      const toward = Math.sign(pred);
+      const k = Math.min(1, edge / 3);
+      if (Math.sign(s) === toward) s *= 1 - 0.9 * k;
+      s -= toward * k * (0.3 + clamp((latV * toward) / 10, 0, 0.7));
+    }
+    return clamp(s, -1, 1);
+  }
+
   // ------------------------------------------------------------ per frame
   update(dt) {
     this.t += dt;
@@ -604,7 +644,7 @@ export class Race {
       const c = C[k];
       pl.ctl.throttle = c.throttle;
       pl.ctl.brake = c.brake;
-      pl.ctl.steer = c.steer;
+      pl.ctl.steer = this.assist ? this.steerAssist(pl, c.steer, c.drift) : c.steer;
       pl.ctl.drift = c.drift;
       if (this.state !== 'race' || pl.finished) return;
       if (c.fire && !pl.fireHeld) this.items.use(pl);

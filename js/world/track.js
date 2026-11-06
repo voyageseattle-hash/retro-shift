@@ -1081,8 +1081,10 @@ export class TrackWorld {
     if (vn > 0) {
       // a bumper, not a wall: it takes the speed going into it, gives a little back, and keeps most of the speed
       // along it
-      r.vel.x -= gx * side * vn * 1.18;
-      r.vel.z -= gz * side * vn * 1.18;
+      // (it soaks up the hit and you slide along it: a bounce back across the road just sends you into the other
+      // rail, wall to wall)
+      r.vel.x -= gx * side * vn * 1.06;
+      r.vel.z -= gz * side * vn * 1.06;
       r.vel.multiplyScalar(1 - clamp(vn * 0.005, 0, 0.1));
       // and the curved lip turns the nose along the road, so a hard hit becomes a slide down the rail instead of a
       // bounce back across the road into the other one
@@ -1094,7 +1096,7 @@ export class TrackWorld {
         const tz = hz - gz * side * hn;
         let d = Math.atan2(tx, tz) - r.yaw;
         d = Math.atan2(Math.sin(d), Math.cos(d));
-        const k = clamp(vn / 25, 0.15, 0.6);
+        const k = clamp(vn / 18, 0.3, 0.8);
         r.yaw += d * k;
         r.yawRate *= 1 - k;
       }
