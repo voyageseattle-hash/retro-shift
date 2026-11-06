@@ -832,6 +832,29 @@ export class UI {
     H.classList.toggle('split', n > 1);
     H.hidden = false;
     H.querySelector('.h-pause').addEventListener('click', () => this.app.pause());
+    // on a phone the dash's charge slot fires the charge and its form badge does the form move
+    if (document.body.classList.contains('touch')) {
+      const I = this.app.input;
+      for (const v of H.querySelectorAll('.hud-view')) {
+        const item = v.querySelector('.h-item');
+        const fire = (on) => (e) => {
+          e.preventDefault();
+          I.lastDevice = 'touch';
+          I.touch.active = true;
+          I.touch.fire = on;
+          // (a quick tap can start and end between two frames: the press itself always counts)
+          if (on) I.touchEdge('fire');
+        };
+        item.addEventListener('pointerdown', fire(true));
+        for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) item.addEventListener(ev, fire(false));
+        v.querySelector('.h-form').addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          I.lastDevice = 'touch';
+          I.touch.active = true;
+          I.touchEdge('form');
+        });
+      }
+    }
     const best = race.mono ? loadGhost(race.def.id, true) : storage.get(`rs.best.${race.def.id}`, null);
     const bits = [];
     if (race.tutorial) bits.push('FIRST RUN · ESC TO SKIP');
@@ -1140,7 +1163,12 @@ export class UI {
     h.controls.classList.toggle('on', pre);
     if (pre) {
       const g = (key) => `<kbd>${this.lensGlyph(race, k, key)}</kbd>`;
-      const html = `<div><span>GAS ${g('gas')}</span><span>BRAKE ${g('brake')}</span><span>STEER ${g('steer')}</span><span>DRIFT ${g('drift')}</span>${race.items?.on ? `<span>CHARGE ${g('fire')}</span>` : ''}${!race.split && !race.solo ? `<span>HORN ${g('horn')}</span>` : ''}</div>
+      // (on a phone the buttons say what they do, so the card says what isn't on a button)
+      const touch = this.app.input.lastDevice === 'touch';
+      const html = touch
+        ? `<div>${race.items?.on ? '<span>CHARGE: TAP ITS SLOT</span>' : ''}<span>FORM MOVE: TAP THE BADGE</span></div>
+        <p>${race.mono ? 'SWAP flips your lens.' : 'RED is fastest · BLUE grips and drifts · BOTH refills SHIFT'}</p>`
+        : `<div><span>GAS ${g('gas')}</span><span>BRAKE ${g('brake')}</span><span>STEER ${g('steer')}</span><span>DRIFT ${g('drift')}</span>${race.items?.on ? `<span>CHARGE ${g('fire')}</span>` : ''}${!race.split && !race.solo && this.app.input.lastDevice !== 'touch' ? `<span>HORN ${g('horn')}</span>` : ''}</div>
         <div><span class="red">RED ${g('red')}</span><span class="both">${race.mono ? 'SWAP' : 'BOTH'} ${g('both')}</span><span class="blue">BLUE ${g('blue')}</span></div>
         <p>${race.mono ? 'SWAP flips your lens.' : 'RED is fastest · BLUE grips and drifts · BOTH refills SHIFT'}</p>`;
       if (h.controlsHtml !== html) h.controls.innerHTML = h.controlsHtml = html;

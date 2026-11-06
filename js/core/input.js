@@ -119,7 +119,8 @@ const GLYPHS = {
 };
 GLYPHS.generic = GLYPHS.xbox;
 // (the lens buttons are already labelled RED, BOTH and BLUE, so their chips and tips carry no extra glyph)
-GLYPHS.touch = { ...GLYPHS.keyboard, gas: 'GAS', brake: 'BRK', steer: '◀ ▶', drift: 'DRIFT', confirm: 'TAP', back: '✕', pause: '❚❚', reset: '↺', look: 'REAR', red: '', blue: '', both: '' };
+// (on a phone the charge and form slots in the HUD are the buttons: tap them)
+GLYPHS.touch = { ...GLYPHS.keyboard, gas: 'GAS', brake: 'BRK', steer: '◀ ▶', drift: 'DRIFT', confirm: 'TAP', back: '✕', pause: '❚❚', reset: '↺', look: 'REAR', fire: 'TAP', form: 'TAP', red: '', blue: '', both: '' };
 
 function normalizePad(p) {
   const buttons = p.buttons.map((b) => (typeof b === 'number' ? b : b.value || (b.pressed ? 1 : 0)));
@@ -418,7 +419,7 @@ export class Input {
       if (Math.abs(t.pitch || 0) > Math.abs(pitch)) pitch = t.pitch;
       drift = drift || t.drift;
       driftPressed = driftPressed || this.touchEdges.has('drift');
-      fire = fire || t.fire;
+      fire = fire || t.fire || this.touchEdges.has('fire');
       item = item || this.touchEdges.has('item');
       special = special || this.touchEdges.has('special');
       reset = reset || t.reset;
@@ -426,6 +427,7 @@ export class Input {
       jump = jump || this.touchEdges.has('jump');
       rear = rear || this.touchEdges.has('rear');
       horn = horn || this.touchEdges.has('horn');
+      form = form || this.touchEdges.has('form');
     }
     c.throttle = throttle;
     c.brake = brake;

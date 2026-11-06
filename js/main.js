@@ -80,6 +80,8 @@ class App {
   }
 
   onResize() {
+    // a phone turned upright mid-race: the race waits under the turn-sideways card (css #rotate)
+    if (this.race && !this.race.online && !this.paused && this.race.state !== 'finished' && document.body.classList.contains('touch') && innerHeight > innerWidth * 1.15) this.pause();
     const a = this.renderer.width / this.renderer.height;
     if (this.race) this.race.setAspect(a);
     this.showroom?.setAspect(a);
@@ -410,6 +412,8 @@ class App {
     if (!isTouch) return;
     const T = document.getElementById('touch');
     T.hidden = false;
+    // (the HUD lays itself out round the touch buttons, and the charge and form slots in it become buttons)
+    document.body.classList.add('touch');
     // the first prompts on a phone name the touch buttons, not W A S D (a key press switches them back)
     this.input.lastDevice = 'touch';
     T.innerHTML = `
