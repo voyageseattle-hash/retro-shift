@@ -9,16 +9,28 @@
 //                  edge, a heavy slosh in water (a light one for the Skimmer, which rides on it), a high buzz up a
 //                  wall-run or a pipe wall, a drop-out in the air and a thump on landing.
 //   pass-bys       a rival going past close at a real difference in speed whooshes by.
+//   lens coach     the first few times you shift into each lens (counted for good, in rs.lensCoach), a small line
+//                  under the craft names the form and what it's for, so three lenses are three tools, not three
+//                  things to remember. Skipped in FIRST RUN, which teaches them itself.
 //
 // Reads racer state only (drift, boostTime, grounded, gnd), so it never fights race.js's own events.
 
 import * as THREE from '../../vendor/three.js';
-import { clamp } from '../core/util.js';
-import { RED, BLUE } from '../world/shift.js';
+import { clamp, storage } from '../core/util.js';
+import { RED, BLUE, BOTH } from '../world/shift.js';
 
 // the drift stages' colours (index = drift level); 3 alternates between its two
 export const DRIFT_COLORS = [0xb8c4e8, 0x4ab0ff, 0xff4a6a, 0xff4fd8];
 const PRISM_ALT = 0xffffff;
+
+// what each lens turns you into, and what it's for
+export const LENS_COACH = {
+  [RED]: { name: 'RED · THE BLADE', job: 'FASTEST · CLINGS · FITS SLITS', color: '#ff4a6a' },
+  [BLUE]: { name: 'BLUE · THE SKIMMER', job: 'GRIP · SKIMS WATER · GLIDES GAPS', color: '#4ab0ff' },
+  [BOTH]: { name: 'BOTH · THE PAIR', job: 'STEADY · REFILLS SHIFT', color: '#d8c8ff' },
+};
+const COACH_TIMES = 3;
+const COACH_KEY = 'rs.lensCoach';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -30,6 +42,9 @@ export class Feel {
     this.st = new Map(); // racer -> { level, active, grounded, airTime, sparkT, edgeT, rumbleT }
     this.t = 0;
     this.passCd = 0;
+    this.coach = storage.get(COACH_KEY, {});
+    this.coachMode = new Map(); // player -> the lens they were last in
+    this.coachCd = 0;
   }
 
   stateOf(r) {
@@ -55,6 +70,29 @@ export class Feel {
       s.air = r.grounded ? 0 : r.airTime;
     }
     if (R.state === 'race' && !R.split) this.passBys(R.player, dt);
+    if (R.state === 'race' && !R.tutorial && !R.opts.autopilot) this.lensCoach(dt);
+  }
+
+  // The first few shifts into each lens name the form you just became and its job.
+  lensCoach(dt) {
+    const R = this.race;
+    this.coachCd = Math.max(0, this.coachCd - dt);
+    for (const r of R.racers) {
+      if (!r.isPlayer) continue;
+      const last = this.coachMode.get(r);
+      this.coachMode.set(r, r.mode);
+      if (last === undefined || last === r.mode || this.coachCd > 0) continue;
+      const n = this.coach[r.mode] || 0;
+      if (n >= COACH_TIMES) continue;
+      // BOTH only after you've been in a lens a few times: it's the one you start in
+      if (r.mode === BOTH && !(this.coach[RED] || this.coach[BLUE])) continue;
+      this.coach[r.mode] = n + 1;
+      storage.set(COACH_KEY, this.coach);
+      this.coachCd = 1.2;
+      const c = LENS_COACH[r.mode];
+      // the form in its lens colour, its job in white with a dark edge, so it reads on a screen tinted the same colour
+      R.emitP(r, 'popup', { text: `${c.name} <span class="coach-job">${c.job}</span>`, color: c.color, small: true });
+    }
   }
 
   // Sparks off the rear pads while drifting, in the stage's colour; a burst and a lunge when the turbo fires.

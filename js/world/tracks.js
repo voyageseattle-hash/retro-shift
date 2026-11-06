@@ -285,6 +285,7 @@ export const TRACKS = [
       return pts.map(([x, z, y]) => [x, z, y]);
     })(),
     features: (P) => ({
+      routeBoosts: 'light', // a hard course: just a pad at the mouth of each route
       // the BLUE DROP: off the outside of the spiral's top, a long blue-only fall across the loop, and a hairpin at
       // the bottom that feeds into the road from the inside. (A straight chord from the spiral to the far corner met
       // the road with a near-180° hook at each end, where rivals stalled and fell through.) The via line is a
@@ -337,6 +338,7 @@ export const TRACKS = [
       [-60, 360, 4], [-160, 240, 2], [-140, 80, 0], [-80, -40, 0],
     ],
     features: (P) => ({
+      routeBoosts: 'light', // a hard course: just a pad at the mouth of each route
       branches: [
         { from: P(1, 0.3), to: P(5, 0.7), mask: M.RO, side: 1, lift: 8, label: 'RED FOLD' },
         { from: P(9, 0.2), to: P(14, 0.4), mask: M.BO, side: -1, lift: 10, label: 'BLUE FOLD' },

@@ -508,3 +508,20 @@ body.shapes .chip.both::before { content: '◆'; font-size: 0.85em; }
 .keylist kbd.wait { color: #ffd04a; border-color: #ffd04a; animation: blink 0.8s steps(2) infinite; }
 @keyframes blink { 50% { opacity: 0.35; } }
 .screen.keys .list { max-height: 62vh; overflow-y: auto; }
+/* SHIFT SCHOOL brief: the three lenses as cards */
+.lens-cards { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 14px auto 10px; width: min(900px, 100%); }
+.lens-card { flex: 1 1 200px; max-width: 280px; padding: 12px 14px; background: var(--panel); border: 2px solid var(--lc); display: flex; flex-direction: column; gap: 4px; transform: skewX(-6deg); }
+.lens-card.red { --lc: #ff4a6a; }
+.lens-card.blue { --lc: #4ab0ff; }
+.lens-card.both { --lc: #d8c8ff; }
+.lens-card b { color: var(--lc); font-family: 'Russo One', sans-serif; font-style: italic; font-size: 22px; letter-spacing: 0.08em; }
+.lens-card .lc-form { letter-spacing: 0.12em; color: #fff; }
+.lens-card .lc-key { align-self: flex-start; padding: 1px 8px; border: 1.5px solid var(--lc); color: var(--lc); font-size: 13px; letter-spacing: 0.06em; }
+.lens-card p { margin: 4px 0 0; color: #e0d4ff; line-height: 1.35; font-size: 14px; }
+.lens-card.off { opacity: 0.32; border-style: dashed; }
+.brief-how { width: min(640px, 92%); margin: 6px auto 14px; color: #e0d4ff; line-height: 1.6; }
+.h-event .ev-note { font-size: 13px; letter-spacing: 0.06em; }
+body.shapes .lens-card.red b::before { content: '▲ '; }
+body.shapes .lens-card.blue b::before { content: '● '; }
+.pop .coach-job { color: #fff; text-shadow: 0 0 3px #000, 0 0 10px rgba(0, 0, 0, 0.8); }
+.pop:has(.coach-job) { text-shadow: 0 0 3px #000, 0 0 12px rgba(0, 0, 0, 0.85), 0 0 18px currentColor; }

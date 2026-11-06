@@ -191,3 +191,58 @@ export function signFormRoutes(world, addSign) {
     }
   }
 }
+
+// ROUTE BOOSTS: the boost pads along a lens road or a form route take that lens's colour, and a chain of them is laid
+// down its length, so the colour of the pads says which lens the road wants and, once you've picked a blue route,
+// the blue pads keep carrying you along it. A lens-only road gets pads in that lens only; a form route's pads are
+// there in its lens and in BOTH (the Skimmer's glide gap: blue; the Blade's slit and wall run: red), so a late shift
+// doesn't cost you the pad. None on a glide gap, a wall run or near a slit, where you have other things to do.
+// A course can set routeBoosts: 'light' (just the pad at the mouth of each route, for the hard courses) or false.
+export function routeMask(path) {
+  const m = path.def?.mask;
+  if (m === M.RO || m === M.BO) return m;
+  if (path.slit || path.wallrun) return M.R;
+  if (path.glide) return M.B;
+  return null;
+}
+
+export function layRouteBoosts(world, addPad) {
+  const style = world.def.routeBoosts ?? 'full';
+  if (!style) return;
+  const SPACING = 130; // metres between pads on a route
+  for (const path of world.paths) {
+    if (path === world.main || path.closed) continue;
+    const mask = routeMask(path);
+    // a short hop (a rooftop run) is over before a chain would mean anything, and a boost there throws you off it
+    if (mask == null || path.length < 250) continue;
+    const ds = path.ds;
+    const near = (i, metres, list) => list.some((j) => Math.abs(i - j) * ds < metres);
+    const slits = (world.slits || []).filter((s) => s.path === path).map((s) => s.i);
+    const obs = world.obstacles.filter((o) => o.path === path).map((o) => o.i);
+    const pads = world.pads.filter((p) => p.path === path).map((p) => p.i);
+    const clear = (i) => {
+      for (let k = -Math.round(20 / ds); k <= Math.round(30 / ds); k++) {
+        const j = i + k;
+        if (j < 0 || j >= path.N) return false;
+        if (path.glide?.[j] || path.cling?.[j] || !path.mask[j]) return false;
+      }
+      // and none in the run-up to a glide gap: the Skimmer wants a steady speed off the lip, not a kick
+      if (path.glide) for (let k = 0; k <= Math.round(80 / ds); k++) if (path.glide[i + k]) return false;
+      return !near(i, 35, slits) && !near(i, 20, obs) && !near(i, 45, pads);
+    };
+    // the mouth of the route first (it says the colour as you commit), then one every SPACING metres
+    const want = [Math.round(path.N * 0.1)];
+    if (style === 'full') for (let d = 0.1 * path.length + SPACING; d < path.length * 0.88; d += SPACING) want.push(Math.round(d / ds));
+    for (const i0 of want) {
+      // slide a pad forward (then back) up to 30 m to find clear road
+      let at = -1;
+      for (let s = 0; s <= Math.round(30 / ds) && at < 0; s++) {
+        if (clear(i0 + s)) at = i0 + s;
+        else if (clear(i0 - s)) at = i0 - s;
+      }
+      if (at < 0) continue;
+      addPad({ path: path.id, at: path.frac(at), mask });
+      pads.push(at);
+    }
+  }
+}

@@ -264,7 +264,7 @@ export class EventRun {
     R.emitP(p, 'popup', { text: this.failed ? reason || 'FAILED' : ['DONE', 'BRONZE', 'SILVER', 'GOLD'][this.tier], color: ['#d8c8ff', '#e08a4a', '#d8e0f0', '#ffd04a'][this.tier] });
   }
 
-  // What the HUD shows: { title, goal, value, target, timeLeft, tier, failed }
+  // What the HUD shows: { title, goal, value, target, timeLeft, tier, failed, kind, note }
   hud() {
     const G = this.goal;
     const hi = HIGHER[G.kind];
@@ -275,7 +275,8 @@ export class EventRun {
     let timeLeft = null;
     if (G.time) timeLeft = Math.max(0, G.time - this.t);
     else if (G.kind === 'survive') timeLeft = Math.max(0, this.def.medals[2] - this.t);
-    return { title: this.def.title, goal: this.def.blurb, value: this.value, target, timeLeft, tier, failed: this.failed, kind: G.kind };
+    // note: a twist's own line (THREE FORMS ticks off the lenses)
+    return { title: this.def.title, goal: this.def.blurb, value: this.value, target, timeLeft, tier, failed: this.failed, kind: G.kind, note: this.note || '' };
   }
 }
 

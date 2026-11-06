@@ -12,7 +12,7 @@ import { buildDecor } from './decor.js';
 import { buildSigns } from './signs.js';
 import { buildCovers } from './covers.js';
 import { layStorms } from './storms-def.js';
-import { layFormRoutes, addSlit } from './formroutes.js';
+import { layFormRoutes, addSlit, routeMask, layRouteBoosts } from './formroutes.js';
 import { layWarps, buildWarps, PIPE } from './warp.js';
 import { FORMS } from '../vehicles/forms.js';
 
@@ -802,7 +802,13 @@ export class TrackWorld {
       if (o.type === 'slit') addSlit(this, o);
       else this.addObstacle(o);
     }
-    for (const b of def.boosts || []) this.addPad(b);
+    // a pad on a lens road or a form route takes the route's colour (formroutes.js), and a chain is laid along it
+    for (const b of def.boosts || []) {
+      const rp = b.path && b.mask == null && this.paths.find((p) => p.id === b.path);
+      const rm = rp && routeMask(rp);
+      this.addPad(rm != null && def.routeBoosts !== false ? { ...b, mask: rm } : b);
+    }
+    layRouteBoosts(this, (b) => this.addPad(b));
     // LAUNCHERS: a hole in your world is a ramp in the other one. Before each stretch of main road that's missing in
     // a lens, that lens gets a launcher, there only for it, that throws you up and over the hole. (More can be laid by
     // hand with def.launchers.)
