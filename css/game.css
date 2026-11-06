@@ -249,6 +249,15 @@ kbd:empty { display: none; }
 .h-hull span { position: absolute; right: calc(100% + 10px); top: -3px; font-size: 9px; letter-spacing: 0.3em; color: #cfc4e6; transform: skewX(20deg); }
 .h-hull.hit { animation: shake 0.3s; }
 @keyframes blink2 { 50% { opacity: 0.35; } }
+.h-item { position: absolute; left: 50%; top: max(14px, env(safe-area-inset-top)); transform: translateX(-50%) scale(0.8); display: flex; align-items: center; gap: 10px; padding: 8px 16px; background: var(--panel); border: 1.5px solid var(--ic, #fff); box-shadow: 0 0 18px color-mix(in srgb, var(--ic, #fff) 45%, transparent), inset 0 0 14px color-mix(in srgb, var(--ic, #fff) 25%, transparent); opacity: 0; transition: opacity 0.15s, transform 0.15s; }
+.h-item.on { opacity: 1; transform: translateX(-50%); }
+.h-item b { font-size: 20px; letter-spacing: 0.14em; color: var(--ic, #fff); text-shadow: 0 0 10px var(--ic, #fff); font-style: italic; }
+.h-item small { font-size: 11px; letter-spacing: 0.16em; color: #cfc4e6; }
+.h-item kbd { font-size: 13px; }
+.h-item.rolling kbd, .h-item.rolling small { display: none; }
+.h-item.rolling b { opacity: 0.8; }
+#hud.split .h-item { top: 8px; padding: 4px 10px; }
+#hud.split .h-item b { font-size: 15px; }
 .h-flash.hurt { background: radial-gradient(ellipse at center, transparent 45%, rgba(255, 60, 40, 0.5)); }
 @keyframes blink { 50% { border-color: #fff; } }
 @keyframes shake { 25% { transform: skewX(-20deg) translateX(-8px); } 75% { transform: skewX(-20deg) translateX(8px); } }

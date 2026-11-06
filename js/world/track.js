@@ -928,28 +928,44 @@ export class TrackWorld {
     if (Math.abs(lat) <= hw) return 0;
     const side = Math.sign(lat);
     const rail = side < 0 ? path.railL[g.i] : path.railR[g.i];
+    const gx = g.rx;
+    const gz = g.rz;
     if (!rail) {
       const open = (side < 0 ? path.jL : path.jR)?.[g.i];
-      if (!open || solidIn(open, r.mode)) return 0;
+      if (!open) return 0;
+      if (solidIn(open, r.mode)) {
+        // a fork opens the rail, but only where the fork's road is really there beside you: past its end (or where
+        // it has climbed away) the rail holds, so a junction is never a hole to fall through
+        const px = r.pos.x + gx * side * 2.2;
+        const pz = r.pos.z + gz * side * 2.2;
+        const h = (r._probe ||= {});
+        Object.assign(h, r.hints);
+        const saved = (this._gSave ||= {});
+        Object.assign(saved, g);
+        const g2 = this.ground(px, r.pos.y, pz, h, r.mode);
+        const ok = g2.onRoad && g2.path !== path;
+        Object.assign(g, saved);
+        if (ok) return 0;
+      }
     }
     const push = Math.abs(lat) - hw;
-    r.pos.x -= g.rx * side * push;
-    r.pos.z -= g.rz * side * push;
-    const vn = r.vel.x * g.rx * side + r.vel.z * g.rz * side;
+    r.pos.x -= gx * side * push;
+    r.pos.z -= gz * side * push;
+    const vn = r.vel.x * gx * side + r.vel.z * gz * side;
     if (vn > 0) {
       // a bumper, not a wall: it takes the speed going into it, gives a little back, and keeps most of the speed
       // along it
-      r.vel.x -= g.rx * side * vn * 1.18;
-      r.vel.z -= g.rz * side * vn * 1.18;
+      r.vel.x -= gx * side * vn * 1.18;
+      r.vel.z -= gz * side * vn * 1.18;
       r.vel.multiplyScalar(1 - clamp(vn * 0.005, 0, 0.1));
       // and the curved lip turns the nose along the road, so a hard hit becomes a slide down the rail instead of a
       // bounce back across the road into the other one
       const hx = Math.sin(r.yaw);
       const hz = Math.cos(r.yaw);
-      const hn = hx * g.rx * side + hz * g.rz * side;
+      const hn = hx * gx * side + hz * gz * side;
       if (hn > 0.05) {
-        const tx = hx - g.rx * side * hn;
-        const tz = hz - g.rz * side * hn;
+        const tx = hx - gx * side * hn;
+        const tz = hz - gz * side * hn;
         let d = Math.atan2(tx, tz) - r.yaw;
         d = Math.atan2(Math.sin(d), Math.cos(d));
         const k = clamp(vn / 25, 0.15, 0.6);

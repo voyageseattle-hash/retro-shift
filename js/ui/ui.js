@@ -1,6 +1,8 @@
 // Menus and the race HUD, all DOM over the WebGL canvas. Menus work with keyboard, gamepad, mouse and touch.
 
 import { drawPortrait } from './portraits.js';
+import { ITEMS } from '../game/items.js';
+const ITEM_IDS = Object.keys(ITEMS);
 import { TRACKS } from '../world/tracks.js';
 import { TrackWorld } from '../world/track.js';
 import { CARS } from '../vehicles/racer.js';
@@ -771,6 +773,7 @@ export class UI {
         <div class="h-energy"><i></i><span>SHIFT</span></div>
         <div class="h-hull">${'<i></i>'.repeat(10)}<span>HULL</span></div>
       </div>
+      <div class="h-item"><kbd></kbd><b></b><small></small></div>
       <div class="h-center"></div>
       <div class="h-tip"></div>
       <div class="h-controls"></div>
@@ -805,6 +808,10 @@ export class UI {
         energy: q('.h-energy i'),
         energyBox: q('.h-energy'),
         hull: q('.h-hull'),
+        item: q('.h-item'),
+        itemKey: q('.h-item kbd'),
+        itemName: q('.h-item b'),
+        itemTip: q('.h-item small'),
         hullCells: [...V.querySelectorAll('.h-hull i')],
         center: q('.h-center'),
         tip: q('.h-tip'),
@@ -958,7 +965,7 @@ export class UI {
       if (h[`_${key}`] === v) return;
       h[`_${key}`] = v;
       if (key === 'lap') node.innerHTML = v;
-      else if (key === 'driftCls' || key === 'energyCls' || key === 'hullCls') node.className = v;
+      else if (key === 'driftCls' || key === 'energyCls' || key === 'hullCls' || key === 'itemCls') node.className = v;
       else node.textContent = v;
     };
     set(h.place, 'place', String(place));
@@ -978,6 +985,26 @@ export class UI {
     const width = `${(p.energy * 100).toFixed(1)}%`;
     if (h._width !== width) h.energy.style.width = h._width = width;
     set(h.energyBox, 'energyCls', `h-energy m${p.mode}${p.energy < 0.25 ? ' low' : ''}${h.energyBox.classList.contains('deny') ? ' deny' : ''}`);
+    // the SEAM CHARGE slot: spinning through the charges while it rolls, then the one you hold and its button
+    if (race.items?.on) {
+      let id = null;
+      let cls = 'h-item';
+      if (p.rollT > 0) {
+        id = ITEM_IDS[Math.floor(race.t * 14) % ITEM_IDS.length];
+        cls += ' on rolling';
+      } else if (p.item) {
+        id = p.item;
+        cls += ' on';
+      }
+      set(h.item, 'itemCls', cls);
+      if (id) {
+        const it = ITEMS[id];
+        set(h.itemName, 'itemName', it.name);
+        set(h.itemTip, 'itemTip', p.rollT > 0 ? '' : it.tip);
+        set(h.itemKey, 'itemKey', this.lensGlyph(race, k, 'fire'));
+        if (h._itemColor !== it.color) h.item.style.setProperty('--ic', (h._itemColor = it.color));
+      }
+    }
     // the hull: ten cells, white while it's sound, orange once it's hurt, red and blinking when one more hit ends it
     const hp = Math.ceil(((p.hp ?? 100) / 100) * 10 - 0.001);
     const hullCls = `h-hull${hp <= 3 ? ' crit' : hp <= 6 ? ' hurt' : ''}${h.hull.classList.contains('hit') ? ' hit' : ''}`;
@@ -994,7 +1021,7 @@ export class UI {
     h.controls.classList.toggle('on', pre);
     if (pre) {
       const g = (key) => `<kbd>${this.lensGlyph(race, k, key)}</kbd>`;
-      const html = `<div><span>GAS ${g('gas')}</span><span>BRAKE ${g('brake')}</span><span>STEER ${g('steer')}</span><span>DRIFT ${g('drift')}</span></div>
+      const html = `<div><span>GAS ${g('gas')}</span><span>BRAKE ${g('brake')}</span><span>STEER ${g('steer')}</span><span>DRIFT ${g('drift')}</span>${race.items?.on ? `<span>CHARGE ${g('fire')}</span>` : ''}</div>
         <div><span class="red">RED ${g('red')}</span><span class="both">${race.mono ? 'SWAP' : 'BOTH'} ${g('both')}</span><span class="blue">BLUE ${g('blue')}</span></div>
         <p>${race.mono ? 'SWAP flips your lens.' : 'RED is fastest · BLUE grips and drifts · BOTH refills SHIFT'}</p>`;
       if (h.controlsHtml !== html) h.controls.innerHTML = h.controlsHtml = html;

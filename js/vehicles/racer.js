@@ -106,6 +106,10 @@ export class Racer {
     this.invuln = 0;
     this.hp = 100; // the hull (race.js HULL)
     this.hurtCd = 0;
+    // charges (game/items.js): a held one survives a respawn, the effects don't
+    this.cellT = this.empT = this.flipT = 0;
+    if (this.beamT > 0) this.setBeam(false);
+    this.beamT = 0;
     this.suspension = 0;
     this.suspVel = 0;
     this.bodyRoll = 0;
@@ -137,7 +141,8 @@ export class Racer {
   }
   shiftTo(mode, session) {
     if (mode === this.mode) return false;
-    if (!this.canShift(mode)) {
+    // flipped or stalled by a rival's charge: the lens is held for you
+    if (!this.canShift(mode) || this.flipT > 0 || this.empT > 0) {
       session?.onShiftDenied?.(this);
       return false;
     }
@@ -147,6 +152,20 @@ export class Racer {
     if (this.mono) this.energy -= SHIFT.monoCost;
     session?.onShift?.(this, prev, mode);
     return true;
+  }
+  // A rival's charge moves your lens for you (FLIP, EMP): no SHIFT check, no cost.
+  forceMode(mode, session) {
+    if (mode === this.mode) return;
+    const prev = this.mode;
+    this.mode = mode;
+    this.shiftT = 0.35;
+    session?.onShift?.(this, prev, mode, true);
+  }
+  // LIGHTSPEED: the craft stretches into a streak of light
+  setBeam(on) {
+    const b = this.model.body;
+    if (on) b.scale.set(0.55, 0.45, 2.6);
+    else b.scale.set(1, 1, 1);
   }
   updateEnergy(dt, session) {
     this.shiftT = Math.max(0, this.shiftT - dt);
@@ -158,7 +177,9 @@ export class Racer {
     if (held) this.lensRoadT = 0.6;
     else this.lensRoadT = Math.max(0, (this.lensRoadT || 0) - dt);
     if (this.mode === BOTH) this.energy = Math.min(1, this.energy + SHIFT.recharge * dt);
-    else if (this.lensRoadT > 0 && solidIn(this.gnd.mask, this.mode)) {
+    else if (this.cellT > 0 || this.flipT > 0) {
+      // a LENS CELL pays for the lens; a FLIP holds you in one for free
+    } else if (this.lensRoadT > 0 && solidIn(this.gnd.mask, this.mode)) {
       // held by the road
     } else {
       this.energy -= SHIFT.drain * dt;
@@ -195,7 +216,7 @@ export class Racer {
     this.spinTime = Math.max(0, this.spinTime - dt);
     this.updateEnergy(dt, session);
 
-    let throttle = this.controlLocked ? 0 : ctl.throttle;
+    let throttle = this.controlLocked || this.empT > 0 ? 0 : ctl.throttle;
     let brake = this.controlLocked ? 0 : ctl.brake;
     let steer = this.controlLocked ? 0 : ctl.steer;
     if (this.spinTime > 0) {
@@ -225,7 +246,7 @@ export class Racer {
     if (this.grounded) {
       const boosting = this.boostTime > 0;
       const lens = LENS[this.mode] || LENS[BOTH];
-      const top = P.topSpeed * this.speedMul * lens.top * (boosting ? this.boostPower : 1);
+      const top = P.topSpeed * this.speedMul * lens.top * (boosting ? this.boostPower : 1) * (this.cellT > 0 && this.mode !== BOTH ? 1.06 : 1);
       if (throttle > 0 && vF < top) {
         const k = 1 - Math.pow(clamp(vF / top, 0, 1), 2);
         vF += P.accel * this.accelMul * lens.accel * throttle * (0.25 + 0.75 * k) * dt * (vF < 0 ? 2.5 : 1);

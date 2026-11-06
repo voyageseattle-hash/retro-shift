@@ -17,6 +17,7 @@ import { SpeedLines } from './speedlines.js';
 import { Storms } from './storms.js';
 import { Traffic } from './traffic.js';
 import { Police } from './police.js';
+import { Items, ITEMS } from './items.js';
 import { Reflection } from './reflect.js';
 import { Construction } from './construction.js';
 import { Quake } from './quake.js';
@@ -147,6 +148,8 @@ export class Race {
       this.cams.push(c2);
     }
     this.players.forEach((p, k) => this.cams[k].snap(p));
+    this.items = new Items(this);
+    this.scene.add(this.items.group);
     // the lens-shift wave starts from the player's car (split-screen fades each view instead)
     this.world.layers.waveAt = this.split ? null : this.player.pos;
     this.events = [];
@@ -286,7 +289,7 @@ export class Race {
   // A hit takes hull. Returns true if it was the last of it (the car comes apart). by: who rammed you; text: the popup.
   // A healthy car always survives one hit: it's left hanging by a thread, smoking, with the next hit the last.
   hurt(r, dmg, by = null, text = null, steady = false) {
-    if (r.respawnT > 0 || r.finished || dmg <= 0) return false;
+    if (r.respawnT > 0 || r.finished || dmg <= 0 || r.beamT > 0) return false;
     if (r.invuln > 0 && !by) return false;
     // heavier hulls take hits better (GREAT WEDGE is a tank); you're a little tougher than the field
     dmg *= Math.sqrt(1 / (r.mass || 1)) * (r.isPlayer ? 0.85 : 1);
@@ -439,6 +442,8 @@ export class Race {
       pl.ctl.steer = c.steer;
       pl.ctl.drift = c.drift;
       if (this.state !== 'race' || pl.finished) return;
+      if (c.fire && !pl.fireHeld) this.items.use(pl);
+      pl.fireHeld = c.fire;
       if (c.item) pl.setMode(RED, this);
       if (c.special) pl.setMode(BLUE, this);
       if (c.jump) {
@@ -507,6 +512,7 @@ export class Race {
     this.quake.update(sim, p);
     this.traffic.update(sim, p);
     this.police.update(sim, p);
+    this.items.update(sim);
 
     // visuals
     this.app.net?.applyPuppets(this);
@@ -752,7 +758,7 @@ export class Race {
     if (!tr) return;
     const P = tr.path;
     for (const o of w.obstacles) {
-      if (o.path !== P || o.broken) continue;
+      if (o.path !== P || o.broken || r.beamT > 0) continue;
       let di = tr.i - o.i;
       if (P.closed) {
         if (di > P.N / 2) di -= P.N;
@@ -881,6 +887,7 @@ export class Race {
       for (let b = a + 1; b < R.length; b++) {
         const B = R[b];
         if (B.respawnT > 0) continue;
+        if (A.beamT > 0 || B.beamT > 0) continue; // light passes through
         if (!(A.mode & B.mode) && A.mode !== BOTH && B.mode !== BOTH) continue;
         _v.subVectors(B.pos, A.pos);
         if (Math.abs(_v.y) > 2) continue;
