@@ -3,6 +3,7 @@
 import { drawPortrait } from './portraits.js';
 import { helmetPortrait, warmHelmets } from './helmets.js';
 import { ITEMS } from '../game/items.js';
+import { ITEM_ICONS } from './itemicons.js';
 const ITEM_IDS = Object.keys(ITEMS);
 import { TRACKS } from '../world/tracks.js';
 import { TrackWorld } from '../world/track.js';
@@ -179,13 +180,14 @@ export class UI {
       { label: '', cycle: (d) => ((S.sfx = Math.max(0, Math.min(1, S.sfx + d * 0.1))), save(), refresh()), action: () => items[1].cycle(1) },
       { label: '', cycle: (d) => ((S.difficulty = (S.difficulty + d + 3) % 3), save(), refresh()), action: () => items[2].cycle(1) },
       { label: '', cycle: (d) => ((S.quality = quals[(quals.indexOf(S.quality) + d + quals.length) % quals.length]), save(), refresh()), action: () => items[3].cycle(1) },
+      { label: '', cycle: () => ((S.assist = S.assist === false), save(), refresh()), action: () => items[4].cycle(1) },
       { label: 'BACK', action: () => this.title() },
     ];
     s.appendChild(list);
     this.root.appendChild(s);
     this.menu = new Menu(this.app, list, items, { onBack: () => this.title() });
     const refresh = () => {
-      const labels = [`MUSIC ◀ ${pct(S.music)} ▶`, `EFFECTS ◀ ${pct(S.sfx)} ▶`, `RIVALS ◀ ${diffs[S.difficulty]} ▶`, `GRAPHICS ◀ ${S.quality.toUpperCase()} ▶`];
+      const labels = [`MUSIC ◀ ${pct(S.music)} ▶`, `EFFECTS ◀ ${pct(S.sfx)} ▶`, `RIVALS ◀ ${diffs[S.difficulty]} ▶`, `GRAPHICS ◀ ${S.quality.toUpperCase()} ▶`, `STEERING ◀ ${S.assist === false ? 'FULL CONTROL' : 'ASSIST'} ▶`];
       labels.forEach((l, k) => (this.menu.nodes[k].innerHTML = l));
     };
     refresh();
@@ -778,7 +780,7 @@ export class UI {
         <div class="h-form"><kbd></kbd><b></b><i><u></u></i></div>
         <div class="h-hull">${'<i></i>'.repeat(10)}<span>HULL</span></div>
       </div>
-      <div class="h-item"><kbd></kbd><b></b><small></small></div>
+      <div class="h-item"><div class="h-item-ic"></div><div class="h-item-tx"><b></b><small></small></div><div class="h-item-btn"><kbd></kbd><span>FIRE</span></div></div>
       <div class="h-center"></div>
       <div class="h-tip"></div>
       <div class="h-controls"></div>
@@ -821,6 +823,7 @@ export class UI {
         itemKey: q('.h-item kbd'),
         itemName: q('.h-item b'),
         itemTip: q('.h-item small'),
+        itemIcon: q('.h-item-ic'),
         hullCells: [...V.querySelectorAll('.h-hull i')],
         center: q('.h-center'),
         tip: q('.h-tip'),
@@ -1010,25 +1013,28 @@ export class UI {
       if (h._formW !== w) h.formBar.style.width = h._formW = w;
       set(h.form, 'formCls', `h-form m${p.mode}${cd <= 0 ? ' ready' : ''}`);
     }
-    // the SEAM CHARGE slot: spinning through the charges while it rolls, then the one you hold and its button
+    // the SEAM CHARGE slot: always there in a race with charges. Empty, it says where to get one; rolling, it spins
+    // through the icons; held, a big icon, the name, what it does, and the button that fires it.
     if (race.items?.on) {
-      let id = null;
-      let cls = 'h-item';
+      let id = 'none';
+      let cls = 'h-item on';
       if (p.rollT > 0) {
         id = ITEM_IDS[Math.floor(race.t * 14) % ITEM_IDS.length];
-        cls += ' on rolling';
+        cls += ' rolling';
       } else if (p.item) {
         id = p.item;
-        cls += ' on';
-      }
+        cls += ' held';
+        if (h._held !== id) h.gotT = race.t;
+        if (race.t - (h.gotT ?? -9) < 0.7) cls += ' got';
+      } else cls += ' empty';
+      h._held = p.rollT > 0 ? null : p.item;
       set(h.item, 'itemCls', cls);
-      if (id) {
-        const it = ITEMS[id];
-        set(h.itemName, 'itemName', it.name);
-        set(h.itemTip, 'itemTip', p.rollT > 0 ? '' : it.tip);
-        set(h.itemKey, 'itemKey', this.lensGlyph(race, k, 'fire'));
-        if (h._itemColor !== it.color) h.item.style.setProperty('--ic', (h._itemColor = it.color));
-      }
+      const it = ITEMS[id] || { name: 'NO CHARGE', tip: 'DRIVE THROUGH A PRISM', color: '#8a7aa8' };
+      if (h._itemIcon !== id) h.itemIcon.innerHTML = ITEM_ICONS[(h._itemIcon = id)];
+      set(h.itemName, 'itemName', p.rollT > 0 ? 'ROLLING' : it.name);
+      set(h.itemTip, 'itemTip', p.rollT > 0 ? '' : it.tip);
+      set(h.itemKey, 'itemKey', this.lensGlyph(race, k, 'fire'));
+      if (h._itemColor !== it.color) h.item.style.setProperty('--ic', (h._itemColor = it.color));
     }
     // the hull: ten cells, white while it's sound, orange once it's hurt, red and blinking when one more hit ends it
     const hp = Math.ceil(((p.hp ?? 100) / 100) * 10 - 0.001);

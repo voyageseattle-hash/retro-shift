@@ -38,6 +38,7 @@ export class ChaseCamera {
 
   snap(v) {
     this.heading = v.yaw;
+    this.anchor = v.pos.clone();
     this.upV.copy(WORLD_UP);
     this.bent = 0;
     const f = _d.set(Math.sin(v.yaw), 0, Math.cos(v.yaw));
@@ -119,8 +120,19 @@ export class ChaseCamera {
     const f = _d.set(Math.sin(this.heading), 0, Math.cos(this.heading));
     this.rel.x = damp(this.rel.x, -f.x * dist * dir, 10, dt);
     this.rel.z = damp(this.rel.z, -f.z * dist * dir, 10, dt);
-    this.pos.x = v.pos.x + this.rel.x;
-    this.pos.z = v.pos.z + this.rel.z;
+    // follow a point that tracks the car exactly along its heading but eases sideways, so a rail nudging the car a
+    // few centimetres each frame doesn't shake the whole view
+    const A = (this.anchor ||= v.pos.clone());
+    if (A.distanceToSquared(v.pos) > 400) A.copy(v.pos);
+    const dx = v.pos.x - A.x;
+    const dz = v.pos.z - A.z;
+    const along = dx * f.x + dz * f.z;
+    const k = 1 - Math.exp(-16 * dt);
+    A.x += f.x * along + (dx - f.x * along) * k;
+    A.z += f.z * along + (dz - f.z * along) * k;
+    A.y = v.pos.y;
+    this.pos.x = A.x + this.rel.x;
+    this.pos.z = A.z + this.rel.z;
     const flying = v.form === 'wing';
     const pitch = flying ? v.pitch || 0 : 0;
     if (flying) {
@@ -135,12 +147,12 @@ export class ChaseCamera {
       const gy = world.heightAt(this.pos.x, this.pos.z, this.pos.y);
       if (this.pos.y < gy + 1.2) this.pos.y = gy + 1.2;
     }
-    const lookTarget = _l.copy(v.pos).addScaledVector(f, 6 * dir * v.scale);
+    const lookTarget = _l.copy(A).addScaledVector(f, 6 * dir * v.scale);
     lookTarget.y += 1.4 * v.scale + Math.sin(pitch) * 6 * dir;
     this.look.lerp(lookTarget, 1 - Math.exp(-14 * dt));
     this.fov = damp(this.fov, 62 + sp * 20 + (boosting ? 12 : 0), 3, dt);
     // a constant fine buzz near top speed
-    if (sp > 0.75 && v.grounded) this.shake = Math.max(this.shake, (sp - 0.75) * 0.5 * this.shakeScale);
+    if (sp > 0.8 && v.grounded) this.shake = Math.max(this.shake, Math.min(0.12, (sp - 0.8) * 0.3) * this.shakeScale);
     // Lean into drifts a touch.
     const rollT = flying ? -(v.bank || 0) * 0.18 : v.drift.active && v.grounded ? -v.drift.dir * 0.035 : clamp(-v.yawRate * 0.012, -0.02, 0.02);
     this.roll = damp(this.roll, rollT * this.shakeScale, 5, dt);

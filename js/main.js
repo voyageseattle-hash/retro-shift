@@ -173,6 +173,7 @@ class App {
       livery2: split ? liveryFor(c.car2) : null,
       rivals: solo ? 0 : 5,
       difficulty: this.ui.settings.difficulty,
+      assist: this.ui.settings.assist !== false,
       staff,
       autopilot: this.autopilot,
       laps: c.mode === 'tutorial' ? 1 : undefined,
