@@ -3,6 +3,7 @@
 import { drawPortrait } from './portraits.js';
 import { helmetPortrait, warmHelmets } from './helmets.js';
 import { ITEMS } from '../game/items.js';
+import { CHAIN } from '../game/chain.js';
 import { ITEM_ICONS } from './itemicons.js';
 const ITEM_IDS = Object.keys(ITEMS);
 import { TRACKS } from '../world/tracks.js';
@@ -437,7 +438,7 @@ export class UI {
     const place = race.placeOf(p);
     const s = el('div', 'screen results');
     s.innerHTML = `<h2>${place === 1 ? 'YOU WIN' : `${ordinal(place)} PLACE`}</h2><div class="rgrid"><table class="standings"></table>
-      <div class="rstats"><div><span>TIME</span><b>${formatTime(p.finishTime)}</b></div><div><span>BEST LAP</span><b>${formatTime(p.bestLap)}</b></div><div><span>SHIFTS</span><b>${race.stats.shifts}</b></div></div></div>
+      ${this.raceStory(race, p)}</div>
       <div class="sub">${net.isHost ? '' : 'The host will bring everyone back to the lobby.'}</div>`;
     const table = s.querySelector('table');
     const draw = () => {
@@ -558,16 +559,7 @@ export class UI {
     s.innerHTML = `<h2>${head}</h2>${this.quoteHtml(race)}
       <div class="rgrid">
         ${left}
-        <div class="rstats">
-          <div><span>TIME</span><b>${formatTime(p.finishTime)}</b></div>
-          <div><span>BEST LAP</span><b>${formatTime(p.bestLap)}</b></div>
-          <div><span>SHIFTS</span><b>${race.stats.shifts}</b></div>
-          <div><span>PHASED</span><b>${race.stats.phased}</b></div>
-          <div><span>CRASHES</span><b>${race.stats.crashes}</b></div>
-          ${race.stats.takedowns ? `<div><span>TAKEDOWNS</span><b>${race.stats.takedowns}</b></div>` : ''}
-          ${race.stats.wrecks ? `<div><span>WRECKED</span><b>${race.stats.wrecks}</b></div>` : ''}
-          ${race.newRecord ? `<div class="record">${solo ? 'NEW BEST · GHOST SAVED' : 'NEW COURSE RECORD'}</div>` : ''}
-        </div>
+        ${race.players.map((pl) => this.raceStory(race, pl, race.newRecord && pl === p ? (solo ? 'NEW BEST · GHOST SAVED' : 'NEW COURSE RECORD') : '')).join('')}
       </div>`;
     this.unlockBanner(s);
     const list = el('div', 'list row');
@@ -683,6 +675,47 @@ export class UI {
     this.menu.nodes.forEach((n) => grid.appendChild(n));
   }
 
+  // How your race went, for the results screens: the times (and the best through each third of the lap), how long you
+  // spent in each lens, your best SHIFT CHAIN, and the lens moves that made it.
+  raceStory(race, p, record = '') {
+    const t = p.tally || {};
+    const L = t.lens || {};
+    const lr = L[RED] || 0;
+    const lb = L[BOTH] || 0;
+    const lu = L[BLUE] || 0;
+    const tot = lr + lb + lu || 1;
+    const pc = (v) => Math.round((v / tot) * 100);
+    const st = race.split ? null : race.stats;
+    const sec = (p.sectors || []).map((v, k) => `<div><span>S${k + 1}</span><b>${Number.isFinite(v) ? formatTime(v) : '--'}</b></div>`).join('');
+    const tile = (label, v, cls = '') => `<div class="${cls}"><b>${v}</b><span>${label}</span></div>`;
+    const forms = [
+      [t.wallRuns, 'WALL RUNS'],
+      [t.glides, 'GLIDES'],
+      [t.slits, 'SLITS'],
+    ].filter(([v]) => v > 0);
+    const tiles = [
+      tile('BEST CHAIN', p.chain?.best ? `×${Math.min(p.chain.best, CHAIN.max)}` : '--', 'big'),
+      tile('PERFECT', t.perfect || 0, t.perfect ? 'hot' : ''),
+      tile('CLOSE PHASES', t.close || 0),
+      tile('PHASED', t.phased || 0),
+      tile('LENS ROUTES', t.routes || 0),
+      ...forms.map(([v, l]) => tile(l, v)),
+      tile('TAKEDOWNS', t.takedowns || 0),
+      ...(st ? [tile('SHIFTS', st.shifts), tile('CRASHES', st.crashes)] : []),
+      ...(st?.wrecks ? [tile('WRECKED', st.wrecks)] : []),
+    ].join('');
+    return `<div class="rstory">
+      ${race.split ? `<div class="rs-who">${p.name}</div>` : ''}
+      <div class="rs-times"><div><span>TIME</span><b>${p.finished ? formatTime(p.finishTime) : '--'}</b></div><div><span>BEST LAP</span><b>${Number.isFinite(p.bestLap) ? formatTime(p.bestLap) : '--'}</b></div></div>
+      <div class="rs-sec">${sec}</div>
+      <div class="rs-lens" title="Time in each lens"><i class="red" style="flex:${lr}"></i><i class="both" style="flex:${lb}"></i><i class="blue" style="flex:${lu}"></i></div>
+      <div class="rs-lensk"><span class="red">RED ${pc(lr)}%</span><span class="both">BOTH ${pc(lb)}%</span><span class="blue">BLUE ${pc(lu)}%</span></div>
+      <div class="rs-tiles">${tiles}</div>
+      ${p.chain?.chains ? `<div class="rs-note">${p.chain.chains} CHAIN${p.chain.chains > 1 ? 'S' : ''} OF ×3 OR MORE</div>` : ''}
+      ${record ? `<div class="record">${record}</div>` : ''}
+    </div>`;
+  }
+
   quoteHtml(race) {
     const q = race.quote;
     if (q && !race.quotePlayed) {
@@ -717,6 +750,7 @@ export class UI {
       <div class="rgrid">
         <table class="standings">${rows}</table>
         <table class="standings gp"><tr class="hd"><td></td><td>CUP</td><td>RACE</td><td>PTS</td></tr>${this.gpTable(gp, added)}</table>
+        ${this.raceStory(race, race.player)}
       </div>`;
     const list = el('div', 'list row');
     s.appendChild(list);
@@ -773,17 +807,20 @@ export class UI {
       <div class="h-tr"><div class="h-course"></div><div class="h-best"></div></div>
       <canvas class="h-map"></canvas>
       <div class="h-speed"><b>0</b><small>KM/H</small><div class="h-drift"></div></div>
-      <div class="h-lens">
-        <div class="h-chips">
-          <span class="chip red" data-m="2"><kbd></kbd>RED</span>
-          <span class="chip both" data-m="1"><kbd></kbd>BOTH</span>
-          <span class="chip blue" data-m="4"><kbd></kbd>BLUE</span>
+      <div class="h-chain"><div class="ch-row"><b class="ch-x"></b><span class="ch-word">CHAIN</span></div><small class="ch-link"></small><i class="ch-bar"><u></u></i></div>
+      <div class="h-dash">
+        <div class="h-item"><div class="h-item-tx"><b></b><small></small></div><div class="h-item-ic"></div><kbd></kbd></div>
+        <div class="h-lens">
+          <div class="h-chips">
+            <span class="chip red" data-m="2"><kbd></kbd>RED</span>
+            <span class="chip both" data-m="1"><kbd></kbd>BOTH</span>
+            <span class="chip blue" data-m="4"><kbd></kbd>BLUE</span>
+          </div>
+          <div class="h-energy"><i></i><span>SHIFT</span></div>
+          <div class="h-hull">${'<i></i>'.repeat(10)}<span>HULL</span></div>
         </div>
-        <div class="h-energy"><i></i><span>SHIFT</span></div>
-        <div class="h-form"><kbd></kbd><b></b><i><u></u></i></div>
-        <div class="h-hull">${'<i></i>'.repeat(10)}<span>HULL</span></div>
+        <div class="h-form"><b></b><div class="h-form-ring"><kbd></kbd></div></div>
       </div>
-      <div class="h-item"><div class="h-item-ic"></div><div class="h-item-tx"><b></b><small></small></div><div class="h-item-btn"><kbd></kbd><span>FIRE</span></div></div>
       <div class="h-center"></div>
       <div class="h-tip"></div>
       <div class="h-controls"></div>
@@ -821,7 +858,11 @@ export class UI {
         form: q('.h-form'),
         formKey: q('.h-form kbd'),
         formName: q('.h-form b'),
-        formBar: q('.h-form u'),
+        formRing: q('.h-form-ring'),
+        chain: q('.h-chain'),
+        chainX: q('.ch-x'),
+        chainLink: q('.ch-link'),
+        chainBar: q('.ch-bar u'),
         item: q('.h-item'),
         itemKey: q('.h-item kbd'),
         itemName: q('.h-item b'),
@@ -907,6 +948,20 @@ export class UI {
         if (e.forced) this.popup('SHIFT EMPTY', '#ffffff', true, h);
         break;
       }
+      case 'chain':
+        h.chain.classList.remove('bump');
+        void h.chain.offsetWidth;
+        h.chain.classList.add('bump');
+        break;
+      case 'chainEnd':
+        h.chainOut = { n: e.n, broke: e.broke, t: race.t };
+        break;
+      case 'perfect':
+        // a white rim with the lens's colour in it, over the shift's own flash
+        h.flash.className = `h-flash on perfect m${e.mode}`;
+        void h.flash.offsetWidth;
+        h.flash.className = `h-flash go perfect m${e.mode}`;
+        break;
       case 'denied':
         h.energyBox.classList.remove('deny');
         void h.energyBox.offsetWidth;
@@ -985,7 +1040,7 @@ export class UI {
       if (h[`_${key}`] === v) return;
       h[`_${key}`] = v;
       if (key === 'lap') node.innerHTML = v;
-      else if (key === 'driftCls' || key === 'energyCls' || key === 'hullCls' || key === 'itemCls' || key === 'formCls') node.className = v;
+      else if (key.endsWith('Cls')) node.className = v;
       else node.textContent = v;
     };
     set(h.place, 'place', String(place));
@@ -1005,16 +1060,44 @@ export class UI {
     const width = `${(p.energy * 100).toFixed(1)}%`;
     if (h._width !== width) h.energy.style.width = h._width = width;
     set(h.energyBox, 'energyCls', `h-energy m${p.mode}${p.energy < 0.25 ? ' low' : ''}${h.energyBox.classList.contains('deny') ? ' deny' : ''}`);
-    // the form's move: its name in the lens colour, and a bar that fills as it recharges
+    // the form's move: its name in the lens colour, and a ring round its button that fills as it recharges
     {
       const name = p.mode === BLUE ? 'LIFT' : p.mode === RED ? 'LANCE' : 'BRACE';
       set(h.formName, 'formName', name);
       set(h.formKey, 'formKey', this.lensGlyph(race, k, 'form'));
       const cd = Math.max(0, p.formCd || 0);
       const full = { LIFT: 5, LANCE: 6, BRACE: 8 }[name];
-      const w = `${Math.round((1 - Math.min(1, cd / full)) * 100)}%`;
-      if (h._formW !== w) h.formBar.style.width = h._formW = w;
+      const f = (1 - Math.min(1, cd / full)).toFixed(2);
+      if (h._formP !== f) h.formRing.style.setProperty('--p', (h._formP = f));
       set(h.form, 'formCls', `h-form m${p.mode}${cd <= 0 ? ' ready' : ''}`);
+    }
+    // the SHIFT CHAIN, over the dash: the multiplier, the last link, and the window running down (held full while a
+    // road keeps your lens, or a glide or a launch carries you). When it lets go, a long one takes a bow; a broken one
+    // says so.
+    {
+      const c = p.chain;
+      const n = c?.n || 0;
+      let cls = 'h-chain';
+      let x = '';
+      let link = '';
+      let w = '0%';
+      if (n > 0) {
+        const m = Math.min(n, CHAIN.max);
+        const held = p.lensRoadT > 0 || p.gliding || !!p.launch;
+        x = `×${m}`;
+        link = c.label;
+        w = `${(held ? 100 : Math.max(0, c.t / CHAIN.window) * 100).toFixed(1)}%`;
+        cls += ` on t${m >= 5 ? 3 : m >= 3 ? 2 : m >= 2 ? 1 : 0}${held ? ' held' : ''}${m >= CHAIN.max ? ' max' : ''}`;
+        h.chainOut = null;
+      } else if (h.chainOut && race.t - h.chainOut.t < 1.4) {
+        x = `×${Math.min(h.chainOut.n, CHAIN.max)}`;
+        link = h.chainOut.broke ? 'BROKEN' : `${h.chainOut.n} LINKS`;
+        cls += ` on out${h.chainOut.broke ? ' broke' : ''}`;
+      }
+      set(h.chainX, 'chainX', x);
+      set(h.chainLink, 'chainLink', link);
+      if (h._chainW !== w) h.chainBar.style.width = h._chainW = w;
+      set(h.chain, 'chainCls', cls + (h.chain.classList.contains('bump') ? ' bump' : ''));
     }
     // the SEAM CHARGE slot: always there in a race with charges. Empty, it says where to get one; rolling, it spins
     // through the icons; held, a big icon, the name, what it does, and the button that fires it.
@@ -1029,6 +1112,8 @@ export class UI {
         cls += ' held';
         if (h._held !== id) h.gotT = race.t;
         if (race.t - (h.gotT ?? -9) < 0.7) cls += ' got';
+        // (what it does, for a moment after you get it)
+        if (race.t - (h.gotT ?? -9) < 2.6) cls += ' tell';
       } else cls += ' empty';
       h._held = p.rollT > 0 ? null : p.item;
       set(h.item, 'itemCls', cls);

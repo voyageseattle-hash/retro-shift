@@ -142,6 +142,11 @@ export class Race {
       // the SHIFT CHAIN, and the moves the results screen tells (game/chain.js)
       r.chain = newChain();
       r.tally = newTally();
+      // best time through each third of the lap, for the results screen
+      r.sectors = [Infinity, Infinity, Infinity];
+      r.sec = Math.floor(r.prog * 3);
+      r.secStart = 0;
+      r.secFull = false;
       if (!isPlayer && !r.puppet) {
         const skill = clamp([0.55, 0.75, 0.92][diff] + (k / field) * 0.1 + rand(-0.05, 0.05), 0.3, 1);
         r.ai = new RaceAI(r, this.world, skill);
@@ -1340,6 +1345,17 @@ export class Race {
     }
     r.prog += du;
     r.lastU = u;
+    // sectors: a third of the lap driven whole, start to end, counts toward its best
+    const sec = Math.floor(r.prog * 3);
+    if (sec !== r.sec && !r.finished) {
+      if (sec === r.sec + 1 && r.secFull) {
+        const k = ((r.sec % 3) + 3) % 3;
+        r.sectors[k] = Math.min(r.sectors[k], this.raceTime - r.secStart);
+      }
+      r.secFull = sec === r.sec + 1 && this.state === 'race';
+      r.sec = sec;
+      r.secStart = this.raceTime;
+    }
     const lap = Math.floor(r.prog);
     if (lap > r.lap && !r.finished) {
       const lt = this.raceTime - r.lapStart;

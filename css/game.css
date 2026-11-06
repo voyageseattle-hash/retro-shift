@@ -106,10 +106,32 @@ kbd:empty { display: none; }
 .standings { border-collapse: collapse; background: var(--panel); min-width: 300px; }
 .standings td { padding: 8px 16px; font-weight: 700; letter-spacing: 0.08em; border-bottom: 1px solid rgba(176, 76, 255, 0.2); }
 .standings tr.me { background: linear-gradient(90deg, rgba(255, 42, 74, 0.25), rgba(30, 140, 255, 0.25)); }
-.rstats { display: flex; flex-direction: column; gap: 8px; min-width: 220px; background: var(--panel); padding: 14px 18px; }
-.rstats div { display: flex; justify-content: space-between; gap: 20px; }
-.rstats span { color: var(--dim); }
-.rstats .record { color: var(--pink); justify-content: center; text-shadow: 0 0 10px var(--pink); }
+/* your race, told: times and best sectors, time in each lens, the best SHIFT CHAIN and the lens moves (ui.js raceStory) */
+.rstory { display: flex; flex-direction: column; gap: 10px; width: min(380px, 92vw); background: var(--panel); padding: 14px 18px; box-sizing: border-box; }
+.rs-who { font-family: 'Russo One'; font-style: italic; color: var(--pink); letter-spacing: 0.1em; }
+.rs-times, .rs-sec { display: flex; gap: 14px; justify-content: space-between; }
+.rs-times div, .rs-sec div { display: flex; flex-direction: column; gap: 2px; }
+.rs-times span, .rs-sec span { color: var(--dim); font-size: 11px; letter-spacing: 0.2em; }
+.rs-times b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.rs-sec { padding-bottom: 8px; border-bottom: 1px solid rgba(176, 76, 255, 0.2); }
+.rs-sec b { font-size: 14px; color: #c8b8ff; font-variant-numeric: tabular-nums; }
+.rs-lens { display: flex; height: 10px; gap: 2px; transform: skewX(-20deg); background: rgba(255, 255, 255, 0.06); }
+.rs-lens i { min-width: 0; }
+.rs-lens .red { background: var(--red); box-shadow: 0 0 8px var(--red); }
+.rs-lens .both { background: var(--violet); box-shadow: 0 0 8px var(--violet); }
+.rs-lens .blue { background: var(--blue); box-shadow: 0 0 8px var(--blue); }
+.rs-lensk { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: 0.14em; margin-top: -4px; }
+.rs-lensk .red { color: #ff6a80; }
+.rs-lensk .both { color: #d8c8ff; }
+.rs-lensk .blue { color: #6ab8ff; }
+.rs-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.rs-tiles div { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 6px 4px; background: rgba(176, 76, 255, 0.08); border: 1px solid rgba(176, 76, 255, 0.22); }
+.rs-tiles b { font-size: 20px; line-height: 1.1; }
+.rs-tiles span { font-size: 9.5px; letter-spacing: 0.12em; color: var(--dim); text-align: center; }
+.rs-tiles .big b { font-family: 'Russo One'; font-style: italic; color: #fff; text-shadow: 0 0 10px var(--pink); }
+.rs-tiles .hot b { color: #fff; text-shadow: 0 0 10px #fff; }
+.rs-note { font-size: 11px; letter-spacing: 0.16em; color: var(--pink); text-align: center; }
+.rstory .record { color: var(--pink); text-align: center; text-shadow: 0 0 10px var(--pink); letter-spacing: 0.1em; }
 
 /* modes: medals, cups, trophies, unlocks */
 .screen .sub { max-width: 720px; text-align: center; color: #c8b8ff; line-height: 1.4; margin-top: -8px; }
@@ -199,10 +221,6 @@ kbd:empty { display: none; }
 #hud.split .h-map { width: 110px; height: 110px; bottom: 10px; }
 #hud.split .h-speed { bottom: 10px; }
 #hud.split .h-speed b { font-size: 40px; }
-#hud.split .h-lens { bottom: 10px; gap: 5px; }
-#hud.split .h-chips .chip { font-size: 11px; padding: 3px 9px; }
-#hud.split .h-energy { height: 10px; width: 220px; }
-#hud.split .h-hull { height: 6px; width: 170px; }
 #hud.split .h-count { font-size: 90px; }
 #hud.split .pop { font-size: 26px; }
 #hud.split .pop.small { font-size: 15px; }
@@ -233,56 +251,86 @@ kbd:empty { display: none; }
 .h-drift.l1 { background: #6ac8ff; box-shadow: 0 0 10px #6ac8ff; }
 .h-drift.l2 { background: #ff8a3a; box-shadow: 0 0 10px #ff8a3a; }
 .h-drift.l3 { background: var(--pink); box-shadow: 0 0 12px var(--pink); }
-.h-lens { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; }
+/* the dash: everything you press, in one place at the bottom. The charge you hold on the left, the lenses with SHIFT
+   and the hull in the middle, the form's move on the right; the SHIFT CHAIN rides above it. */
+.h-dash { position: absolute; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%); transform-origin: 50% 100%; display: flex; align-items: flex-end; gap: 18px; padding: 9px 22px 8px; isolation: isolate; }
+.h-dash::before { content: ''; position: absolute; inset: 0; z-index: -1; transform: skewX(-14deg); background: linear-gradient(90deg, transparent, var(--red) 16%, var(--violet) 50%, var(--blue) 84%, transparent) top / 100% 2px no-repeat, linear-gradient(180deg, rgba(10, 4, 22, 0.12), rgba(10, 4, 22, 0.66)); box-shadow: 0 -6px 22px -12px var(--mode); }
+.h-lens { display: flex; flex-direction: column; align-items: center; gap: 7px; }
 .h-chips { display: flex; gap: 8px; }
 .h-chips .chip { opacity: 0.45; font-size: 14px; padding: 5px 12px; transition: opacity 0.1s, transform 0.1s, box-shadow 0.1s; background: rgba(5, 2, 12, 0.6); }
 .h-chips .chip kbd { font-size: 11px; }
 .h-chips .chip.active { opacity: 1; transform: skewX(-12deg) scale(1.15); box-shadow: 0 0 16px currentColor, inset 0 0 14px currentColor; }
-.h-energy { position: relative; width: 300px; max-width: 70vw; height: 14px; border: 1.5px solid var(--mode); transform: skewX(-20deg); background: rgba(5, 2, 12, 0.6); }
+.h-energy { position: relative; width: 300px; max-width: 42vw; height: 14px; border: 1.5px solid var(--mode); transform: skewX(-20deg); background: rgba(5, 2, 12, 0.6); }
 .h-energy i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, var(--red), var(--pink), var(--blue)); box-shadow: 0 0 12px var(--pink); }
 .h-energy.m2 i { background: var(--red); box-shadow: 0 0 12px var(--red); }
 .h-energy.m4 i { background: var(--blue); box-shadow: 0 0 12px var(--blue); }
 .h-energy span { position: absolute; inset: 0; display: grid; place-content: center; font-size: 10px; letter-spacing: 0.4em; color: #fff; }
 .h-energy.low { animation: blink 0.4s steps(2) infinite; }
 .h-energy.deny { animation: shake 0.3s; }
-.h-form { display: flex; align-items: center; gap: 8px; font-size: 12px; letter-spacing: 0.2em; opacity: 0.55; margin: -2px 0 -2px; }
-.h-form.ready { opacity: 1; }
-.h-form kbd { font-size: 10px; }
-.h-form b { min-width: 52px; color: #d8c8ff; text-shadow: 0 0 8px currentColor; }
-.h-form.m2 b { color: #ff4a6a; } .h-form.m4 b { color: #4ab0ff; }
-.h-form i { display: block; width: 60px; height: 4px; background: rgba(255, 255, 255, 0.12); transform: skewX(-20deg); }
-.h-form u { display: block; height: 100%; background: currentColor; color: #d8c8ff; box-shadow: 0 0 6px currentColor; }
-.h-form.m2 u { color: #ff4a6a; } .h-form.m4 u { color: #4ab0ff; }
-#hud.split .h-form { font-size: 10px; }
-.h-hull { position: relative; display: flex; gap: 3px; width: 260px; max-width: 60vw; height: 10px; transform: skewX(-20deg); margin-top: -2px; }
+.h-hull { position: relative; display: flex; gap: 3px; width: 286px; max-width: 40vw; height: 7px; transform: skewX(-20deg); }
 .h-hull i { flex: 1; background: #f4ecff; box-shadow: 0 0 6px rgba(244, 236, 255, 0.7); transition: background 0.2s, opacity 0.2s; }
 .h-hull i.off { background: rgba(255, 255, 255, 0.08); box-shadow: none; }
 .h-hull.hurt i:not(.off) { background: #ff9a3a; box-shadow: 0 0 8px #ff9a3a; }
 .h-hull.crit i:not(.off) { background: #ff3a5a; box-shadow: 0 0 10px #ff3a5a; animation: blink2 0.5s steps(2) infinite; }
-.h-hull span { position: absolute; right: calc(100% + 10px); top: -3px; font-size: 9px; letter-spacing: 0.3em; color: #cfc4e6; transform: skewX(20deg); }
+.h-hull span { position: absolute; right: calc(100% + 8px); top: -3px; font-size: 9px; letter-spacing: 0.3em; color: #cfc4e6; transform: skewX(20deg); }
 .h-hull.hit { animation: shake 0.3s; }
 @keyframes blink2 { 50% { opacity: 0.35; } }
-.h-item { position: absolute; right: max(18px, env(safe-area-inset-right)); bottom: calc(max(14px, env(safe-area-inset-bottom)) + 108px); display: none; align-items: center; gap: 12px; padding: 8px 12px 8px 8px; min-width: 300px; background: var(--panel); border: 2px solid var(--ic, #fff); border-radius: 6px; box-shadow: 0 0 22px color-mix(in srgb, var(--ic, #fff) 45%, transparent), inset 0 0 16px color-mix(in srgb, var(--ic, #fff) 22%, transparent); transform-origin: right bottom; transition: transform 0.15s, opacity 0.2s; }
+/* the form's move: its name in the lens colour over its button, in a ring that fills as it recharges */
+.h-form { --fc: #d8c8ff; display: flex; flex-direction: column; align-items: center; gap: 5px; opacity: 0.55; transition: opacity 0.15s; }
+.h-form.m2 { --fc: #ff4a6a; }
+.h-form.m4 { --fc: #4ab0ff; }
+.h-form.ready { opacity: 1; }
+.h-form b { font-size: 11px; letter-spacing: 0.22em; color: var(--fc); text-shadow: 0 0 8px var(--fc); }
+.h-form-ring { --p: 1; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--fc) calc(var(--p) * 1turn), rgba(255, 255, 255, 0.12) 0); }
+.h-form.ready .h-form-ring { box-shadow: 0 0 14px color-mix(in srgb, var(--fc) 60%, transparent); }
+.h-form-ring kbd { display: grid; place-items: center; width: 38px; height: 38px; margin: 0; padding: 0; border: none; border-radius: 50%; background: #0a0416; color: #fff; font-size: 13px; }
+/* the SEAM CHARGE slot: the icon in its colour and the button that fires it; the name over it, and for a moment after
+   you get one, what it does. Empty, it says where to get one; rolling, it spins through the icons. */
+.h-item { --ic: #fff; position: relative; display: none; flex-direction: column; align-items: center; gap: 5px; }
 .h-item.on { display: flex; }
-.h-item-ic { width: 64px; height: 64px; flex: none; border-radius: 4px; background: color-mix(in srgb, var(--ic, #fff) 14%, #07020f); filter: drop-shadow(0 0 8px var(--ic, #fff)); }
-.h-item-ic svg { width: 100%; height: 100%; display: block; }
-.h-item-tx { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
-.h-item b { font-size: 22px; letter-spacing: 0.1em; color: var(--ic, #fff); text-shadow: 0 0 10px var(--ic, #fff); font-style: italic; white-space: nowrap; }
-.h-item small { font-size: 12px; letter-spacing: 0.12em; color: #e4dcf5; }
-.h-item-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: none; }
-.h-item-btn kbd { font-size: 22px; min-width: 40px; height: 40px; display: grid; place-items: center; border: 2px solid var(--ic, #fff); color: #fff; border-radius: 50%; box-shadow: 0 0 12px var(--ic, #fff); }
-.h-item-btn span { font-size: 10px; letter-spacing: 0.2em; color: var(--ic, #fff); }
-.h-item.held .h-item-btn kbd { animation: itemPulse 0.9s ease-in-out infinite; }
-@keyframes itemPulse { 50% { box-shadow: 0 0 22px var(--ic, #fff), 0 0 4px #fff inset; transform: scale(1.08); } }
-.h-item.got { transform: scale(1.08); }
-.h-item.empty { opacity: 0.55; box-shadow: none; }
-.h-item.empty .h-item-btn, .h-item.rolling .h-item-btn, .h-item.rolling small { visibility: hidden; }
-.h-item.empty b { font-size: 16px; }
-#hud.split .h-item { bottom: 64px; right: 8px; min-width: 0; padding: 4px 8px 4px 4px; gap: 6px; }
-#hud.split .h-item-ic { width: 40px; height: 40px; }
-#hud.split .h-item b { font-size: 15px; }
-#hud.split .h-item small { display: none; }
-#hud.split .h-item-btn kbd { font-size: 15px; min-width: 28px; height: 28px; }
+.h-item-ic { width: 52px; height: 52px; border: 2px solid var(--ic); border-radius: 6px; background: color-mix(in srgb, var(--ic) 14%, #07020f); box-shadow: 0 0 16px color-mix(in srgb, var(--ic) 45%, transparent), inset 0 0 12px color-mix(in srgb, var(--ic) 22%, transparent); transition: transform 0.15s; }
+.h-item-ic svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 0 5px var(--ic)); }
+.h-item > kbd { display: grid; place-items: center; min-width: 26px; height: 26px; margin: 0; padding: 0 4px; border: 1.5px solid var(--ic); border-radius: 13px; color: #fff; font-size: 12px; box-shadow: 0 0 8px var(--ic); }
+.h-item-tx { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 2px; white-space: nowrap; pointer-events: none; }
+.h-item-tx b { font-size: 16px; letter-spacing: 0.1em; font-style: italic; color: var(--ic); text-shadow: 0 0 10px var(--ic); }
+.h-item-tx small { display: none; font-size: 11px; letter-spacing: 0.12em; color: #e4dcf5; text-shadow: 0 0 6px #000; }
+.h-item.tell small, .h-item.empty small { display: block; }
+.h-item.held > kbd { animation: itemPulse 0.9s ease-in-out infinite; }
+@keyframes itemPulse { 50% { box-shadow: 0 0 22px var(--ic, #fff), 0 0 4px #fff inset; transform: scale(1.1); } }
+.h-item.got .h-item-ic { transform: scale(1.18); }
+.h-item.empty .h-item-ic { opacity: 0.45; box-shadow: none; }
+.h-item.empty .h-item-tx b { font-size: 11px; font-style: normal; letter-spacing: 0.2em; color: #b8a8d8; text-shadow: none; }
+.h-item.empty .h-item-tx small { font-size: 10px; color: #9a8ab8; }
+.h-item.empty > kbd, .h-item.rolling > kbd { visibility: hidden; }
+/* the SHIFT CHAIN: x2 and up pays SHIFT and a boost on every link. The window drains between links, and stays full
+   while a lens road, a glide or a launch carries you. */
+.h-chain { --cc: #b8a8d8; position: absolute; left: 50%; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 112px); transform: translateX(-50%); transform-origin: 50% 100%; display: flex; flex-direction: column; align-items: center; gap: 3px; opacity: 0; transition: opacity 0.25s; pointer-events: none; }
+.h-chain.on { opacity: 1; }
+.ch-row { display: flex; align-items: baseline; gap: 8px; }
+.ch-x { font-family: 'Russo One'; font-style: italic; font-size: 26px; line-height: 1; color: #fff; text-shadow: 0 0 10px var(--cc), 0 0 24px var(--cc); }
+.ch-word { font-size: 12px; letter-spacing: 0.36em; color: var(--cc); font-weight: 700; text-shadow: 0 0 8px var(--cc); }
+.ch-link { font-size: 13px; letter-spacing: 0.18em; color: #f4ecff; font-weight: 700; text-shadow: 0 0 8px var(--cc); }
+.ch-bar { display: block; width: 160px; height: 4px; background: rgba(255, 255, 255, 0.12); transform: skewX(-20deg); }
+.ch-bar u { display: block; width: 0; height: 100%; background: var(--cc); box-shadow: 0 0 8px var(--cc); }
+.h-chain.t1 { --cc: var(--mode); }
+.h-chain.t1 .ch-x { font-size: 34px; }
+.h-chain.t2 { --cc: var(--pink); }
+.h-chain.t2 .ch-x { font-size: 42px; }
+.h-chain.t3 { --cc: #ffe066; }
+.h-chain.t3 .ch-x { font-size: 50px; text-shadow: 0 0 10px var(--pink), 0 0 26px var(--pink), 0 0 40px var(--blue); }
+.h-chain.max .ch-word::after { content: ' · MAX'; color: #fff; }
+.h-chain.held .ch-bar u { animation: chainHeld 0.45s ease-in-out infinite alternate; }
+.h-chain.bump .ch-x { animation: chainBump 0.32s ease-out; }
+.h-chain.out .ch-bar { visibility: hidden; }
+.h-chain.out .ch-row, .h-chain.out .ch-link { animation: chainOut 1.4s ease-in forwards; }
+.h-chain.broke { --cc: var(--red); }
+.h-chain.broke .ch-x { color: #ffc0c8; }
+@keyframes chainBump { 0% { transform: scale(1.55); } 100% { transform: none; } }
+@keyframes chainHeld { from { opacity: 0.6; } to { opacity: 1; } }
+@keyframes chainOut { 0% { opacity: 1; transform: none; } 60% { opacity: 1; } 100% { opacity: 0; transform: translateY(-12px); } }
+#hud.split .h-dash { transform: translateX(-50%) scale(0.7); bottom: 6px; }
+#hud.split .h-chain { transform: translateX(-50%) scale(0.72); bottom: 82px; }
+#hud.split .h-controls { bottom: 92px; font-size: 12px; padding: 8px 14px; }
 .h-flash.hurt { background: radial-gradient(ellipse at center, transparent 45%, rgba(255, 60, 40, 0.5)); }
 @keyframes blink { 50% { border-color: #fff; } }
 @keyframes shake { 25% { transform: skewX(-20deg) translateX(-8px); } 75% { transform: skewX(-20deg) translateX(8px); } }
@@ -292,14 +340,13 @@ kbd:empty { display: none; }
 @keyframes pop { 0% { transform: scale(1.6); opacity: 0; } 12% { transform: scale(1); opacity: 1; } 75% { opacity: 1; } 100% { transform: translateY(-30px); opacity: 0; } }
 .h-tip { position: absolute; left: 50%; top: 18%; transform: translateX(-50%) skewX(-10deg); padding: 8px 18px; background: var(--panel); border: 1.5px solid var(--violet); font-size: 18px; letter-spacing: 0.12em; opacity: 0; transition: opacity 0.2s; white-space: nowrap; }
 .h-tip.on { opacity: 1; }
-.h-controls { position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 20px; background: var(--panel); border: 1.5px solid var(--violet); font-size: 15px; letter-spacing: 0.1em; opacity: 0; transition: opacity 0.4s; pointer-events: none; white-space: nowrap; }
+.h-controls { position: absolute; left: 50%; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 124px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 20px; background: var(--panel); border: 1.5px solid var(--violet); font-size: 15px; letter-spacing: 0.1em; opacity: 0; transition: opacity 0.4s; pointer-events: none; white-space: nowrap; }
 .h-controls.on { opacity: 1; }
 .h-controls div { display: flex; gap: 18px; }
 .h-controls .red { color: var(--red); }
 .h-controls .blue { color: #4ab0ff; }
 .h-controls .both { color: #e8dcff; }
 .h-controls p { margin: 0; font-size: 12px; letter-spacing: 0.06em; opacity: 0.8; }
-#hud.split .h-controls { bottom: 70px; font-size: 12px; padding: 8px 14px; }
 .h-tip.k-red { border-color: var(--red); color: #ff8a9a; }
 .h-tip.k-blue { border-color: var(--blue); color: #8ac8ff; }
 .h-count { position: absolute; inset: 0; display: grid; place-content: center; font-family: 'Russo One'; font-style: italic; font-size: 160px; opacity: 0; }
@@ -316,8 +363,12 @@ kbd:empty { display: none; }
 .h-flash.m1 { background: radial-gradient(ellipse at center, transparent 30%, rgba(176, 76, 255, 0.55)); }
 .h-flash.m2 { background: radial-gradient(ellipse at center, transparent 30%, rgba(255, 42, 74, 0.6)); }
 .h-flash.m4 { background: radial-gradient(ellipse at center, transparent 30%, rgba(30, 140, 255, 0.6)); }
+.h-flash.perfect { background: radial-gradient(ellipse at center, transparent 42%, rgba(176, 76, 255, 0.3) 72%, rgba(255, 255, 255, 0.85)); }
+.h-flash.perfect.m2 { background: radial-gradient(ellipse at center, transparent 42%, rgba(255, 42, 74, 0.35) 72%, rgba(255, 255, 255, 0.85)); }
+.h-flash.perfect.m4 { background: radial-gradient(ellipse at center, transparent 42%, rgba(30, 140, 255, 0.35) 72%, rgba(255, 255, 255, 0.85)); }
 .h-flash.on { opacity: 1; }
 .h-flash.go { opacity: 0; transition: opacity 0.45s ease-out; }
+.h-flash.go.perfect { transition: opacity 0.6s ease-out; }
 .h-pause { position: absolute; top: max(12px, env(safe-area-inset-top)); right: 14px; pointer-events: auto; background: var(--panel); border: 1px solid rgba(176, 76, 255, 0.5); width: 40px; height: 40px; cursor: pointer; }
 
 /* ---------------------------------------------------------------- touch */
@@ -346,6 +397,14 @@ body:not(.racing) #touch { display: none; }
   .h-speed b { font-size: 44px; }
   .h-tr { display: none; }
   .h-comms { left: 14px; top: auto; bottom: 150px; max-width: 70vw; }
+  .h-dash { transform: translateX(-50%) scale(0.86); }
+  .h-chain { transform: translateX(-50%) scale(0.86); bottom: calc(max(10px, env(safe-area-inset-bottom)) + 98px); }
+}
+/* a phone on its side: the dash and the chain shrink to leave the road */
+@media (max-height: 480px) {
+  .h-dash { transform: translateX(-50%) scale(0.72); bottom: 4px; }
+  .h-chain { transform: translateX(-50%) scale(0.72); bottom: 80px; }
+  .h-controls { bottom: 92px; }
 }
 
 /* ---------------------------------------------------------------- studio splash */
