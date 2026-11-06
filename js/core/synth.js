@@ -226,18 +226,57 @@ export function buildCurves() {
   return { soft: mk(1.6), warm: mk(2.6, 0.1), drive: mk(5), fuzz: mk(12, 0.2), crush: mk(24) };
 }
 
+// ------------------------------------------------------------ chip helpers
+// Console-style percussion: a square that drops in pitch, and gated noise bursts.
+function chipKick(A, t, v, out) {
+  const s = osc(A, 'square', 380, t, t + 0.16);
+  s.frequency.exponentialRampToValueAtTime(45, t + 0.09);
+  const g = amp(A);
+  perc(g.gain, t, v * 0.32, 0.14);
+  const lp = filt(A, 'lowpass', 2400);
+  s.connect(lp).connect(g).connect(out);
+}
+function chipNoise(A, t, v, out, f, decay, blip = 0, type = 'highpass') {
+  const n = noise(A, t, t + decay * 1.4 + 0.02, 0.6);
+  const hp = filt(A, type, f, type === 'bandpass' ? 0.8 : 0.7);
+  const g = amp(A);
+  perc(g.gain, t, v * 0.6, decay);
+  n.connect(hp).connect(g).connect(out);
+  if (blip) {
+    const s = osc(A, 'square', blip, t, t + 0.06);
+    s.frequency.exponentialRampToValueAtTime(blip * 0.6, t + 0.05);
+    const bg = amp(A);
+    perc(bg.gain, t, v * 0.16, 0.04);
+    s.connect(bg).connect(out);
+  }
+}
+// Narrow pulse waves (12.5%, 25%, 50%) for the chip voices, built once per context.
+function pulseWave(A, duty) {
+  A._pulse ||= {};
+  if (A._pulse[duty]) return A._pulse[duty];
+  const N = 64;
+  const re = new Float32Array(N);
+  const im = new Float32Array(N);
+  for (let k = 1; k < N; k++) {
+    re[k] = (2 / (k * Math.PI)) * Math.sin(Math.PI * k * duty) * Math.cos(Math.PI * k * duty);
+    im[k] = (2 / (k * Math.PI)) * Math.sin(Math.PI * k * duty) * Math.sin(Math.PI * k * duty);
+  }
+  return (A._pulse[duty] = A.ctx.createPeriodicWave(re, im));
+}
+
 // ------------------------------------------------------------ drums
 // Each drum: (A, t, vel, dest, opts) -> sound. opts.style picks a variant from the song kit.
 export const DRUMS = {
   kick(A, t, v, out, o = {}) {
     const style = o.style || 'punch';
     const P = {
-      punch: { f0: 170, f1: 48, bend: 0.055, decay: 0.34, click: 0.5, curve: 'warm' },
+      punch: { f0: 175, f1: 52, bend: 0.05, decay: 0.26, click: 0.7, curve: 'warm' },
       hard: { f0: 230, f1: 50, bend: 0.045, decay: 0.3, click: 0.7, curve: 'drive' },
       boom: { f0: 130, f1: 38, bend: 0.1, decay: 0.8, click: 0.3, curve: 'soft' },
       soft: { f0: 120, f1: 50, bend: 0.06, decay: 0.24, click: 0.15, curve: 'soft' },
       gabber: { f0: 260, f1: 55, bend: 0.04, decay: 0.26, click: 0.9, curve: 'fuzz' },
     }[style];
+    if (style === 'chip') return chipKick(A, t, v, out);
     const end = t + P.decay * 1.6 + 0.05;
     const s = osc(A, 'sine', P.f0, t, end);
     s.frequency.exponentialRampToValueAtTime(P.f1 * 1.3, t + P.bend);
@@ -262,6 +301,8 @@ export const DRUMS = {
       fat: { body: 170, decay: 0.28, tone: 0.65, hp: 900, lp: 7000 },
       crack: { body: 240, decay: 0.14, tone: 0.35, hp: 2400, lp: 12000 },
     }[style];
+    if (style === 'chip') return chipNoise(A, t, v * 0.9, out, 1800, 0.13, 220);
+    if (style === 'brush') return chipNoise(A, t, v * 0.55, out, 3200, 0.2, 0, 'bandpass');
     const end = t + P.decay * 1.5 + 0.05;
     for (const [f, k] of [
       [P.body, 1],
@@ -294,7 +335,8 @@ export const DRUMS = {
   clap(A, t, v, out) {
     buf(A, 'clap', t, out, v * 0.9, 0.96 + Math.random() * 0.08);
   },
-  hat(A, t, v, out) {
+  hat(A, t, v, out, o = {}) {
+    if (o.style === 'chip') return chipNoise(A, t, v * 0.5, out, 7000, 0.035);
     buf(A, 'hat', t, out, v * 0.42, 0.95 + Math.random() * 0.1);
   },
   ohat(A, t, v, out, o = {}) {
@@ -818,6 +860,136 @@ export const INST = {
     const sg = amp(A, 1);
     c.connect(lp).connect(shaper(A, 'drive')).connect(g).connect(out);
     sub.connect(sg).connect(g);
+  },
+
+  // ---------- style voices ----------
+  // Theremin: a sine with a breath of triangle that glides into every note, with a wide, quick vibrato.
+  theremin(A, t, n, dur, v, out, o = {}) {
+    const f = mtof(n);
+    const g = amp(A);
+    const end = adsr(g.gain, t, 0.06, v * 0.24, 0.3, 0.9, dur, 0.22);
+    const from = o.prev ? mtof(o.prev) : f * 0.96;
+    const s = osc(A, 'sine', f, t, end);
+    const tr = osc(A, 'triangle', f, t, end);
+    pitch(s, f, t, from, 0.11);
+    pitch(tr, f, t, from, 0.11);
+    vibrato(A, [s, tr], f, t, end, 0.02, 6.4, 0.06);
+    const tg = amp(A, 0.3);
+    s.connect(g);
+    tr.connect(tg).connect(g);
+    g.connect(out);
+  },
+  // Surf guitar: a bright single-coil pluck, quick to decay, with a little bar wobble.
+  surf(A, t, n, dur, v, out, o = {}) {
+    const f = mtof(n);
+    const g = amp(A);
+    const end = adsr(g.gain, t, 0.002, v * 0.26, 0.18, 0.35, dur, 0.1);
+    const a = osc(A, 'sawtooth', f, t, end);
+    const b = osc(A, 'square', f * 1.003, t, end);
+    vibrato(A, [a, b], f, t, end, 0.008, 6, 0.12);
+    const lp = filt(A, 'lowpass', 4200, 1.6);
+    lp.frequency.setValueAtTime(4200, t);
+    lp.frequency.setTargetAtTime(1500, t, 0.08);
+    const hp = filt(A, 'highpass', 180);
+    const bg = amp(A, 0.4);
+    a.connect(lp);
+    b.connect(bg).connect(lp);
+    lp.connect(hp).connect(shaper(A, 'soft')).connect(g).connect(out);
+  },
+  // Vibraphone: soft mallet sine with a motor tremolo.
+  vibes(A, t, n, dur, v, out) {
+    const f = mtof(n);
+    const end = t + 1.6;
+    const g = amp(A);
+    perc(g.gain, t, v * 0.2, 1.2, 0.003);
+    const trem = osc(A, 'sine', 5.2, t, end);
+    const tg = amp(A, v * 0.06);
+    trem.connect(tg).connect(g.gain);
+    osc(A, 'sine', f, t, end).connect(g);
+    const h = osc(A, 'sine', f * 4, t, end);
+    const hg = amp(A);
+    perc(hg.gain, t, v * 0.05, 0.12, 0.002);
+    h.connect(hg).connect(out);
+    g.connect(out);
+  },
+  // Upright bass: a round, thumpy pluck.
+  upright(A, t, n, dur, v, out) {
+    const f = mtof(n);
+    const g = amp(A);
+    const end = adsr(g.gain, t, 0.004, v * 0.42, 0.25, 0.35, dur, 0.06);
+    const lp = filt(A, 'lowpass', 900, 1);
+    lp.frequency.setValueAtTime(1400, t);
+    lp.frequency.setTargetAtTime(520, t, 0.05);
+    osc(A, 'triangle', f, t, end).connect(lp);
+    const s = osc(A, 'sine', f, t, end);
+    const sg = amp(A, 0.6);
+    s.connect(sg).connect(lp);
+    lp.connect(g).connect(out);
+  },
+  // Console pulse voice: no filter, a gate envelope, delayed vibrato on long notes. o.duty: 0.125, 0.25 or 0.5.
+  chip(A, t, n, dur, v, out, o = {}) {
+    const f = mtof(n);
+    const g = amp(A);
+    const end = adsr(g.gain, t, 0.002, v * 0.2, 0.08, 0.75, dur * 0.95, 0.03);
+    const s = osc(A, 'sine', f, t, end);
+    s.setPeriodicWave(pulseWave(A, o.duty || 0.25));
+    pitch(s, f, t, o.slide && o.from && mtof(o.from), 0.04);
+    if (dur > 0.25) vibrato(A, s, f, t, end, 0.01, 6, 0.18);
+    s.connect(g).connect(out);
+  },
+  // Console triangle bass.
+  chiptri(A, t, n, dur, v, out) {
+    const f = mtof(n);
+    const g = amp(A);
+    const end = adsr(g.gain, t, 0.002, v * 0.5, 0.05, 0.9, dur * 0.92, 0.02);
+    osc(A, 'triangle', f, t, end).connect(g).connect(out);
+  },
+  // FM electric piano: a bell-ish tine on the attack over a warm body, two voices spread wide.
+  epiano(A, t, n, dur, v, out) {
+    const f = mtof(n);
+    const end = t + Math.max(0.6, dur + 0.5);
+    for (const [det, pan] of [[-4, -0.35], [4, 0.35]]) {
+      const c = osc(A, 'sine', f, t, end);
+      c.detune.value = det;
+      const m = osc(A, 'sine', f, t, end);
+      const mi = amp(A);
+      mi.gain.setValueAtTime(f * 1.6, t);
+      mi.gain.setTargetAtTime(f * 0.25, t, 0.25);
+      m.connect(mi).connect(c.frequency);
+      const tine = osc(A, 'sine', f * 14, t, t + 0.1);
+      const ti = amp(A);
+      perc(ti.gain, t, f * 2, 0.04);
+      tine.connect(ti).connect(c.frequency);
+      const g = amp(A);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(v * 0.14, t + 0.004);
+      g.gain.setTargetAtTime(v * 0.07, t + 0.004, 0.3);
+      g.gain.setTargetAtTime(0, t + Math.max(0.08, dur), 0.12);
+      const p = A.ctx.createStereoPanner();
+      p.pan.value = pan;
+      c.connect(g).connect(p).connect(out);
+    }
+  },
+  // Overdriven lead guitar that bends up into each note from the last.
+  lguitar(A, t, n, dur, v, out, o = {}) {
+    const f = mtof(n);
+    const g = amp(A);
+    const end = adsr(g.gain, t, 0.004, v * 0.15, 0.3, 0.8, dur, 0.1);
+    const pre = amp(A, 1);
+    const from = o.prev && Math.abs(o.prev - n) <= 2 ? mtof(o.prev) : null;
+    const oscs = [0, 7].map((d) => {
+      const s = osc(A, 'sawtooth', f, t, end);
+      s.detune.value = d;
+      pitch(s, f, t, from, 0.07);
+      s.connect(pre);
+      return s;
+    });
+    vibrato(A, oscs, f, t, end, 0.012, 5.6, 0.22);
+    const hp = filt(A, 'highpass', 160);
+    const mid = filt(A, 'peaking', 900);
+    mid.gain.value = 5;
+    const cab = filt(A, 'lowpass', 3000, 1.2);
+    pre.connect(hp).connect(shaper(A, 'fuzz')).connect(mid).connect(cab).connect(g).connect(out);
   },
 };
 
