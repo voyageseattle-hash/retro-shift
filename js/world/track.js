@@ -5,7 +5,7 @@
 
 import * as THREE from '../../vendor/three.js';
 import { clamp, lerp, wrapAngle, mulberry32, smoothstep } from '../core/util.js';
-import { M, BOTH, solidIn, colorForMask, COLORS } from './shift.js';
+import { M, BOTH, RED, BLUE, solidIn, colorForMask, COLORS } from './shift.js';
 import { Layers } from './layers.js';
 import { buildDecor } from './decor.js';
 import { buildSigns } from './signs.js';
@@ -315,6 +315,7 @@ export class TrackWorld {
     this.animated = [];
     this.obstacles = [];
     this.pads = [];
+    this.launchers = [];
     this.shards = [];
     this.buildMain();
     this.buildBranches();
@@ -678,6 +679,18 @@ export class TrackWorld {
       else this.addObstacle(o);
     }
     for (const b of def.boosts || []) this.addPad(b);
+    // LAUNCHERS: a hole in your world is a ramp in the other one. Before each stretch of main road that's missing in
+    // a lens, that lens gets a launcher, there only for it, that throws you up and over the hole. (More can be laid by
+    // hand with def.launchers.)
+    for (const g of def.gaps || []) {
+      if (g.path || !g.mask) continue;
+      for (const lens of [RED, BLUE]) {
+        if (solidIn(g.mask, lens)) continue;
+        const m = this.main;
+        this.addLauncher({ at: g.at - 16 / m.length, mask: lens === RED ? M.RO : M.BO, over: (g.len ?? 40) + 22 });
+      }
+    }
+    for (const l of def.launchers || []) this.addLauncher(l);
     for (const s of def.shards || []) {
       const n = s.n ?? 3;
       for (let k = 0; k < n; k++) this.addShard({ ...s, at: s.at + k * (s.gap ?? 0.006) });
@@ -801,6 +814,47 @@ export class TrackWorld {
       L.quad(mask, r0, tip2, tip, r1, col, 1.2);
     }
     this.pads.push({ path, i, f: path.frac(i), lat, w, len: path.ds * 3.5, mask });
+  }
+
+  // A launcher: a raised chevron ramp with an arch over it, in one lens's colour. `over`: metres it has to clear.
+  addLauncher(l) {
+    const path = this.pathOf(l);
+    const i = path.index(l.at);
+    const lat = (l.lat ?? 0) * path.halfW;
+    const mask = l.mask ?? M.RO;
+    const col = colorForMask(mask);
+    const L = this.layers;
+    const w = path.halfW - 1.5;
+    // the ramp: chevrons climbing toward the lip
+    const n = 6;
+    for (let k = 0; k < n; k++) {
+      const i0 = path.wrap(i + k);
+      const y0 = 0.06 + (k / n) * 0.9;
+      const y1 = 0.06 + ((k + 1) / n) * 0.9;
+      const tip = path.point(i0 + 1, lat, y1, new THREE.Vector3());
+      const l0 = path.point(i0, lat - w, y0, new THREE.Vector3());
+      const r0 = path.point(i0, lat + w, y0, new THREE.Vector3());
+      const c0 = path.point(i0, lat, y0 + 0.02, new THREE.Vector3());
+      L.quad(mask, l0, c0, tip, path.point(i0 + 1, lat - w, y1, new THREE.Vector3()), col, 0.5 + k * 0.12);
+      L.quad(mask, r0, c0, tip, path.point(i0 + 1, lat + w, y1, new THREE.Vector3()), col, 0.5 + k * 0.12);
+      L.line(mask, l0, tip, col);
+      L.line(mask, r0, tip, col);
+    }
+    // the arch over the lip, and an up arrow in it
+    const top = path.point(path.wrap(i + n), lat, 0, new THREE.Vector3());
+    const right = new THREE.Vector3(path.rightX(path.wrap(i + n)), 0, path.rightZ(path.wrap(i + n)));
+    let prev = null;
+    for (let k = 0; k <= 12; k++) {
+      const a = (k / 12) * Math.PI;
+      const p = top.clone().addScaledVector(right, -Math.cos(a) * (w + 0.6)).setY(top.y + Math.sin(a) * 5.5);
+      if (prev) L.line(mask, prev, p, col);
+      prev = p;
+    }
+    const up = (dx, dy, ex, ey) => L.line(mask, top.clone().addScaledVector(right, dx).setY(top.y + dy), top.clone().addScaledVector(right, ex).setY(top.y + ey), col);
+    up(0, 1.4, 0, 4.2);
+    up(-1, 3.2, 0, 4.2);
+    up(1, 3.2, 0, 4.2);
+    this.launchers.push({ path, i, f: path.frac(i), lat, w, len: path.ds * n, mask, over: l.over ?? 50 });
   }
 
   addShard(s) {

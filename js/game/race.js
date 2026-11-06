@@ -36,6 +36,7 @@ const HULL_FLOOR = 60; // a hull above this survives any one hit (it's left hang
 const HULL_REPAIR = { wait: 2.5, rate: 3, both: 7 }; // hp/s once it's gone a while without a hit; BOTH patches it faster
 // each car's horn (core/engine.js's horn library)
 const HORNS = { vector: 'honk1', scanline: 'honk2', polygon: 'honk3', chroma: 'honk6', raster: 'honk4', glitch: 'honk5', dash: 'bell', greatwedge: 'shark' };
+const G_AIR_RACE = 27; // racer.js G_AIR
 // recharge time of each form's move (seconds)
 const FORM_CD = { lift: 5, lance: 6, brace: 8 };
 const NO_INPUT = { throttle: 0, brake: 0, steer: 0, drift: false, item: false, special: false, jump: false, reset: false, look: false };
@@ -229,6 +230,33 @@ export class Race {
       }
     }
     return true;
+  }
+
+  // In the air off a launcher the flight follows the road under it (bending with a curve, drawn back to the middle),
+  // so the landing is on the road beyond the hole and never off its side.
+  flyLaunch(r, dt) {
+    const L = r.launch;
+    L.t -= dt;
+    if (L.t <= 0 || (r.grounded && L.t < 0.3)) {
+      r.launch = null;
+      return;
+    }
+    if (r.grounded) return;
+    const P = L.path;
+    const f = (r._lf ||= {});
+    if (!P.frame(r.pos.x, r.pos.z, L.i, f)) return;
+    L.i = f.i;
+    const j = P.wrap(f.i + 2);
+    const tx = P.thx[j];
+    const tz = P.thz[j];
+    const hs = Math.max(L.fwd, Math.hypot(r.vel.x, r.vel.z));
+    // along the road, plus a pull back toward its middle
+    const pull = clamp(-f.lat * 0.9, -12, 12);
+    r.vel.x = tx * hs + P.rightX(f.i) * pull;
+    r.vel.z = tz * hs + P.rightZ(f.i) * pull;
+    let d = Math.atan2(tx, tz) - r.yaw;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    r.yaw += d * Math.min(1, dt * 6);
   }
 
   // the form moves ticking, and how they look
@@ -880,6 +908,7 @@ export class Race {
       r.update(dt, w, this);
       if (r.respawnT > 0) continue;
       this.hull(r, dt);
+      if (r.launch) this.flyLaunch(r, dt);
       this.formTick(r, dt);
       if (r.ai) this.formAI(r);
       // wedged against something: put rivals back on the road (the player has RESET)
@@ -1008,6 +1037,31 @@ export class Race {
       if (r.isPlayer) {
         this.app.audio.play('boost');
         this.camOf(r).fovPunch(8);
+      }
+    }
+    // a launcher in your lens: up and over (at least fast enough, and high enough, to clear what it was built for)
+    for (const L of w.launchers) {
+      if (L.path !== P || !solidIn(L.mask, r.mode) || !r.grounded) continue;
+      let di = tr.i - L.i;
+      if (P.closed && di < -P.N / 2) di += P.N;
+      if (di < 3 || di * P.ds > L.len + 1) continue;
+      if (Math.abs(tr.lat - L.lat) > L.w + 0.5) continue;
+      if ((r.launchCd || 0) > this.t) continue;
+      r.launchCd = this.t + 1.5;
+      const fwd = Math.max(r.speed, 52);
+      const air = (L.over + 8) / fwd;
+      const vy = clamp((G_AIR_RACE * air) / 2, 9, 22);
+      _v.set(Math.sin(r.yaw), 0, Math.cos(r.yaw));
+      r.vel.copy(_v).multiplyScalar(fwd).setY(vy);
+      r.grounded = false;
+      r.airTime = 0.01;
+      r.launch = { path: P, i: tr.i, t: air + 0.6, fwd };
+      r.giveBoost(0.6, 1.2);
+      if (this.near(r)) this.debris.sparks(r.pos, _a.set(0, -1, 0), 30, r.mode === RED ? 0xff4a6a : 0x4ab0ff, 14, r.gnd.y);
+      if (r.isPlayer) {
+        this.emitP(r, 'popup', { text: 'LAUNCH', color: r.mode === RED ? '#ff4a6a' : '#4ab0ff' });
+        this.app.audio.play('turbo', 3);
+        this.camOf(r).fovPunch(12);
       }
     }
     for (const sh of w.shards) {
