@@ -246,6 +246,7 @@ export class Racer {
     let vR = this.vel.dot(right);
     const vN = this.grounded ? this.vel.dot(n) : 0;
 
+    this.gliding = false;
     if (this.grounded) {
       const boosting = this.boostTime > 0;
       const lens = LENS[this.mode] || LENS[BOTH];
@@ -315,6 +316,8 @@ export class Racer {
       // (only over a real drop: skimming a downhill road with the road just underneath is driving, not gliding)
       const high = !this.gnd.onRoad || this.pos.y - this.gnd.y > 2;
       const gliding = F.glide && high && this.airTime > 0.08 && this.airTime < 1.6 && this.speed > 25 && !this.controlLocked;
+      // (race.js counts a long glide as a lens move for the SHIFT CHAIN)
+      this.gliding = gliding;
       this.yawRate = damp(this.yawRate, -steer * (gliding ? 1.6 : 0.9), 3, dt);
       if (gliding) {
         this.vel.y -= G_AIR * (this.vel.y > 0 ? 0.55 : 0.22) * dt;

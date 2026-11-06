@@ -503,7 +503,7 @@ export class Audio extends Engine {
     const W = this.sfxWet;
     // The sounds a player can set off many times a second (shifting, grinding a rail, mashing a shift with no
     // energy) are rate-limited, so they read as one event and not a buzz.
-    const lim = { shift: 0.07, scrape: 0.22, wall: 0.25, denied: 0.35, smash: 0.08, phase: 0.12, shard: 0.04 }[name];
+    const lim = { shift: 0.07, scrape: 0.22, wall: 0.25, denied: 0.35, smash: 0.08, phase: 0.12, shard: 0.04, chain: 0.08, perfect: 0.15 }[name];
     if (lim) {
       const last = this.throttle.get(`rs-${name}`) ?? -1;
       if (t - last < lim) return;
@@ -533,6 +533,30 @@ export class Audio extends Engine {
         break;
       case 'shard':
         this.arp(t, [88, 92, 95, 100], 0.045, 0.1, 'bell');
+        break;
+      case 'chain': {
+        // a SHIFT CHAIN link: a soft bell pair climbing an E minor pentatonic ladder with the multiplier
+        const m = clamp(arg || 1, 1, 8);
+        const n = [76, 79, 81, 83, 86, 88, 91, 93][m - 1];
+        this.arp(t, [n, n + 7], 0.04, 0.05 + m * 0.004, 'vibes');
+        break;
+      }
+      case 'perfect': {
+        // PERFECT SHIFT: a bright zing up into the lens, a quick sparkle, and the big turbo under it
+        const up = arg === BLUE ? 1.12 : arg === RED ? 0.9 : 1;
+        this.tone('sine', 700 * up, t, 0.16, 0.06, W, { slideTo: 2600 * up, slideTime: 0.12, fm: [2, 0.4] });
+        this.arp(t + 0.06, [88, 95, 100], 0.03, 0.06, 'bell');
+        this.thump(t, 140, 50, 0.12, 0.2);
+        super.play('miniturbo3');
+        break;
+      }
+      case 'chainEnd':
+        // the chain lets go: two soft notes back down
+        this.arp(t, [83, 76], 0.07, 0.04, 'vibes');
+        break;
+      case 'chainBreak':
+        // broken by a crash: a short dull drop
+        this.tone('triangle', 330, t, 0.2, 0.05, this.sfxDry, { slideTo: 120, filter: 1200 });
         break;
       case 'fall':
         this.tone('triangle', 800, t, 0.9, 0.14, W, { slideTo: 60 });

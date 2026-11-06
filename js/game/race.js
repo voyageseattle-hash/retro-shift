@@ -21,6 +21,8 @@ import { Items, ITEMS } from './items.js';
 import { Reflection } from './reflect.js';
 import { Construction } from './construction.js';
 import { Quake } from './quake.js';
+import { chainMove, chainTick, chainEnd, shiftTiming, perfectFx, newChain, newTally } from './chain.js';
+import { PIPE } from '../world/warp.js';
 import { disposeTree } from '../core/renderer.js';
 
 const _v = new THREE.Vector3();
@@ -133,6 +135,9 @@ export class Race {
       r.lapStart = 0;
       r.finished = false;
       r.respawnT = 0;
+      // the SHIFT CHAIN, and the moves the results screen tells (game/chain.js)
+      r.chain = newChain();
+      r.tally = newTally();
       if (!isPlayer && !r.puppet) {
         const skill = clamp([0.55, 0.75, 0.92][diff] + (k / field) * 0.1 + rand(-0.05, 0.05), 0.3, 1);
         r.ai = new RaceAI(r, this.world, skill);
@@ -391,12 +396,84 @@ export class Race {
       this.emitP(r, 'denied');
     }
   }
+  // Every lens move lands here (the kinds are listed in game/chain.js): the tally for the results screen, then the
+  // SHIFT CHAIN. Returns the chain's length. (An event, game/events.js, listens in by wrapping it.)
+  onMove(r, kind, data = {}) {
+    const t = r.tally;
+    if (t) {
+      if (kind === 'perfect') t.perfect++;
+      else if (kind === 'phase') {
+        t.phased++;
+        if (data.close) t.close++;
+      } else if (kind === 'lensRoute') t.routes++;
+      else if (kind === 'wallRun') t.wallRuns++;
+      else if (kind === 'glide') t.glides++;
+      else if (kind === 'slit') t.slits++;
+      else if (kind === 'takedown') t.takedowns++;
+    }
+    return chainMove(this, r, kind, data);
+  }
+
+  // The lens moves that happen on the road rather than at something on it, each counted once as it starts: onto a
+  // road that's only there in your lens, up a wall-run (or high round a pipe) as the Blade, a long glide as the
+  // Skimmer. Then the chain's window, and the lens-time tally.
+  moves(r, dt) {
+    const g = r.gnd;
+    const P = g.path;
+    const on = r.grounded && g.onRoad;
+    // a lens road: there in your lens, not in BOTH (a little hysteresis, for the seam where a fork meets the road)
+    const lens = on && !solidIn(g.mask, BOTH);
+    if (lens) {
+      r.offLensT = 0;
+      if (!r.onLens) {
+        r.onLens = true;
+        // off a road there in every lens straight onto one that isn't (a lens bridge's lip, a fork's mouth): the
+        // shift's timing counts. (Landing on one from a launcher's flight doesn't.)
+        const tm = this.t - (r.bothRoadT ?? -9) < 0.25 ? shiftTiming(this, r) : null;
+        if (tm === 'perfect') {
+          r.giveBoost(0.9, 1.3);
+          r.energy = Math.min(1, r.energy + 0.1);
+          perfectFx(this, r);
+          this.onMove(r, 'perfect', { on: 'road' });
+        }
+        this.onMove(r, 'lensRoute', { mask: g.mask, path: P.id, perfect: tm === 'perfect' });
+      }
+    } else if (on) {
+      r.offLensT = (r.offLensT || 0) + dt;
+      if (r.offLensT > 0.4) r.onLens = false;
+      r.bothRoadT = this.t;
+    }
+    // a wall-run, or a pipe wall past the steep part, in RED
+    const wall = on && r.mode === RED && P && (P.cling?.[g.i] || (P.warpKind?.[g.i] === PIPE && Math.abs((g.lat * P.warpK[g.i]) / P.warpR[g.i]) > 0.9));
+    if (wall) {
+      r.offWallT = 0;
+      if (!r.onWall) {
+        r.onWall = true;
+        this.onMove(r, 'wallRun', { pipe: !P.cling?.[g.i] });
+      }
+    } else if ((r.offWallT = (r.offWallT || 0) + dt) > 0.4) r.onWall = false;
+    // a glide that's really a glide (racer.js sets r.gliding)
+    if (r.gliding) {
+      r.glideT = (r.glideT || 0) + dt;
+      if (r.glideT > 0.35 && !r.glided) {
+        r.glided = true;
+        this.onMove(r, 'glide', { gap: !!P?.glide?.[g.i] });
+      }
+    } else if (r.grounded) {
+      r.glideT = 0;
+      r.glided = false;
+    }
+    chainTick(this, r, dt);
+    if (this.state === 'race' && !r.finished) r.tally.lens[r.mode] += dt;
+  }
+
   onDriftLevel(r, lvl) {
     if (r.isPlayer) this.emitP(r, 'drift', { lvl });
   }
   onMiniTurbo(r, lvl) {
     // a long drift charges SHIFT as well as the turbo
     if (lvl >= 2) r.energy = Math.min(1, r.energy + (lvl === 3 ? 0.12 : 0.06));
+    this.onMove(r, 'drift', { lvl });
     if (r.isPlayer) {
       this.app.audio.play('turbo', lvl);
       this.emitP(r, 'popup', { text: ['', 'TURBO', 'SUPER TURBO', 'ULTRA TURBO'][lvl], color: '#ff4fd8' });
@@ -422,6 +499,7 @@ export class Race {
   }
   onFell(r) {
     if (r.respawnT > 0) return;
+    chainEnd(this, r);
     r.falls = (r.falls || 0) + 1;
     r.respawnT = 1.1;
     r.root.visible = false;
@@ -516,6 +594,8 @@ export class Race {
       this.debris.sparks(r.pos, _v.set(0, 0, 0), 40, 0xffd27a, 26, r.gnd.y);
     }
     r.wrecks = (r.wrecks || 0) + 1;
+    chainEnd(this, r);
+    if (by && by !== r) this.onMove(by, 'takedown', { victim: r.index });
     r.respawnT = 1.8;
     r.root.visible = false;
     r.drift.active = false;
@@ -975,6 +1055,7 @@ export class Race {
         }
       } else r.stuckT = 0;
       this.features(r, dt);
+      this.moves(r, dt);
       this.progress(r, dt);
     }
     this.bump();
@@ -998,6 +1079,13 @@ export class Race {
         if (r.inside === o) r.inside = null;
         continue;
       }
+      // through a slit's gap: only the Blade fits (formroutes.js); its two pieces count as one
+      if (o.slit && r.mode === RED && Math.abs(along) < o.len + r.halfL && Math.abs(tr.lat) < o.slit) {
+        const key = `${P.id}:${o.i}`;
+        if (r.slitKey !== key || this.t - r.slitT > 3) this.onMove(r, 'slit', {});
+        r.slitKey = key;
+        r.slitT = this.t;
+      }
       const dlat = tr.lat - o.lat;
       if (Math.abs(dlat) > o.w + r.halfW) continue;
       if (r.pos.y - P.py[o.i] > o.h + 1) continue;
@@ -1006,9 +1094,15 @@ export class Race {
         if (r.inside !== o) {
           r.inside = o;
           r.energy = Math.min(1, r.energy + 0.04);
-          // shifted at the last moment: a CLOSE PHASE throws you through it with a boost and some SHIFT back
-          const close = this.t - (r.lastShiftT ?? -9) < 0.45 && o.type === 'wall';
-          if (close) {
+          // shifted at the last moment: a PERFECT SHIFT, or a CLOSE PHASE, throws you through it with a boost and
+          // some SHIFT back (a lens wall: blocks are just phased)
+          const tm = o.type === 'wall' ? shiftTiming(this, r) : null;
+          if (tm === 'perfect') {
+            r.giveBoost(1.2, 1.38);
+            r.energy = Math.min(1, r.energy + 0.16);
+            perfectFx(this, r);
+            this.onMove(r, 'perfect', { on: 'wall' });
+          } else if (tm === 'close') {
             r.giveBoost(0.9, 1.3);
             r.energy = Math.min(1, r.energy + 0.12);
             if (r.isPlayer) {
@@ -1020,9 +1114,10 @@ export class Race {
           }
           if (r.isPlayer) {
             this.app.audio.play('phase');
-            this.emitP(r, 'popup', { text: 'PHASED', color: r.mode === RED ? '#ff4a6a' : r.mode === BLUE ? '#4ab0ff' : '#d8c8ff', small: true });
+            if (!tm) this.emitP(r, 'popup', { text: 'PHASED', color: r.mode === RED ? '#ff4a6a' : r.mode === BLUE ? '#4ab0ff' : '#d8c8ff', small: true });
             this.stats.phased++;
           }
+          this.onMove(r, 'phase', { close: tm === 'close', perfect: tm === 'perfect', type: o.type });
         }
         continue;
       }
@@ -1066,7 +1161,10 @@ export class Race {
         if (smashes) this.smash(o, r);
         this.scrape(r, into, _v.set(-tx * s, 0, -tz * s));
         const hard = into > 12;
-        if (hard) r.spinOut(o.type === 'wall' ? 0.9 : 0.6, Math.random() < 0.5 ? -1 : 1);
+        if (hard) {
+          r.spinOut(o.type === 'wall' ? 0.9 : 0.6, Math.random() < 0.5 ? -1 : 1);
+          chainEnd(this, r);
+        }
         if (r.isPlayer) {
           this.app.audio.play(o.type === 'wall' ? 'wall' : 'hit');
           this.camOf(r).addShake(o.type === 'wall' ? 0.9 : 0.5);
@@ -1087,11 +1185,19 @@ export class Race {
       if (Math.abs(tr.lat - pad.lat) > pad.w + 0.5) continue;
       if (r.padCool > this.t) continue;
       r.padCool = this.t + 0.6;
-      r.giveBoost(1.2, 1.32);
+      // a pad there only in one lens: shift onto it at the last moment for a PERFECT
+      const lens = !solidIn(pad.mask, BOTH);
+      const tm = lens ? shiftTiming(this, r) : null;
+      if (tm === 'perfect') {
+        r.giveBoost(1.6, 1.4);
+        perfectFx(this, r);
+        this.onMove(r, 'perfect', { on: 'pad' });
+      } else r.giveBoost(1.2, 1.32);
       if (r.isPlayer) {
         this.app.audio.play('boost');
         this.camOf(r).fovPunch(8);
       }
+      this.onMove(r, 'pad', { lens, perfect: tm === 'perfect' });
     }
     // a launcher in your lens: up and over (at least fast enough, and high enough, to clear what it was built for)
     for (const L of w.launchers) {
@@ -1110,7 +1216,14 @@ export class Race {
       r.grounded = false;
       r.airTime = 0.01;
       r.launch = { path: P, i: tr.i, t: air + 0.6, fwd };
-      r.giveBoost(0.6, 1.2);
+      // a launcher is only there in one lens: shift onto it at the last moment for a PERFECT
+      const tm = !solidIn(L.mask, BOTH) ? shiftTiming(this, r) : null;
+      if (tm === 'perfect') {
+        r.giveBoost(1.0, 1.3);
+        perfectFx(this, r);
+        this.onMove(r, 'perfect', { on: 'launch' });
+      } else r.giveBoost(0.6, 1.2);
+      this.onMove(r, 'launch', { perfect: tm === 'perfect' });
       if (this.near(r)) this.debris.sparks(r.pos, _a.set(0, -1, 0), 30, r.mode === RED ? 0xff4a6a : 0x4ab0ff, 14, r.gnd.y);
       if (r.isPlayer) {
         this.emitP(r, 'popup', { text: 'LAUNCH', color: r.mode === RED ? '#ff4a6a' : '#4ab0ff' });
@@ -1129,6 +1242,7 @@ export class Race {
         this.app.audio.play('shard');
         this.emitP(r, 'popup', { text: '+SHIFT', color: '#ffffff', small: true });
       }
+      this.onMove(r, 'shard', { lens: !solidIn(sh.mask, BOTH) });
     }
   }
 
