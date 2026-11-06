@@ -34,8 +34,9 @@ export function buildShapeCues(world) {
   for (const o of world.obstacles) {
     const kind = shapeOf(o.mask);
     if (!kind || !o.root) continue;
-    const s = Math.min(o.w, o.h / 2) * 0.62;
-    const segs = outline(kind, s, []);
+    const s = Math.min(o.w, o.h / 2) * 0.8;
+    // (drawn twice, a little apart, so it reads bold against the hazard stripes)
+    const segs = outline(kind, s * 0.86, outline(kind, s, []));
     const pos = [];
     const faces = [[0, o.len + 0.06, 0], [0, -o.len - 0.06, 0]];
     if (o.type === 'block') faces.push([o.w + 0.06, 0, Math.PI / 2], [-o.w - 0.06, 0, Math.PI / 2]);

@@ -395,3 +395,14 @@ body:not(.racing) #touch { display: none; }
 .h-event i { font-style: normal; font-size: 13px; }
 .event-results .ev-score { font-size: 28px; font-weight: 700; letter-spacing: 0.08em; }
 @media (max-width: 640px) { .h-event { top: 64px; font-size: 13px; } .h-event .ev-val { font-size: 17px; } }
+
+/* ---- accessibility (ui/access.js, core/access.js) ---- */
+body.calm .h-flash { display: none; }
+body.shapes .chip.red::before { content: '▲'; font-size: 0.85em; }
+body.shapes .chip.blue::before { content: '●'; font-size: 0.85em; }
+body.shapes .chip.both::before { content: '◆'; font-size: 0.85em; }
+.keylist .item { display: flex; justify-content: space-between; align-items: center; gap: 18px; }
+.keylist kbd { font: inherit; padding: 1px 10px; border: 1px solid rgba(255, 255, 255, 0.4); min-width: 3em; text-align: center; }
+.keylist kbd.wait { color: #ffd04a; border-color: #ffd04a; animation: blink 0.8s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0.35; } }
+.screen.keys .list { max-height: 62vh; overflow-y: auto; }

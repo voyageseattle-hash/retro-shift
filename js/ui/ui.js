@@ -16,6 +16,7 @@ import { CUPS, POINTS, TROPHY, getProgress, saveProgress as saveProgressUI, meda
 import { loadGhost } from '../game/ghost.js';
 import { playerName, setPlayerName, courseName, MAX_PLAYERS } from '../net/online.js';
 import { PREMISE, CUP_STORY, SECRET_SCENES, DRIVERS } from '../game/story.js';
+import { accessScreen } from './access.js';
 
 export const el = (tag, cls, html) => {
   const e = document.createElement(tag);
@@ -182,6 +183,7 @@ export class UI {
       { label: '', cycle: (d) => ((S.difficulty = (S.difficulty + d + 3) % 3), save(), refresh()), action: () => items[2].cycle(1) },
       { label: '', cycle: (d) => ((S.quality = quals[(quals.indexOf(S.quality) + d + quals.length) % quals.length]), save(), refresh()), action: () => items[3].cycle(1) },
       { label: '', cycle: () => ((S.assist = S.assist === false), save(), refresh()), action: () => items[4].cycle(1) },
+      { label: 'ACCESSIBILITY', action: () => accessScreen(this) },
       { label: 'BACK', action: () => this.title() },
     ];
     s.appendChild(list);
