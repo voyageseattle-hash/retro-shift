@@ -14,6 +14,7 @@ import { monoDef, medalFor, recordMedal } from './modes.js';
 import { driverOf, pick } from './story.js';
 import { Debris } from './wreck.js';
 import { SpeedLines } from './speedlines.js';
+import { Feel } from './feel.js';
 import { Storms } from './storms.js';
 import { Traffic } from './traffic.js';
 import { Police } from './police.js';
@@ -78,6 +79,7 @@ export class Race {
     this.scene.add(this.debris.mesh);
     this.speedLines = new SpeedLines();
     this.scene.add(this.speedLines.mesh);
+    this.feel = new Feel(this); // drift stages, surface rumble, pass-bys (feel.js)
     this.storms = new Storms(this);
     this.traffic = new Traffic(this);
     this.police = new Police(this);
@@ -760,6 +762,7 @@ export class Race {
       cam.update(dt, pl, this.world, C[k].look);
     });
     this.dtLast = dt;
+    this.feel.update(dt);
     if (!this.split) this.env.update(dt, this.t, this.cam.camera);
     if (!this.split) {
       const k = (p.respawnT > 0 || !p.grounded ? 0 : Math.abs(p.speed) / p.phys.topSpeed) + (p.boostTime > 0 ? 0.3 : 0);

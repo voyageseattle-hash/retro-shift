@@ -1,5 +1,5 @@
 // Speed streaks: thin lines in a tube around the camera's view that rush past faster and longer the harder you're
-// going, tinted by your lens. They only start to show past half speed, so a fast run reads as fast.
+// going, tinted by your lens. They start to show a little before half speed, so a fast run reads as fast.
 
 import * as THREE from '../../vendor/three.js';
 
@@ -38,7 +38,7 @@ export class SpeedLines {
   update(dt, camera, k, color) {
     // lens colour washed toward white, so the streaks read against roads of the same colour
     this.tint.lerp(_w.copy(color).lerp(WHITE, 0.45), 1 - Math.exp(-8 * dt));
-    const show = Math.max(0, (k - 0.5) / 0.5);
+    const show = Math.max(0, (k - 0.42) / 0.5);
     this.mesh.visible = show > 0.01;
     if (!this.mesh.visible) return;
     camera.getWorldDirection(_f);
