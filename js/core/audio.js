@@ -20,7 +20,7 @@ const RADIO_VOICES = {
   dash: { f0: 1.02, form: 1.04, rate: 0.9 }, // DASH: plucky
   greatwedge: { f0: 0.6, form: 0.86, rate: 1.15, growl: 0.45 }, // Captain Finn Razorback
 };
-const ANNOUNCER = ['title', 'three', 'two', 'one', 'go', 'lap2', 'final', 'winner', 'second', 'third', 'over', 'record', 'gold', 'champion', 'p1wins', 'p2wins', 'ready', 'grandprix', 'timetrial', 'monorun', 'twoplayer', 'online', 'shift', 'unlocked'];
+const ANNOUNCER = ['title', 'three', 'two', 'one', 'go', 'lap2', 'final', 'winner', 'second', 'third', 'over', 'record', 'gold', 'champion', 'p1wins', 'p2wins', 'ready', 'grandprix', 'timetrial', 'monorun', 'twoplayer', 'online', 'shift', 'unlocked', 'chain3', 'chain5', 'chain8', 'perfect', 'takedown'];
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
 export class Audio extends Engine {
@@ -49,11 +49,15 @@ export class Audio extends Engine {
         .catch(() => {});
     }
   }
-  // Play an announcer line; returns its length in seconds (0 if it isn't loaded yet).
-  announce(id, delay = 0, vol = 1) {
+  // Play an announcer line; returns its length in seconds (0 if it isn't loaded yet). A soft line (the in-race calls:
+  // chains, PERFECT SHIFT, takedowns) keeps quiet rather than talk over a line that's still being said.
+  announce(id, delay = 0, vol = 1, soft = false) {
     const buf = this.voice?.get(id);
     if (!buf || !this.ctx || this.announcerOff) return 0;
     const t = this.ctx.currentTime + delay;
+    if (soft && t < (this.talkingUntil || 0)) return 0;
+    // (each clip is the words, then about a second of the hall dying away)
+    this.talkingUntil = Math.max(this.talkingUntil || 0, t + buf.duration - 1);
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     const g = this.ctx.createGain();

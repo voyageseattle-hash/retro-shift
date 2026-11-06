@@ -85,7 +85,7 @@ export function chainMove(race, r, kind, d) {
     const call = { 3: 'chain3', 5: 'chain5', 8: 'chain8' }[c.n];
     if (call && race.t - (r.calledT ?? -9) > 2.5) {
       r.calledT = race.t;
-      A.announce(call, 0.1, 0.9);
+      A.announce(call, 0.1, 0.9, true);
     }
   }
   return c.n;
@@ -133,11 +133,12 @@ export function perfectFx(race, r) {
   race.camOf(r).fovPunch(11);
   race.camOf(r).addShake(0.2);
   race.aberr = Math.max(race.aberr || 0, 0.8);
-  // (the call is a treat: the first one, then now and then)
-  if (race.t - (r.perfectCallT ?? -99) > 12 && (!r.perfectCalled || Math.random() < 0.4)) {
+  // (the call is a treat: the first one, then now and then; and when this shift makes the chain x3, x5 or x8, the
+  // chain gets the call instead)
+  const milestone = [3, 5, 8].includes((r.chain?.n || 0) + 1);
+  if (!milestone && race.t - (r.perfectCallT ?? -99) > 12 && (!r.perfectCalled || Math.random() < 0.4) && race.app.audio.announce('perfect', 0.05, 0.9, true) > 0) {
     r.perfectCallT = race.t;
     r.perfectCalled = true;
-    race.app.audio.announce('perfect', 0.05, 0.9);
   }
 }
 

@@ -200,6 +200,11 @@ export class Race {
     this.ghosts.push(g);
   }
 
+  // A rival gets on the radio in a moment (one call waits at a time, and not too often).
+  radioSoon(r, kind, delay) {
+    if (this.radioLater || this.t - (this.radioT ?? -99) < 9) return;
+    this.radioLater = { r, kind, t: this.t + delay };
+  }
   // A rival gets on the radio.
   comms(r, kind) {
     const d = r && !r.human && driverOf(r.car.id);
@@ -208,6 +213,7 @@ export class Race {
     if (!text) return;
     const msg = { id: r.car.id, name: d.name, car: r.car.name, color: r.color, text, kind };
     this.emit('comms', msg);
+    this.radioT = this.t;
     return msg;
   }
 
@@ -621,6 +627,13 @@ export class Race {
       by.takedowns = (by.takedowns || 0) + 1;
       this.emitP(by, 'popup', { text: 'TAKEDOWN', color: '#ffd04a' });
       this.app.input.rumble(by.pIndex || 0, 0.8, 0.8, 300);
+      // the announcer calls your first takedown, then now and then (a chain call just made gets the floor), and the
+      // driver you took out has something to say about it once they're back
+      if (this.t - (by.takedownCallT ?? -99) > 14 && (!by.takedownCalled || Math.random() < 0.5) && this.app.audio.announce('takedown', 0.15, 0.9, true) > 0) {
+        by.takedownCallT = this.t;
+        by.takedownCalled = true;
+      }
+      this.radioSoon(r, 'downed', 1.4);
     }
     const seen = r.isPlayer || by?.isPlayer || this.players.some((p) => p.pos.distanceToSquared(r.pos) < 60 * 60);
     if (seen) {
@@ -734,6 +747,11 @@ export class Race {
   // ------------------------------------------------------------ per frame
   update(dt) {
     this.t += dt;
+    if (this.radioLater && this.t >= this.radioLater.t) {
+      const q = this.radioLater;
+      this.radioLater = null;
+      if (this.state === 'race') this.comms(q.r, q.kind);
+    }
     const input = this.app.input;
     const p = this.player;
     // player controls (two sets in split-screen)
@@ -1370,6 +1388,14 @@ export class Race {
           this.emitP(r, 'popup', { text: 'FINAL LAP', color: '#ff4fd8' });
           this.app.audio.play('finalLap');
           this.app.audio.announce('final', 0.25);
+          // and the rival just ahead (or just behind) gets on the radio about it, once a race
+          if (!this.finalRadio && !this.solo) {
+            this.finalRadio = true;
+            const st = this.standings();
+            const i = st.indexOf(r);
+            const near = [st[i - 1], st[i + 1]].find((o) => o && !o.human && !o.isPlayer && !o.finished);
+            if (near) this.radioSoon(near, 'final', 1.7);
+          }
         } else if (r.lap === 1) this.app.audio.announce('lap2', 0.25);
       }
     }
