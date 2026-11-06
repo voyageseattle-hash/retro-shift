@@ -152,12 +152,14 @@ kbd:empty { display: none; }
 .roster span b { font-weight: 700; margin-right: 4px; }
 .quote { max-width: 640px; text-align: center; color: #e8dcff; font-size: 16px; font-style: italic; margin-top: -6px; }
 .quote b { font-style: normal; letter-spacing: 0.12em; margin-right: 6px; }
-.h-comms { position: absolute; left: 18px; top: 140px; max-width: min(420px, 44vw); padding: 10px 16px 10px 14px; background: var(--panel); border-left: 3px solid var(--c, var(--violet)); opacity: 0; transform: translateX(-12px); transition: opacity 0.25s, transform 0.25s; }
+.h-comms { position: absolute; left: 18px; top: 140px; display: flex; gap: 12px; align-items: center; max-width: min(480px, 48vw); padding: 8px 16px 8px 8px; background: var(--panel); border-left: 3px solid var(--c, var(--violet)); opacity: 0; transform: translateX(-12px); transition: opacity 0.25s, transform 0.25s; }
 .h-comms.on { opacity: 1; transform: none; }
 .h-comms b { display: flex; align-items: center; gap: 8px; font-size: 12px; letter-spacing: 0.2em; }
 .h-comms b::before { content: 'RADIO'; font-size: 10px; padding: 1px 5px; color: #0a0612; background: var(--c, var(--violet)); letter-spacing: 0.16em; }
 .h-comms span { display: block; font-size: 17px; font-weight: 600; line-height: 1.3; }
-.h-comms i { position: absolute; right: 10px; top: 10px; display: flex; gap: 2px; align-items: flex-end; height: 12px; }
+.h-comms > div { position: relative; min-width: 0; }
+.h-face { width: 72px; height: 72px; flex: none; border: 1px solid var(--c, var(--violet)); box-shadow: 0 0 12px color-mix(in srgb, var(--c, #b04cff) 50%, transparent); }
+.h-comms i { position: absolute; right: -6px; top: 0; display: flex; gap: 2px; align-items: flex-end; height: 12px; }
 .h-comms i::before, .h-comms i::after, .h-comms i u { content: ''; width: 3px; height: 100%; background: var(--c, var(--violet)); animation: vox 0.32s ease-in-out infinite alternate; }
 .h-comms i::after { animation-delay: -0.15s; } .h-comms i u { animation-delay: -0.07s; }
 .h-comms:not(.on) i { display: none; }
@@ -203,6 +205,7 @@ kbd:empty { display: none; }
 #hud.split .h-tip { font-size: 14px; top: 12%; }
 #hud.split .h-wrong { font-size: 28px; }
 #hud.split .h-comms { left: 140px; top: auto; bottom: 12px; }
+#hud.split .h-face { width: 48px; height: 48px; }
 #hud.split .h-tr { right: 64px; }
 #hud.split .v1 .h-tr { display: none; }
 .h-who { position: absolute; left: 50%; top: 8px; transform: translateX(-50%) skewX(-10deg); font-family: 'Russo One'; font-style: italic; font-size: 18px; padding: 0 10px; color: #fff; text-shadow: 0 0 10px var(--pink); }

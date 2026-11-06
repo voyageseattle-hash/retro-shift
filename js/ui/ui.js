@@ -1,5 +1,6 @@
 // Menus and the race HUD, all DOM over the WebGL canvas. Menus work with keyboard, gamepad, mouse and touch.
 
+import { drawPortrait } from './portraits.js';
 import { TRACKS } from '../world/tracks.js';
 import { TrackWorld } from '../world/track.js';
 import { CARS } from '../vehicles/racer.js';
@@ -773,7 +774,7 @@ export class UI {
       <div class="h-center"></div>
       <div class="h-tip"></div>
       <div class="h-controls"></div>
-      <div class="h-comms"><i><u></u></i><b></b><span></span></div>
+      <div class="h-comms"><canvas class="h-face" width="144" height="144"></canvas><div><i><u></u></i><b></b><span></span></div></div>
       <div class="h-count"></div>
       <div class="h-wrong">WRONG WAY<small>TURN AROUND</small></div>
       <div class="h-flash"></div>`;
@@ -916,13 +917,29 @@ export class UI {
       case 'comms': {
         const c = h.comms;
         c.querySelector('b').textContent = `${e.name} · ${e.car}`;
+        // their face, lip-flapping for as long as the line takes to say
+        const face = c.querySelector('.h-face');
+        clearInterval(h.faceTimer);
+        const talkFor = Math.min(3600, 500 + e.text.length * 52);
+        const t0 = performance.now();
+        const flap = () => {
+          const t = performance.now() - t0;
+          const talking = t < talkFor;
+          drawPortrait(face, e.id, e.color, talking ? (Math.sin(t / 55) * 0.5 + 0.5) * (0.4 + Math.random() * 0.6) : 0, t / 1000);
+          if (!talking && e.id !== 'glitch') clearInterval(h.faceTimer);
+        };
+        flap();
+        h.faceTimer = setInterval(flap, 70);
         c.querySelector('b').style.color = hex(e.color);
         c.querySelector('span').textContent = e.text;
         c.style.setProperty('--c', hex(e.color));
         c.classList.add('on');
         if (!echo) this.app.audio.radio(e.id, e.text, e.kind === 'lose' ? 'lose' : 'talk');
         clearTimeout(h.commsTimer);
-        h.commsTimer = setTimeout(() => c.classList.remove('on'), 4200);
+        h.commsTimer = setTimeout(() => {
+          c.classList.remove('on');
+          clearInterval(h.faceTimer);
+        }, 4200);
         break;
       }
       case 'finish':
