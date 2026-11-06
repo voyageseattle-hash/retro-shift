@@ -158,11 +158,15 @@ kbd:empty { display: none; }
 .h-comms b::before { content: 'RADIO'; font-size: 10px; padding: 1px 5px; color: #0a0612; background: var(--c, var(--violet)); letter-spacing: 0.16em; }
 .h-comms span { display: block; font-size: 17px; font-weight: 600; line-height: 1.3; }
 .h-comms > div { position: relative; min-width: 0; }
+.h-face-img { width: 84px; height: 84px; flex: none; border: 1px solid var(--c, var(--violet)); box-shadow: 0 0 12px color-mix(in srgb, var(--c, #b04cff) 50%, transparent); transition: box-shadow 0.15s, filter 0.15s; }
+.h-comms.talking .h-face-img { animation: talk 0.24s ease-in-out infinite alternate; }
+@keyframes talk { from { filter: brightness(1); box-shadow: 0 0 10px color-mix(in srgb, var(--c, #b04cff) 40%, transparent); } to { filter: brightness(1.25); box-shadow: 0 0 22px var(--c, #b04cff); } }
+#hud.split .h-face-img { width: 52px; height: 52px; }
 .h-face { width: 72px; height: 72px; flex: none; border: 1px solid var(--c, var(--violet)); box-shadow: 0 0 12px color-mix(in srgb, var(--c, #b04cff) 50%, transparent); }
 .h-comms i { position: absolute; right: -6px; top: 0; display: flex; gap: 2px; align-items: flex-end; height: 12px; }
 .h-comms i::before, .h-comms i::after, .h-comms i u { content: ''; width: 3px; height: 100%; background: var(--c, var(--violet)); animation: vox 0.32s ease-in-out infinite alternate; }
 .h-comms i::after { animation-delay: -0.15s; } .h-comms i u { animation-delay: -0.07s; }
-.h-comms:not(.on) i { display: none; }
+.h-comms:not(.talking) i { display: none; }
 @keyframes vox { from { transform: scaleY(0.25); } to { transform: scaleY(1); } }
 
 /* online */

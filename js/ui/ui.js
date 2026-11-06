@@ -1,6 +1,7 @@
 // Menus and the race HUD, all DOM over the WebGL canvas. Menus work with keyboard, gamepad, mouse and touch.
 
 import { drawPortrait } from './portraits.js';
+import { helmetPortrait, warmHelmets } from './helmets.js';
 import { ITEMS } from '../game/items.js';
 const ITEM_IDS = Object.keys(ITEMS);
 import { TRACKS } from '../world/tracks.js';
@@ -757,6 +758,8 @@ export class UI {
 
   // ------------------------------------------------------------------ HUD
   buildHud(race) {
+    // render the rivals' helmets now, between frames, so the first radio call doesn't stall a frame
+    warmHelmets(race.racers.filter((r) => !r.isPlayer && !r.human).map((r) => [r.car.id, r.color]));
     const H = this.hudRoot;
     const n = race.split ? 2 : 1;
     const view = `
@@ -778,7 +781,7 @@ export class UI {
       <div class="h-center"></div>
       <div class="h-tip"></div>
       <div class="h-controls"></div>
-      <div class="h-comms"><canvas class="h-face" width="144" height="144"></canvas><div><i><u></u></i><b></b><span></span></div></div>
+      <div class="h-comms"><img class="h-helmet h-face-img" alt="" hidden><canvas class="h-face" width="144" height="144"></canvas><div><i><u></u></i><b></b><span></span></div></div>
       <div class="h-count"></div>
       <div class="h-wrong">WRONG WAY<small>TURN AROUND</small></div>
       <div class="h-flash"></div>`;
@@ -930,18 +933,23 @@ export class UI {
         const c = h.comms;
         c.querySelector('b').textContent = `${e.name} · ${e.car}`;
         // their face, lip-flapping for as long as the line takes to say
+        // their helmet (a line drawing if the portrait couldn't be rendered), lit up while they talk
         const face = c.querySelector('.h-face');
+        const img = c.querySelector('.h-helmet');
+        const url = helmetPortrait(e.id, e.color);
         clearInterval(h.faceTimer);
-        const talkFor = Math.min(3600, 500 + e.text.length * 52);
-        const t0 = performance.now();
-        const flap = () => {
-          const t = performance.now() - t0;
-          const talking = t < talkFor;
-          drawPortrait(face, e.id, e.color, talking ? (Math.sin(t / 55) * 0.5 + 0.5) * (0.4 + Math.random() * 0.6) : 0, t / 1000);
-          if (!talking && e.id !== 'glitch') clearInterval(h.faceTimer);
-        };
-        flap();
-        h.faceTimer = setInterval(flap, 70);
+        clearTimeout(h.talkTimer);
+        if (url) {
+          img.src = url;
+          img.hidden = false;
+          face.hidden = true;
+        } else {
+          img.hidden = true;
+          face.hidden = false;
+          drawPortrait(face, e.id, e.color, 0, 0);
+        }
+        c.classList.add('talking');
+        h.talkTimer = setTimeout(() => c.classList.remove('talking'), Math.min(3600, 500 + e.text.length * 52));
         c.querySelector('b').style.color = hex(e.color);
         c.querySelector('span').textContent = e.text;
         c.style.setProperty('--c', hex(e.color));
