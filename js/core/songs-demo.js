@@ -299,4 +299,94 @@ const neon = song({
   form: ['A', 'B', 'A'],
 });
 
-export const DEMOS = { matinee, neon, chip, coinop };
+// ------------------------------------------------------------------ 1c. SHIFT DRIVE (racer)
+// Full racing energy: 142 BPM, an EBM 16th bass and four-on-the-floor in every lens, a lead-guitar hook over
+// power-chord chugs on the red side, the theremin and a racing arpeggio on the blue side. Surf tremolo picking is
+// the one drive-in accent left.
+const drive = song({
+  name: 'Shift Drive',
+  bpm: 142,
+  tonic: 64,
+  delayBeats: 0.75,
+  pumpDepth: 0.6,
+  kit: { kick: 'punch', snare: 'crack' },
+  mix: {
+    kick: { drum: 'kick', vol: 0.62 },
+    clap: { drum: 'clap', vol: 1.2, verb: 0.3 },
+    snare: { drum: 'snare', vol: 1.5, verb: 0.22 },
+    hat: { drum: 'hat', vol: 1.8, pan: 0.22 },
+    ohat: { drum: 'ohat', vol: 1.4, pan: 0.28 },
+    crash: { drum: 'crash', vol: 0.8, pan: -0.25, verb: 0.25 },
+    tom: { drum: 'tom', vol: 0.35, verb: 0.3 },
+    fx: { mode: 'fx', vol: 0.8, verb: 0.35 },
+    ebm: { inst: 'bass', mode: 'bass', oct: 2, vol: 0.3, cut: 1000, pump: true },
+    lead: { inst: 'lguitar', mode: 'notes', vol: 0.95, delay: 0.2, verb: 0.2, pan: -0.1, world: 'red' },
+    chug: { inst: 'guitar', mode: 'chord', rootOnly: true, oct: 3, vol: 1.6, pan: -0.4, world: 'red' },
+    theremin: { inst: 'theremin', mode: 'notes', vol: 0.6, verb: 0.5, delay: 0.25, pan: 0.15, world: 'blue' },
+    pad: { inst: 'pad', mode: 'chord', oct: 4, vol: 0.85, pump: true, verb: 0.35, world: 'blue' },
+    arp: { inst: 'pluck', mode: 'arp', oct: 5, vol: 0.8, pan: 0.4, delay: 0.3, verb: 0.25, world: 'blue' },
+  },
+  parts: {
+    A: {
+      bars: 8,
+      chords: 'Em C G D',
+      crash: true,
+      tracks: {
+        lead: bars(
+          'e5 - b5 - e6 - - d6 - - b5 - d6 - e6 -', 'g6 - - - e6 - - - c6 - - - b5 - c6 -',
+          'd6 - b5 - d6 - - g6 - - f#6 - d6 - b5 -', 'a5 - - - - - - - f#5 - a5 - d6 - f#6 -',
+          'e5 - b5 - e6 - - d6 - - b5 - d6 - e6 -', 'g6 - - - a6 - - - b6 - - - a6 - g6 -',
+          'b6 - - - - - g6 - d6 - - - g6 - a6 -', 'f#6 - - - - - - - - - - - . . . .',
+        ),
+        theremin: bars(
+          'b5 - - - - - - - g5 - - - - - - -', 'e6 - - - - - - - g6 - - - - - - -',
+          'd6 - - - - - - - b5 - - - - - - -', 'a5 - - - - - - - d6 - - - - - - -',
+          'e6 - - - - - - - b6 - - - - - - -', 'g6 - - - - - - - e6 - - - - - - -',
+          'g6 - - - - - - - d6 - - - - - - -', 'f#6 - - - - - - - a6 - - - - - - -',
+        ),
+        ebm: '.xxx.xxx.xxx.xox',
+        chug: 'x.x.x.x.x.x.xx.x',
+        pad: 'x---------------',
+        arp: '0123012301230123',
+        kick: 'x...x...x...x...',
+        clap: '....x.......x...',
+        snare: rep('................', 8, '....x...x.x.xxXX'),
+        hat: 'xoxoxoxoxoxoxoxo',
+        ohat: '..x...x...x...x.',
+        fx: R(7) + '|R---------------',
+      },
+    },
+    B: {
+      bars: 8,
+      chords: 'C D Em Em C D B B',
+      crash: true,
+      tracks: {
+        theremin: bars(
+          'g5 - - - c6 - - - e6 - - - d6 - c6 -', 'a5 - - - d6 - - - f#6 - - - e6 - d6 -',
+          'g6 - - - - - - - f#6 - - - e6 - - -', 'b5 - - - - - - - - - - - . . . .',
+          'g5 - - - c6 - - - e6 - - - g6 - - -', 'a6 - - - - - - - f#6 - - - d6 - - -',
+          'd#6 - - - f#6 - - - b6 - - - a6 - - -', 'f#6 - - - - - - - d#6 - - - - - - -',
+        ),
+        lead: bars(
+          'c5 - - - - - - - e5 - - - g5 - - -', 'd5 - - - - - - - f#5 - - - a5 - - -',
+          'b5 - - - - - - - - - - - - - - -', 'b5 - a5 - g5 - e5 - g5 - a5 - b5 - d6 -',
+          'e6 - - - - - - - c6 - - - g5 - - -', 'f#6 - - - - - - - d6 - - - a5 - - -',
+          'f#6 - - - - - - - d#6 - - - b5 - - -', 'b5 b5 b5 b5 a5 a5 a5 a5 f#5 f#5 f#5 f#5 d#5 d#5 d#5 d#5',
+        ),
+        ebm: '.xxx.xxx.xxx.xxx',
+        chug: 'x..x..x...x.x...',
+        pad: 'x---------------',
+        arp: '0.1.2.3.4.3.2.1.',
+        kick: 'x...x...x...x...',
+        clap: '....x.......x...',
+        snare: rep('....x.......x...', 8, 'x.x.x.x.xxxxXXXX'),
+        hat: 'xoxoxoxoxoxoxoxo',
+        ohat: '..x...x...x...x.',
+        tom: R(3) + '|........h.h.m.l.',
+      },
+    },
+  },
+  form: ['A', 'B', 'A'],
+});
+
+export const DEMOS = { matinee, neon, drive, chip, coinop };

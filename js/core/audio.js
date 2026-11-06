@@ -443,7 +443,7 @@ export class Audio extends Engine {
     const crush = ctx.createWaveShaper();
     crush.curve = this.curves.warm;
     const out = ctx.createGain();
-    out.gain.value = 1.3;
+    out.gain.value = 0.85; // a notch under the music: the rivals chatter, they don't shout over the race
     inp.connect(hp).connect(lp).connect(peak).connect(crush).connect(out).connect(this.sfxDry);
     this._radio = inp;
     return inp;
