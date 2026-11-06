@@ -477,14 +477,13 @@ export class Police {
       this.shatter(c, 0.6);
       if (r.isPlayer) R.emitP(r, 'popup', { text: 'CRUISER DOWN', color: '#ffffff', small: true });
       this.stats.rear++;
-      R.wreck(r, null);
+      R.hurt(r, 50 + hit.into * 0.5);
       return;
     }
     if (ranInto && hit.into > (r.isPlayer ? 25 : 22)) {
       this.stats.rear++;
-      R.wreck(r, null);
       c.flinch = 0.5;
-      return;
+      if (R.hurt(r, (hit.into - 6) * 1.45, null, 'REAR-ENDED A CRUISER')) return;
     }
     if (r.copCd > 0) return;
     r.copCd = 0.5;
@@ -637,8 +636,9 @@ export class Police {
       if (d2 < (SHOT.radius * 0.6) ** 2) {
         if (r.isPlayer) R.emitP(r, 'popup', { text: 'SHOT DOWN', color: '#ff4f7a' });
         this.stats.shot++;
-        R.wreck(r, null);
+        if (!R.hurt(r, 55) && r.spinOut(1, Math.random() < 0.5 ? -1 : 1)) r.vel.multiplyScalar(0.5);
       } else if (d2 < SHOT.radius * SHOT.radius) {
+        if (R.hurt(r, 12)) continue;
         if (r.spinOut(0.7, Math.random() < 0.5 ? -1 : 1)) r.vel.multiplyScalar(0.65);
         this.stats.near++;
         R.scrape(r, 12, _d.set(r.pos.x - s.x, 0, r.pos.z - s.z).normalize());

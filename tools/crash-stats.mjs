@@ -32,8 +32,9 @@ for (const id of ids) {
     p.ai.skill = skill;
     const log = [];
     const where = () => {
-      const s = new Error().stack.split('\n').slice(3, 4)[0] || '';
-      return (s.match(/\/js\/(.+?):(\d+)/) || []).slice(1, 3).join(':');
+      // the first caller that isn't the hull bookkeeping
+      const lines = new Error().stack.split('\n').slice(3).map((s) => (s.match(/\/js\/(.+?):(\d+)/) || []).slice(1, 3).join(':'));
+      return lines.find((l) => l && !/race\.js:(2[89]\d|30\d)$/.test(l)) || lines[0];
     };
     const wreck = R.wreck.bind(R);
     R.wreck = (r, by) => {
@@ -42,7 +43,11 @@ for (const id of ids) {
     };
     const fell = R.onFell.bind(R);
     R.onFell = (r) => {
-      if (r.respawnT <= 0) log.push({ k: 'fall', who: r.isPlayer ? 'P' : 'cpu', at: where(), u: +r.lastU.toFixed(2), mode: r.mode });
+      if (r.respawnT <= 0) {
+        const t = r.track, P = t?.path;
+        const rail = P ? (t.lat < 0 ? P.railL[t.i] : P.railR[t.i]) : -1;
+        log.push({ k: 'fall', who: r.isPlayer ? 'P' : 'cpu', at: where(), u: +r.lastU.toFixed(2), mode: r.mode, why: `path ${P?.id} lat ${t?.lat.toFixed(1)}/${P?.halfW} rail ${rail} mask ${P?.mask[t.i]} spd ${r.speed.toFixed(0)} y-road ${(r.pos.y - (P?.py[t.i] ?? 0)).toFixed(1)}` });
+      }
       fell(r);
     };
     // the stand-in human: the AI's line plus a wandering steering error
@@ -59,7 +64,7 @@ for (const id of ids) {
       steps++;
       if (R.state === 'race' && p.finished) break;
     }
-    return { log, time: p.finishTime, place: R.finishOrder.indexOf(p) + 1 };
+    return { log, time: p.finishTime, place: R.finishOrder.indexOf(p) + 1, end: `lap ${p.lap} u ${p.lastU.toFixed(2)} spd ${p.speed.toFixed(0)} wrong ${(p.wrongWay||0).toFixed(1)} path ${p.track?.path.id} lat ${p.track?.lat.toFixed(1)}` };
   }, { laps, skill, noise });
   await page.close();
   const c = {};
@@ -68,9 +73,10 @@ for (const id of ids) {
     c[key] = (c[key] || 0) + 1;
     total[key] = (total[key] || 0) + 1;
   }
-  console.log(`${id}: ${JSON.stringify(c)}  player ${res.time ? res.time.toFixed(1) + 's' : 'DNF'}`);
-  for (const e of res.log) if (e.who === 'P') console.log(`    ${e.k} at ${e.at} u=${e.u}${e.mode !== undefined ? ' mode ' + e.mode : ''}`);
+  console.log(`${id}: ${JSON.stringify(c)}  player ${res.time ? res.time.toFixed(1) + "s" : "DNF " + res.end}`);
+  for (const e of res.log) if (e.who === 'P') console.log(`    ${e.k} at ${e.at} u=${e.u}${e.mode !== undefined ? ' mode ' + e.mode + ' ' + e.why : ''}`);
   const cpu = {};
+  for (const e of res.log) if (e.who === 'cpu' && e.k === 'fall') console.log(`    cpu fall u=${e.u} mode ${e.mode} ${e.why}`);
   for (const e of res.log) if (e.who === 'cpu') cpu[`${e.k} ${e.at}`] = (cpu[`${e.k} ${e.at}`] || 0) + 1;
   console.log('    cpu:', JSON.stringify(cpu));
 }

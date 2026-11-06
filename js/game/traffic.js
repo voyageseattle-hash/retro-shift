@@ -443,11 +443,12 @@ export class Traffic {
     const ranInto = hit.s < 0; // we hit its tail (rather than it running into our tail)
     const wreckAt = r.isPlayer ? WRECK_INTO * 1.15 : WRECK_INTO;
     if (ranInto && hit.into > wreckAt) {
-      // flat out into the back of it: both cars come apart
+      // flat out into the back of it: it comes apart, and so does a good piece of your hull
       if (r.isPlayer) R.emitP(r, 'popup', { text: 'TRAFFIC', color: '#ff4a6a', small: true });
       this.smash(car, r.vel);
       this.stats.wrecks++;
-      R.wreck(r, null);
+      R.hurt(r, (hit.into - 6) * 1.45);
+      r.vel.multiplyScalar(0.55);
       return;
     }
     if (r.trafCd > 0) return;

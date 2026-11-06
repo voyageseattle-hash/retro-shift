@@ -26,9 +26,13 @@ const _v = new THREE.Vector3();
 const _a = new THREE.Vector3();
 const _c = new THREE.Color();
 const _s = new THREE.Vector2();
-// closing speeds (m/s) that wreck a car: into a wall or block, and a car rammed by another
-const WRECK_SPEED = 30;
+// closing speeds (m/s) where a hit starts to hurt: into a wall or block, and a car rammed by another
+const HURT_SPEED = 6;
 const TAKEDOWN_SPEED = 14;
+// the hull: a hit takes a share of it, and a car only comes apart when it runs out
+export const HULL = 100;
+const HULL_FLOOR = 60; // a hull above this survives any one hit (it's left hanging by a thread instead)
+const HULL_REPAIR = { wait: 2.5, rate: 3, both: 7 }; // hp/s once it's gone a while without a hit; BOTH patches it faster
 const NO_INPUT = { throttle: 0, brake: 0, steer: 0, drift: false, item: false, special: false, jump: false, reset: false, look: false };
 
 export class Race {
@@ -226,12 +230,16 @@ export class Race {
     if (r.isPlayer) this.emitP(r, 'drift', { lvl });
   }
   onMiniTurbo(r, lvl) {
+    // a long drift charges SHIFT as well as the turbo
+    if (lvl >= 2) r.energy = Math.min(1, r.energy + (lvl === 3 ? 0.12 : 0.06));
     if (r.isPlayer) {
       this.app.audio.play('turbo', lvl);
       this.emitP(r, 'popup', { text: ['', 'TURBO', 'SUPER TURBO', 'ULTRA TURBO'][lvl], color: '#ff4fd8' });
     }
   }
   onWallHit(r, impact) {
+    // the rails are bumpers: a glancing scrape costs nothing, a square hit a little hull, and they never finish a car
+    if (impact > 16 && r.hp > 12) this.hurt(r, Math.min((impact - 16) * 0.6, r.hp - 10));
     if (impact > 6 && this.near(r)) this.debris.sparks(r.pos, _v.copy(r.vel).multiplyScalar(-0.03), Math.min(24, impact), 0xffd27a, 14, r.gnd.y);
     if (r.isPlayer && impact > 6) {
       this.app.audio.play('scrape');
@@ -273,6 +281,58 @@ export class Race {
   // Is this racer close enough to the camera for its debris to be worth drawing?
   near(r) {
     return this.players.some((p) => p.pos.distanceToSquared(r.pos) < 260 * 260);
+  }
+
+  // A hit takes hull. Returns true if it was the last of it (the car comes apart). by: who rammed you; text: the popup.
+  // A healthy car always survives one hit: it's left hanging by a thread, smoking, with the next hit the last.
+  hurt(r, dmg, by = null, text = null, steady = false) {
+    if (r.respawnT > 0 || r.finished || dmg <= 0) return false;
+    if (r.invuln > 0 && !by) return false;
+    // heavier hulls take hits better (GREAT WEDGE is a tank); you're a little tougher than the field
+    dmg *= Math.sqrt(1 / (r.mass || 1)) * (r.isPlayer ? 0.85 : 1);
+    if (!steady && r.hurtCd > 0) dmg *= 0.35; // two touches in the same crash count as one
+    const before = r.hp;
+    if (before > HULL_FLOOR && dmg >= before) dmg = before - 6 - Math.random() * 4;
+    r.hp = before - dmg;
+    r.lastHurtT = this.t;
+    if (!steady) r.hurtCd = 0.35;
+    if (r.hp <= 0) {
+      r.hp = 0;
+      this.wreck(r, by);
+      return true;
+    }
+    if (by?.isPlayer && dmg > 8) this.emitP(by, 'popup', { text: `HIT · ${Math.round(dmg)}`, color: '#ffd04a', small: true });
+    if (r.isPlayer) {
+      if (text) this.emitP(r, 'popup', { text, color: '#ff4a6a', small: dmg < 30 });
+      if (before > 30 && r.hp <= 30) {
+        this.emitP(r, 'popup', { text: 'HULL CRITICAL', color: '#ff4a6a' });
+        this.app.audio.play('fall');
+      }
+      if (!steady) {
+        this.app.input.rumble(r.pIndex || 0, Math.min(1, dmg / 40), Math.min(1, dmg / 50), 120 + dmg * 4);
+        this.camOf(r).addShake(Math.min(0.9, 0.15 + dmg * 0.012));
+        this.aberr = Math.max(this.aberr || 0, Math.min(1.2, dmg / 40));
+      }
+      this.emitP(r, 'hurt', { dmg });
+    }
+    // the hit shows: a few lines off the hull, more the worse it is
+    if (!steady && dmg > 12 && this.near(r)) this.debris.burst(r.root, _a.copy(r.vel).multiplyScalar(0.6), 5 + dmg * 0.1, r.gnd.y, Math.min(0.22, dmg * 0.004), 1.8);
+    return false;
+  }
+
+  // A hull left alone patches itself up, faster in BOTH; a hurt hull trails smoke and sparks so you can see it.
+  hull(r, dt) {
+    if (r.hurtCd > 0) r.hurtCd -= dt;
+    if (r.hp < HULL && this.t - (r.lastHurtT ?? -99) > HULL_REPAIR.wait) r.hp = Math.min(HULL, r.hp + (r.mode === BOTH ? HULL_REPAIR.both : HULL_REPAIR.rate) * dt);
+    if (r.hp < 65 && this.near(r)) {
+      const bad = 1 - r.hp / 65;
+      r.smokeT = (r.smokeT || 0) - dt;
+      if (r.smokeT <= 0) {
+        r.smokeT = 0.16 - bad * 0.12;
+        _a.set(-Math.sin(r.yaw), 0.4, -Math.cos(r.yaw));
+        this.debris.sparks(_v.copy(r.pos).setY(r.pos.y + 0.7), _a, 1 + Math.round(bad * 3), r.hp < 30 ? (Math.random() < 0.5 ? 0xff5a2a : 0xffd27a) : 0x9a8aa8, 5 + bad * 6, r.gnd.y);
+      }
+    }
   }
 
   // The car comes apart into its own lines and respawns a moment later.
@@ -343,6 +403,7 @@ export class Race {
     const u = r.lastU;
     const sp = this.world.respawnPoint(u, r.mono ? r.mode : BOTH);
     r.reset(sp.pos, sp.yaw);
+    r.hp = HULL;
     // start the road search at the respawn sample: on a stacked course (Helix) the nearest sample with no hint can
     // be a loop above or below, and you'd fall straight back out
     r.hints[this.world.main.id] = sp.i;
@@ -668,6 +729,7 @@ export class Race {
       }
       r.update(dt, w, this);
       if (r.respawnT > 0) continue;
+      this.hull(r, dt);
       // wedged against something: put rivals back on the road (the player has RESET)
       if (this.state === 'race' && !r.finished && Math.abs(r.speed) < 3) {
         r.stuckT = (r.stuckT || 0) + dt;
@@ -759,14 +821,14 @@ export class Race {
         // Pressing against a wall touches it every frame: only a fresh impact crashes, shakes and rumbles.
         if (into < 3 || r.hitCd > 0) continue;
         r.hitCd = 0.5;
-        // flat out into it: the car comes apart
-        if (into > WRECK_SPEED) {
-          this.wreck(r, null);
-          if (o.type !== 'wall') this.smash(o, r);
+        // the hit takes hull (a block that gives way takes less of it); only a hull with nothing left comes apart
+        const smashes = o.type !== 'wall' && into > 14;
+        if (this.hurt(r, (into - HURT_SPEED) * (smashes ? 0.9 : 1.45), null, into > 24 ? 'HULL HIT' : null)) {
+          if (smashes) this.smash(o, r);
           continue;
         }
         // a block hit hard enough breaks; anything you hit throws sparks and scraps
-        if (o.type !== 'wall' && into > 14) this.smash(o, r);
+        if (smashes) this.smash(o, r);
         this.scrape(r, into, _v.set(-tx * s, 0, -tz * s));
         const hard = into > 12;
         if (hard) r.spinOut(o.type === 'wall' ? 0.9 : 0.6, Math.random() < 0.5 ? -1 : 1);
@@ -798,8 +860,8 @@ export class Race {
     }
     for (const sh of w.shards) {
       if (sh.taken > 0 || !solidIn(sh.mask, r.mode)) continue;
-      if (sh.root.position.distanceToSquared(r.pos) > 3.2 * 3.2) continue;
-      sh.taken = 5;
+      if (sh.root.position.distanceToSquared(r.pos) > 4 * 4) continue;
+      sh.taken = 2.5; // back quickly: six racers share them
       sh.root.visible = false;
       if (this.online) this.app.net?.shard(w.shards.indexOf(sh));
       r.energy = Math.min(1, r.energy + SHIFT.shard);
@@ -855,8 +917,9 @@ export class Race {
             const vb = B.vel.x * _v.x + B.vel.z * _v.z;
             const victim = va > vb ? B : A;
             const by = victim === A ? B : A;
-            // you're tougher than the field: it takes a harder hit to wreck the player
-            if (!victim.isPlayer || rel < -TAKEDOWN_SPEED * 1.5) this.wreck(victim, by);
+            // the one rammed takes hull, the rammer a little; a car worn down by hits is the one that comes apart
+            this.hurt(victim, (-rel - TAKEDOWN_SPEED * 0.5) * 2.6, by, 'RAMMED');
+            this.hurt(by, (-rel - TAKEDOWN_SPEED) * 0.5);
           }
         }
       }

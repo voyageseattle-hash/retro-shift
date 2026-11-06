@@ -104,6 +104,8 @@ export class Racer {
     this.spinTime = 0;
     this.spinDir = 1;
     this.invuln = 0;
+    this.hp = 100; // the hull (race.js HULL)
+    this.hurtCd = 0;
     this.suspension = 0;
     this.suspVel = 0;
     this.bodyRoll = 0;

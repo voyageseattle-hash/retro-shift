@@ -768,6 +768,7 @@ export class UI {
           <span class="chip blue" data-m="4"><kbd></kbd>BLUE</span>
         </div>
         <div class="h-energy"><i></i><span>SHIFT</span></div>
+        <div class="h-hull">${'<i></i>'.repeat(10)}<span>HULL</span></div>
       </div>
       <div class="h-center"></div>
       <div class="h-tip"></div>
@@ -802,6 +803,8 @@ export class UI {
         chips: [...V.querySelectorAll('.h-chips .chip')],
         energy: q('.h-energy i'),
         energyBox: q('.h-energy'),
+        hull: q('.h-hull'),
+        hullCells: [...V.querySelectorAll('.h-hull i')],
         center: q('.h-center'),
         tip: q('.h-tip'),
         controls: q('.h-controls'),
@@ -866,6 +869,14 @@ export class UI {
 
   hudEvent(race, h, e, k, echo) {
     switch (e.type) {
+      case 'hurt':
+        h.flash.className = 'h-flash on hurt';
+        void h.flash.offsetWidth;
+        h.flash.className = 'h-flash go hurt';
+        h.hull.classList.remove('hit');
+        void h.hull.offsetWidth;
+        h.hull.classList.add('hit');
+        break;
       case 'shift': {
         h.flash.className = `h-flash on m${e.mode}`;
         void h.flash.offsetWidth;
@@ -930,7 +941,7 @@ export class UI {
       if (h[`_${key}`] === v) return;
       h[`_${key}`] = v;
       if (key === 'lap') node.innerHTML = v;
-      else if (key === 'driftCls' || key === 'energyCls') node.className = v;
+      else if (key === 'driftCls' || key === 'energyCls' || key === 'hullCls') node.className = v;
       else node.textContent = v;
     };
     set(h.place, 'place', String(place));
@@ -950,6 +961,14 @@ export class UI {
     const width = `${(p.energy * 100).toFixed(1)}%`;
     if (h._width !== width) h.energy.style.width = h._width = width;
     set(h.energyBox, 'energyCls', `h-energy m${p.mode}${p.energy < 0.25 ? ' low' : ''}${h.energyBox.classList.contains('deny') ? ' deny' : ''}`);
+    // the hull: ten cells, white while it's sound, orange once it's hurt, red and blinking when one more hit ends it
+    const hp = Math.ceil(((p.hp ?? 100) / 100) * 10 - 0.001);
+    const hullCls = `h-hull${hp <= 3 ? ' crit' : hp <= 6 ? ' hurt' : ''}${h.hull.classList.contains('hit') ? ' hit' : ''}`;
+    if (h._hp !== hp) {
+      h._hp = hp;
+      h.hullCells.forEach((c, i) => c.classList.toggle('off', i >= hp));
+    }
+    set(h.hull, 'hullCls', hullCls);
     h.wrong.classList.toggle('on', (p.wrongWay || 0) > 0.8 && race.state === 'race' && !p.finished);
     const mode = MODE_NAME[p.mode];
     if (h.root.dataset.mode !== mode) h.root.dataset.mode = mode;

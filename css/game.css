@@ -196,6 +196,7 @@ kbd:empty { display: none; }
 #hud.split .h-lens { bottom: 10px; gap: 5px; }
 #hud.split .h-chips .chip { font-size: 11px; padding: 3px 9px; }
 #hud.split .h-energy { height: 10px; width: 220px; }
+#hud.split .h-hull { height: 6px; width: 170px; }
 #hud.split .h-count { font-size: 90px; }
 #hud.split .pop { font-size: 26px; }
 #hud.split .pop.small { font-size: 15px; }
@@ -237,6 +238,15 @@ kbd:empty { display: none; }
 .h-energy span { position: absolute; inset: 0; display: grid; place-content: center; font-size: 10px; letter-spacing: 0.4em; color: #fff; }
 .h-energy.low { animation: blink 0.4s steps(2) infinite; }
 .h-energy.deny { animation: shake 0.3s; }
+.h-hull { position: relative; display: flex; gap: 3px; width: 260px; max-width: 60vw; height: 10px; transform: skewX(-20deg); margin-top: -2px; }
+.h-hull i { flex: 1; background: #f4ecff; box-shadow: 0 0 6px rgba(244, 236, 255, 0.7); transition: background 0.2s, opacity 0.2s; }
+.h-hull i.off { background: rgba(255, 255, 255, 0.08); box-shadow: none; }
+.h-hull.hurt i:not(.off) { background: #ff9a3a; box-shadow: 0 0 8px #ff9a3a; }
+.h-hull.crit i:not(.off) { background: #ff3a5a; box-shadow: 0 0 10px #ff3a5a; animation: blink2 0.5s steps(2) infinite; }
+.h-hull span { position: absolute; right: calc(100% + 10px); top: -3px; font-size: 9px; letter-spacing: 0.3em; color: #cfc4e6; transform: skewX(20deg); }
+.h-hull.hit { animation: shake 0.3s; }
+@keyframes blink2 { 50% { opacity: 0.35; } }
+.h-flash.hurt { background: radial-gradient(ellipse at center, transparent 45%, rgba(255, 60, 40, 0.5)); }
 @keyframes blink { 50% { border-color: #fff; } }
 @keyframes shake { 25% { transform: skewX(-20deg) translateX(-8px); } 75% { transform: skewX(-20deg) translateX(8px); } }
 .h-center { position: absolute; left: 0; right: 0; top: 30%; display: flex; flex-direction: column; align-items: center; gap: 4px; }

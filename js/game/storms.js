@@ -274,11 +274,12 @@ export class Storms {
       const d2 = (r.pos.x - s.x) ** 2 + (r.pos.z - s.z0) ** 2;
       if (Math.abs(r.pos.y - s.y) > 6) continue;
       if (d2 < (z.radius * 0.5) ** 2) {
-        // a direct hit wrecks you
+        // a direct hit tears a big piece out of the hull (and finishes a hurt one)
         if (r.isPlayer) R.emitP(r, 'popup', { text: z.hit, color: '#' + z.color.toString(16).padStart(6, '0') });
-        R.wreck(r, null);
+        if (!R.hurt(r, 55) && r.spinOut(1, Math.random() < 0.5 ? -1 : 1)) r.vel.multiplyScalar(0.45);
       } else if (d2 < z.radius * z.radius) {
-        // caught in the blast: spun out and slowed, sparks and scraps
+        // caught in the blast: a scorch on the hull, spun out and slowed, sparks and scraps
+        if (R.hurt(r, 14)) continue;
         if (r.spinOut(0.8, Math.random() < 0.5 ? -1 : 1)) r.vel.multiplyScalar(0.55);
         R.scrape(r, 14, _d.set(r.pos.x - s.x, 0, r.pos.z - s.z0).normalize());
         if (r.isPlayer) {

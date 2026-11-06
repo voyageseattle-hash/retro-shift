@@ -465,7 +465,9 @@ export class TrackWorld {
         path.glide ||= new Uint8Array(path.N);
         for (let k = 0; k < n; k++) path.glide[path.wrap(i0 + k)] = 1;
       }
-      if (g.noRails) for (let k = 0; k < n; k++) path.railL[path.wrap(i0 + k)] = path.railR[path.wrap(i0 + k)] = 0;
+      // A stretch that some lens still has keeps its rails (they're there in that lens, gone with the road in the
+      // others): falling off is for the planned places, a gap in your lens and a glide gap, never off a side.
+      if (g.noRails && (g.glide || !g.mask)) for (let k = 0; k < n; k++) path.railL[path.wrap(i0 + k)] = path.railR[path.wrap(i0 + k)] = 0;
     }
     for (const r of this.def.noRails || []) {
       const i0 = main.index(r.at);
@@ -554,9 +556,27 @@ export class TrackWorld {
           const e = path.point(j, side * (hw - 3.2), 0.035, new THREE.Vector3());
           const f = path.point(i, side * (hw - 3.2), 0.035, new THREE.Vector3());
           L.quadFade(mask, d, c, e, f, col, 0.07, 0);
-          // rails
+          // rails: a curved lip rising out of the road's edge into a bumper (a course with an open look, edge 'lip', has
+          // only the lip: a bowl's rim, no fence)
           const rail = side < 0 ? path.railL[i] : path.railR[i];
           if (rail) {
+            const lipH = this.def.edge === 'lip' ? 1.15 : 0.75;
+            let p0 = path.point(i, side * (hw - 0.5), 0.045, new THREE.Vector3());
+            let p1 = path.point(j, side * (hw - 0.5), 0.045, new THREE.Vector3());
+            for (let s = 1; s <= 3; s++) {
+              const a = (s / 3) * Math.PI * 0.5;
+              const lat = hw - 0.5 + (1 - Math.cos(a)) * 0.7;
+              const y = 0.045 + Math.sin(a) * lipH;
+              const q0 = path.point(i, side * lat, y, new THREE.Vector3());
+              const q1 = path.point(j, side * lat, y, new THREE.Vector3());
+              L.quad(mask, p0, p1, q1, q0, col, 0.16 + s * 0.1);
+              p0 = q0;
+              p1 = q1;
+            }
+            if (this.def.edge === 'lip') {
+              if (i % 3 === 0) L.line(mask, path.point(i, side * (hw - 0.5), 0.05, _a), path.point(i, side * (hw + 0.2), lipH, _b), col);
+              continue;
+            }
             const ra = path.point(i, side * (hw + 0.2), 1.1, new THREE.Vector3());
             const rb = path.point(j, side * (hw + 0.2), 1.1, new THREE.Vector3());
             const rd = path.point(i, side * (hw + 0.2), 0.75, new THREE.Vector3());
@@ -661,6 +681,19 @@ export class TrackWorld {
     for (const s of def.shards || []) {
       const n = s.n ?? 3;
       for (let k = 0; k < n; k++) this.addShard({ ...s, at: s.at + k * (s.gap ?? 0.006) });
+    }
+    // and a line of shards wherever the main road goes a long way without any, weaving across it, so there's always
+    // some SHIFT ahead (not in an obstacle field or a lens gap, where you have other things to do)
+    const m = this.main;
+    const taken = this.shards.filter((s) => s.path === m).map((s) => s.i / m.N);
+    const busy = (u) =>
+      this.obstacles.some((o) => o.path === m && Math.abs(((o.i / m.N - u + 1.5) % 1) - 0.5) < 0.025) ||
+      [-0.01, 0, 0.01, 0.02].some((d) => m.mask[m.index((u + d + 1) % 1)] !== M.ALL);
+    for (let k = 0; k < 6; k++) {
+      const u = 0.08 + k / 6;
+      if (taken.some((t) => Math.abs(((t - u + 1.5) % 1) - 0.5) < 0.07) || busy(u)) continue;
+      const lat = [0.45, -0.45, 0][k % 3];
+      for (let q = 0; q < 3; q++) this.addShard({ at: u + q * 0.006, lat: lat * (1 - q * 0.5) });
     }
     // shards laid along a branch (a long lens-only road refills you on the way)
     for (const p of this.paths) {
@@ -904,10 +937,25 @@ export class TrackWorld {
     r.pos.z -= g.rz * side * push;
     const vn = r.vel.x * g.rx * side + r.vel.z * g.rz * side;
     if (vn > 0) {
-      r.vel.x -= g.rx * side * vn * 1.35;
-      r.vel.z -= g.rz * side * vn * 1.35;
-      // scrape
-      r.vel.multiplyScalar(1 - clamp(vn * 0.012, 0, 0.25));
+      // a bumper, not a wall: it takes the speed going into it, gives a little back, and keeps most of the speed
+      // along it
+      r.vel.x -= g.rx * side * vn * 1.18;
+      r.vel.z -= g.rz * side * vn * 1.18;
+      r.vel.multiplyScalar(1 - clamp(vn * 0.005, 0, 0.1));
+      // and the curved lip turns the nose along the road, so a hard hit becomes a slide down the rail instead of a
+      // bounce back across the road into the other one
+      const hx = Math.sin(r.yaw);
+      const hz = Math.cos(r.yaw);
+      const hn = hx * g.rx * side + hz * g.rz * side;
+      if (hn > 0.05) {
+        const tx = hx - g.rx * side * hn;
+        const tz = hz - g.rz * side * hn;
+        let d = Math.atan2(tx, tz) - r.yaw;
+        d = Math.atan2(Math.sin(d), Math.cos(d));
+        const k = clamp(vn / 25, 0.15, 0.6);
+        r.yaw += d * k;
+        r.yawRate *= 1 - k;
+      }
     }
     return Math.max(0, vn);
   }

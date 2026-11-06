@@ -214,6 +214,8 @@ export const TRACKS = [
     laps: 3,
     sun: 2,
     halfWidth: 12,
+    // no fences out here: the road's edges curl up into a lip that holds you on
+    edge: 'lip',
     points: [
       [0, 0, 20], [-60, 220, 26], [40, 420, 34], [240, 480, 30], [400, 380, 22], [380, 200, 30], [460, 40, 40], [380, -140, 30],
       [200, -200, 22], [100, -100, 18],
@@ -225,7 +227,6 @@ export const TRACKS = [
         { at: P(1, 0.6), len: 40, mask: M.B, noRails: true },
         { at: P(7, 0.3), len: 60, mask: M.RO, noRails: true },
       ],
-      noRails: [{ at: P(0, 0), len: 2000 }],
       obstacles: [...field(P(2, 0.2), 0.1, 12, 31), ...field(P(5, 0.1), 0.09, 10, 37), ...field(P(8, 0.4), 0.05, 6, 41)],
       boosts: [{ at: P(0, 0.4) }, { at: P(4, 0.3), mask: M.BO }, { at: P(6, 0.2), mask: M.RO }],
       shards: [{ at: P(0, 0.7), n: 3 }, { at: P(4, 0.6), n: 4 }, { at: P(6, 0.9), n: 3, mask: M.R }],
