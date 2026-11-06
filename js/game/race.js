@@ -391,10 +391,12 @@ export class Race {
       if (!c.reset) pl.resetHeld = false;
     });
     if (this.state === 'intro') {
-      if (this.introT < 0.5 && this.introT + dt >= 0.5 && !this.solo) this.comms(pick(this.racers.filter((r) => !r.isPlayer && !r.human)), 'pre');
+      // a rival gets on the radio, and the fly-by opens on their car while they talk
+      if (this.introT === 0 && !this.solo) this.introSpeaker = pick(this.racers.filter((r) => !r.isPlayer && !r.human && driverOf(r.car.id)));
+      if (this.introT < 0.35 && this.introT + dt >= 0.35 && this.introSpeaker) this.comms(this.introSpeaker, 'pre');
       this.introT += dt;
       for (const r of this.racers) r.controlLocked = true;
-      if (this.online ? this.netGo : this.introT > 2.2 || input.menu('confirm')) {
+      if (this.online ? this.netGo : this.introT > (this.introSpeaker ? 3 : 2.2) || input.menu('confirm')) {
         this.state = 'countdown';
         this.lastBeep = 4;
       }
@@ -460,11 +462,16 @@ export class Race {
     this.players.forEach((pl, k) => {
       const cam = this.cams[k];
       if (this.state === 'intro') {
-        // fly-by
-        const a = this.introT * 0.5 + k * 1.4;
+        // fly-by: a close orbit of the rival on the radio, then around to your own car
+        const sp = this.introSpeaker && !this.split && this.introT < 1.5 ? this.introSpeaker : null;
+        const tgt = sp || pl;
+        const t = sp ? this.introT : this.introT - (this.introSpeaker && !this.split ? 1.5 : 0);
+        const a = t * 0.5 + k * 1.4 + (sp ? 2.2 : 0);
+        const far = sp ? 10 - t * 2 : 24 - t * 6;
         cam.cinematic = (dtc, CC) => {
-          CC.pos.set(pl.pos.x + Math.sin(a + pl.yaw) * (24 - this.introT * 6), pl.pos.y + 8 - this.introT * 2, pl.pos.z + Math.cos(a + pl.yaw) * (24 - this.introT * 6));
-          CC.look.copy(pl.pos);
+          CC.pos.set(tgt.pos.x + Math.sin(a + tgt.yaw) * far, tgt.pos.y + (sp ? 2.6 : 8 - t * 2), tgt.pos.z + Math.cos(a + tgt.yaw) * far);
+          CC.look.copy(tgt.pos);
+          if (sp) CC.look.y += 0.8;
         };
       } else if (cam.cinematic && !cam.held) {
         // (a held cinematic, cam.held, is a shot someone else is directing: trailer and replay cameras)

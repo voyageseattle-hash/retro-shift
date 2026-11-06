@@ -772,7 +772,7 @@ export class UI {
       <div class="h-center"></div>
       <div class="h-tip"></div>
       <div class="h-controls"></div>
-      <div class="h-comms"><b></b><span></span></div>
+      <div class="h-comms"><i><u></u></i><b></b><span></span></div>
       <div class="h-count"></div>
       <div class="h-wrong">WRONG WAY<small>TURN AROUND</small></div>
       <div class="h-flash"></div>`;
