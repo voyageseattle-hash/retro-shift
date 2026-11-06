@@ -394,7 +394,7 @@ export class Police {
       placeOnPath(c, P);
       // contact with the racers (those in BOTH)
       if (c.alpha > 0.6 && c.life === 'run') for (const r of R.racers) {
-        if (r.puppet || r.respawnT > 0 || r.mode !== BOTH) continue;
+        if (r.puppet || r.respawnT > 0 || r.respawnGrace > 0 || r.mode !== BOTH) continue;
         const hit = hitRacer(c, r);
         if (hit) this.collide(c, r, hit);
       }

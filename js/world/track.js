@@ -271,13 +271,17 @@ export class Path {
     return (this.mainFrom + d * (i / (this.N - 1))) % 1;
   }
 
-  nearest(x, z, hint) {
+  // (y, when given, keeps the search on the right level where roads stack: a spiral's turns, a branch crossing high
+  // over the road. A hint carried onto a level far above or below is dropped, and the full search weighs height, so a
+  // car on a branch over the road doesn't latch onto the road 50 m beneath it and then find no road at a junction.)
+  nearest(x, z, hint, y) {
     const N = this.N;
     const d2 = (i) => {
       const dx = this.px[i] - x;
       const dz = this.pz[i] - z;
       return dx * dx + dz * dz;
     };
+    const level = y === undefined ? d2 : (i) => d2(i) + 9 * (this.py[i] - y) ** 2;
     if (hint >= 0 && hint < N) {
       let i = hint;
       let best = d2(i);
@@ -294,12 +298,12 @@ export class Path {
           i = b;
         } else break;
       }
-      if (best < (this.halfW * 3) ** 2) return i;
+      if (best < (this.halfW * 3) ** 2 && (y === undefined || Math.abs(this.py[i] - y) < 20)) return i;
     }
     let bi = 0;
     let bd = Infinity;
     for (let i = 0; i < N; i += 2) {
-      const d = d2(i);
+      const d = level(i);
       if (d < bd) {
         bd = d;
         bi = i;
@@ -307,7 +311,7 @@ export class Path {
     }
     for (let k = -2; k <= 2; k++) {
       const i = this.wrap(bi + k);
-      const d = d2(i);
+      const d = level(i);
       if (d < bd) {
         bd = d;
         bi = i;
@@ -317,8 +321,8 @@ export class Path {
   }
 
   // Road frame under (x, z) near hint: fills out and returns true if (x, z) is over this strip.
-  frame(x, z, hint, out) {
-    const i = this.nearest(x, z, hint);
+  frame(x, z, hint, out, y) {
+    const i = this.nearest(x, z, hint, y);
     const dx = x - this.px[i];
     const dz = z - this.pz[i];
     const along = dx * this.thx[i] + dz * this.thz[i];
@@ -994,7 +998,7 @@ export class TrackWorld {
       if (y < path.minY - 8 || y > path.maxY + 60) {
         if (!(path.id in hints)) continue;
       }
-      if (!path.frame(x, z, hints[path.id] ?? -1, f)) continue;
+      if (!path.frame(x, z, hints[path.id] ?? -1, f, y)) continue;
       hints[path.id] = f.i;
       // a little grace past the edge of the strip you're on: at speed a hard corner can carry you past its rail for
       // a step before the rail pushes you back, and that step shouldn't drop you through the world
@@ -1058,12 +1062,20 @@ export class TrackWorld {
     const gz = g.rz;
     if (!rail) {
       const open = (side < 0 ? path.jL : path.jR)?.[g.i];
-      if (!open) return 0;
-      if (solidIn(open, r.mode)) {
-        // a fork opens the rail, but only where the fork's road is really there beside you: past its end (or where
-        // it has climbed away) the rail holds, so a junction is never a hole to fall through
-        const px = r.pos.x + gx * side * 2.2;
-        const pz = r.pos.z + gz * side * 2.2;
+      // an open side of the loop with no fork there is a planned drop: nothing holds you
+      if (!open && path.closed) return 0;
+      // a fork opens the rail, but only where the fork's road is really there beside you: past its end (or where
+      // it has climbed away) the rail holds, so a junction is never a hole to fall through. A branch drops its rail
+      // where its edge lies over the road it leaves and rejoins, and the same goes for it: Echo Ruins' RED ECHO
+      // crosses the main road at an angle, with its edge at the road's edge, where cars ran off it into nothing.
+      if (!open || solidIn(open, r.mode)) {
+        // (the probe goes just past where this strip stops holding you, ground()'s grace for the strip you're on,
+        // and no further: at the ends of the opening the fork is still there a couple of metres out, across a gap
+        // you'd drop into, which let rivals off Shift Lattice's main road at the RED-ONLY WIRE's mouth. And a few
+        // steps ahead, since at the mouth's far end the fork pulls away from the road faster than you cross to it.)
+        const reach = Math.max(0.3, wide + 1.5 + (r.hints._w || 0) - Math.abs(lat));
+        const px = r.pos.x + gx * side * reach + r.vel.x / 30;
+        const pz = r.pos.z + gz * side * reach + r.vel.z / 30;
         const h = (r._probe ||= {});
         Object.assign(h, r.hints);
         const saved = (this._gSave ||= {});
@@ -1104,22 +1116,81 @@ export class TrackWorld {
     return Math.max(0, vn);
   }
 
-  // Safe place to put a racer back: on the main road, a little behind where they were, solid in BOTH.
+  // Where to put a racer back after a fall or a wreck: on the main road a little behind where they went, on a line
+  // with a fair run-up in front of it. Fair means RUNUP metres where the road is there in `mode` (no lens-only stretch,
+  // wall-run or pipe) and nothing solid in `mode` sits across that line. Inside an obstacle field that's the nearest
+  // open lane, not the field's start (dying near the end of Void Field's blocks used to cost 200 m and drop you 20 m
+  // from the first one); before a lens wall or a lens-only gap it's far enough back to see it coming and shift.
+  // `lensAhead` says a lens is needed soon after, so the race can make sure there's SHIFT for it.
   respawnPoint(mainU, mode = BOTH) {
     const m = this.main;
-    let i = m.index(mainU) - Math.round(18 / m.ds);
-    for (let k = 0; k < m.N; k++) {
-      const j = m.wrap(i - k);
-      let ok = true;
-      for (let q = -3; q <= 12; q++) if (!solidIn(m.mask[m.wrap(j + q)], mode) || m.cling?.[m.wrap(j + q)] || m.warpK?.[m.wrap(j + q)] > 0) ok = false;
-      for (const o of this.obstacles) if (o.path === m && Math.abs(o.i - j) < 10) ok = false;
-      if (ok) {
-        i = j;
-        break;
+    const N = m.N;
+    const hw = m.halfW;
+    const RUNUP = 55;
+    const run = Math.round(RUNUP / m.ds);
+    const i0 = m.index(mainU);
+    const roadOk = (j) => {
+      for (let q = -3; q <= run; q++) {
+        const k = m.wrap(j + q);
+        if (!solidIn(m.mask[k], mode) || m.cling?.[k] || m.warpK?.[k] > 0) return false;
+      }
+      return true;
+    };
+    // obstacles ahead of sample j, in this lens: [along metres, lateral reach, lateral centre]
+    const ahead = (j) => {
+      const out = [];
+      for (const o of this.obstacles) {
+        if (o.path !== m || !solidIn(o.mask, mode)) continue;
+        let d = o.i - j;
+        if (d < -N / 2) d += N;
+        else if (d > N / 2) d -= N;
+        const s = d * m.ds;
+        if (s < -6 || s > RUNUP + o.len) continue;
+        // a car is about 2.4 m wide; a sweeping block is anywhere along its sweep
+        out.push([s, o.w + 1.6 + Math.abs(o.sweep || 0) * hw, o.baseLat ?? o.lat]);
+      }
+      return out;
+    };
+    const LANES = [0, -0.35, 0.35, -0.6, 0.6];
+    let best = null;
+    for (let k = Math.round(8 / m.ds); k < Math.round(170 / m.ds) && !best; k++) {
+      const j = m.wrap(i0 - k);
+      if (!roadOk(j)) continue;
+      const obs = ahead(j);
+      for (const f of LANES) {
+        const lat = f * hw;
+        if (obs.every(([, reach, c]) => Math.abs(c - lat) >= reach)) {
+          best = { i: j, lat };
+          break;
+        }
       }
     }
-    const pos = m.point(i, 0, 0.3, new THREE.Vector3());
-    return { pos, yaw: Math.atan2(m.thx[i], m.thz[i]), i };
+    // nowhere near qualifies (a long lens-only stretch): back along the road until the whole width is clear
+    if (!best) {
+      for (let k = Math.round(18 / m.ds); k < N; k++) {
+        const j = m.wrap(i0 - k);
+        if (roadOk(j) && !ahead(j).length) {
+          best = { i: j, lat: 0 };
+          break;
+        }
+      }
+    }
+    best ||= { i: m.wrap(i0 - Math.round(18 / m.ds)), lat: 0 };
+    const i = best.i;
+    // a lens-only stretch or a wall that's solid in this lens, within a few seconds of the respawn
+    let lensAhead = false;
+    for (let q = run; q < run + Math.round(120 / m.ds) && !lensAhead; q++) {
+      const k = m.wrap(i + q);
+      if (!solidIn(m.mask[k], mode) && !m.glide?.[k]) lensAhead = true;
+    }
+    for (const o of this.obstacles) {
+      if (o.path !== m || o.type !== 'wall' || !solidIn(o.mask, mode)) continue;
+      let d = o.i - i;
+      if (d < 0) d += N;
+      if (d * m.ds < RUNUP + 120) lensAhead = true;
+    }
+    const pos = m.point(i, best.lat, 0.3, new THREE.Vector3());
+    return { pos, yaw: Math.atan2(m.thx[i], m.thz[i]), i, lat: best.lat, lensAhead };
   }
 
   gridSlot(k) {

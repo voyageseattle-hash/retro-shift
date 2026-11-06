@@ -66,6 +66,8 @@ export class Race {
     this.state = 'intro'; // intro, countdown, race, finished
     this.countdown = 3.999;
     this.introT = 0;
+    // skipping the fly-by takes a fresh press (see the intro in update)
+    this.skipArmed = false;
     this.racers = [];
     this.finishOrder = [];
     this.tipShown = new Set();
@@ -580,10 +582,17 @@ export class Race {
     r.hints[this.world.main.id] = sp.i;
     r.hints._cur = this.world.main.id;
     if (r.mono) r.energy = Math.max(r.energy, SHIFT.monoCost);
-    else r.mode = BOTH;
+    else {
+      r.mode = BOTH;
+      // a lens wall or a lens-only gap soon after the respawn point: never send you at it with an empty meter, or a
+      // fall there just loops
+      if (sp.lensAhead) r.energy = Math.max(r.energy, 0.4);
+    }
     r.grounded = true;
     r.wrongWay = 0;
     r.invuln = 1.5;
+    // traffic and the police convoy pass through you while you blink back in
+    r.respawnGrace = 1.5;
     r.vel.set(Math.sin(sp.yaw), 0, Math.cos(sp.yaw)).multiplyScalar(12);
     if (r.ai) Object.assign(r.ai, { path: this.world.main, _branch: null, turn: 0, pinned: 0, planT: 0 });
     // the car draws itself back in, line by line, with a flash where it lands
@@ -669,7 +678,11 @@ export class Race {
       if (this.introT < 0.35 && this.introT + dt >= 0.35 && this.introSpeaker) this.comms(this.introSpeaker, 'pre');
       this.introT += dt;
       for (const r of this.racers) r.controlLocked = true;
-      if (this.online ? this.netGo : this.introT > (this.introSpeaker ? 3 : 2.2) || input.menu('confirm')) {
+      // the press that started this race (RETRY, NEXT COURSE) must not skip its fly-by too: a skip needs the
+      // confirm key let go since the intro began, then pressed again, and not in the first moments
+      if (!input.menuHeld('confirm')) this.skipArmed = true;
+      const skip = this.skipArmed && this.introT > 0.4 && input.menu('confirm');
+      if (this.online ? this.netGo : this.introT > (this.introSpeaker ? 3 : 2.2) || skip) {
         this.state = 'countdown';
         this.lastBeep = 4;
       }
@@ -933,6 +946,7 @@ export class Race {
         if (r.respawnT <= 0) this.respawn(r);
         continue;
       }
+      if (r.respawnGrace > 0) r.respawnGrace -= dt;
       if (r.ai) {
         if (r.finished) {
           r.ai.update(dt);

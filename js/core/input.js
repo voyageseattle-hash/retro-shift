@@ -481,6 +481,14 @@ export class Input {
     return false;
   }
 
+  // Is a menu action's key or button held down right now (not only pressed this frame)?
+  menuHeld(action) {
+    if (this.key(MENU[action] || [])) return true;
+    const btns = { confirm: [PAD.A, PAD.START], back: [PAD.B], pause: [PAD.START] }[action] || [];
+    for (let i = 0; i < 4; i++) for (const b of btns) if ((this.padNow[i][b] || 0) > 0.5) return true;
+    return false;
+  }
+
   // Second-player menu edges for split-screen truck select.
   menuP2(action) {
     const map = { left: ['ArrowLeft'], right: ['ArrowRight'], confirm: ['Enter', 'NumpadEnter'], back: ['Backspace'] };

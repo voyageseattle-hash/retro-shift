@@ -263,7 +263,19 @@ export const TRACKS = [
       return pts.map(([x, z, y]) => [x, z, y]);
     })(),
     features: (P) => ({
-      branches: [{ from: P(30, 0.5), to: P(36, 0.2), mask: M.BO, side: -1, lift: -6, label: 'BLUE DROP' }],
+      // the BLUE DROP: off the outside of the spiral's top, a long blue-only fall across the loop, and a hairpin at
+      // the bottom that feeds into the road from the inside. (A straight chord from the spiral to the far corner met
+      // the road with a near-180° hook at each end, where rivals stalled and fell through.) The via line is a
+      // left turn, a straight and a 25 m left hairpin, [x, z, y].
+      branches: [{
+        from: P(30, 0.5), to: P(36, 0.2), mask: M.BO, side: 1, label: 'BLUE DROP',
+        via: [
+          [-113.2, -5.4, 58.8], [-129.4, 2.9, 57.0], [-147.6, 4.1, 54.6], [-164.8, -2.0, 51.7], [-181.9, -12.4, 48.3],
+          [-194.7, -20.2, 45.5], [-211.9, -30.6, 41.6], [-229.0, -40.9, 37.6], [-241.8, -48.7, 34.7], [-259.0, -59.1, 30.8],
+          [-271.8, -66.9, 28.0], [-289.0, -77.3, 24.4], [-306.1, -87.6, 21.2], [-318.9, -95.4, 19.1], [-336.1, -105.8, 16.7],
+          [-348.9, -113.6, 15.2], [-363.5, -122.3, 13.8], [-373.5, -130.5, 13.2], [-377.0, -146.5, 13.0],
+        ],
+      }],
       gaps: [
         { at: P(6, 0), len: 30, mask: M.R, noRails: false },
         { at: P(14, 0), len: 30, mask: M.B, noRails: false },
