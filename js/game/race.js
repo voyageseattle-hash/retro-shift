@@ -34,6 +34,8 @@ const TAKEDOWN_SPEED = 14;
 export const HULL = 100;
 const HULL_FLOOR = 60; // a hull above this survives any one hit (it's left hanging by a thread instead)
 const HULL_REPAIR = { wait: 2.5, rate: 3, both: 7 }; // hp/s once it's gone a while without a hit; BOTH patches it faster
+// each car's horn (core/engine.js's horn library)
+const HORNS = { vector: 'honk1', scanline: 'honk2', polygon: 'honk3', chroma: 'honk6', raster: 'honk4', glitch: 'honk5', dash: 'bell', greatwedge: 'shark' };
 const NO_INPUT = { throttle: 0, brake: 0, steer: 0, drift: false, item: false, special: false, jump: false, reset: false, look: false };
 
 export class Race {
@@ -187,6 +189,39 @@ export class Race {
     const msg = { id: r.car.id, name: d.name, car: r.car.name, color: r.color, text, kind };
     this.emit('comms', msg);
     return msg;
+  }
+
+  // The horn (L3 / H). Every car has its own. Honk at a rival close by and it's a taunt: they get on the radio, and
+  // for a few seconds they come after you (they drive harder and ram), but a taunt that lands right after you've
+  // passed them is worth a little SHIFT.
+  honk(r) {
+    if ((r.hornCd || 0) > this.t) return;
+    r.hornCd = this.t + 0.6;
+    const near = this.players.some((p) => p.pos.distanceToSquared(r.pos) < 110 * 110);
+    if (near) this.app.audio.play(HORNS[r.car.id] || 'honk1', r.isPlayer ? 0.9 : 0.6);
+    if (!r.isPlayer || this.state !== 'race' || this.solo) return;
+    let best = null;
+    let bd = 45 * 45;
+    for (const o of this.racers) {
+      if (o === r || !o.ai || o.respawnT > 0 || o.finished) continue;
+      const d = o.pos.distanceToSquared(r.pos);
+      if (d < bd) {
+        bd = d;
+        best = o;
+      }
+    }
+    if (!best || (best.tauntCd || 0) > this.t) return;
+    best.tauntCd = this.t + 8;
+    best.angryT = 5;
+    best.angryAt = r;
+    this.comms(best, 'taunted');
+    const passed = this.placeOf(r) < this.placeOf(best) && this.raceTime - (r.passT?.[best.index] ?? -9) < 3;
+    if (passed) {
+      r.energy = Math.min(1, r.energy + 0.1);
+      this.emitP(r, 'popup', { text: 'TAUNT · +SHIFT', color: '#ffd04a', small: true });
+    } else this.emitP(r, 'popup', { text: 'TAUNTED', color: '#ffd04a', small: true });
+    // they honk back
+    setTimeout(() => this.racers.includes(best) && this.honk(best), 450);
   }
 
   camOf(r) {
@@ -443,6 +478,7 @@ export class Race {
       pl.ctl.drift = c.drift;
       if (this.state !== 'race' || pl.finished) return;
       if (c.fire && !pl.fireHeld) this.items.use(pl);
+      if (c.horn) this.honk(pl);
       pl.fireHeld = c.fire;
       if (c.item) pl.setMode(RED, this);
       if (c.special) pl.setMode(BLUE, this);
@@ -499,6 +535,11 @@ export class Race {
     // rivals talk when they get past you (not too often)
     if (this.state === 'race' && !this.solo && !this.split && !p.finished) {
       const place = this.placeOf(p);
+      if (this.lastPlace && place < this.lastPlace) {
+        // you just passed someone: a taunt in the next few seconds lands
+        const behind = this.standings()[place];
+        if (behind) (p.passT ||= {})[behind.index] = this.raceTime;
+      }
       if (this.lastPlace && place > this.lastPlace && this.raceTime > (this.nextComms || 8)) {
         this.comms(this.standings()[place - 2], 'pass');
         this.nextComms = this.raceTime + 18;

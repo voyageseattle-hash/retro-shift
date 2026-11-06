@@ -1021,7 +1021,7 @@ export class UI {
     h.controls.classList.toggle('on', pre);
     if (pre) {
       const g = (key) => `<kbd>${this.lensGlyph(race, k, key)}</kbd>`;
-      const html = `<div><span>GAS ${g('gas')}</span><span>BRAKE ${g('brake')}</span><span>STEER ${g('steer')}</span><span>DRIFT ${g('drift')}</span>${race.items?.on ? `<span>CHARGE ${g('fire')}</span>` : ''}</div>
+      const html = `<div><span>GAS ${g('gas')}</span><span>BRAKE ${g('brake')}</span><span>STEER ${g('steer')}</span><span>DRIFT ${g('drift')}</span>${race.items?.on ? `<span>CHARGE ${g('fire')}</span>` : ''}${!race.split && !race.solo ? `<span>HORN ${g('horn')}</span>` : ''}</div>
         <div><span class="red">RED ${g('red')}</span><span class="both">${race.mono ? 'SWAP' : 'BOTH'} ${g('both')}</span><span class="blue">BLUE ${g('blue')}</span></div>
         <p>${race.mono ? 'SWAP flips your lens.' : 'RED is fastest · BLUE grips and drifts · BOTH refills SHIFT'}</p>`;
       if (h.controlsHtml !== html) h.controls.innerHTML = h.controlsHtml = html;

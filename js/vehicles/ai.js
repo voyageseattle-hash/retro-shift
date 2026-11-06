@@ -215,6 +215,17 @@ export class RaceAI {
       }
       this.targetLat = bestLat;
     }
+    // taunted: for a few seconds, go after whoever honked (line up on them when they're close ahead, and push)
+    if (r.angryT > 0) {
+      r.angryT -= dt;
+      const o = r.angryAt;
+      if (o && o.track?.path === P && o.respawnT <= 0) {
+        let di = o.track.i - pi;
+        if (P.closed) di = ((di % P.N) + P.N + P.N / 2) % P.N - P.N / 2;
+        if (di > 0 && di * P.ds < 40) this.targetLat = clamp(o.track.lat, -P.halfW + 2, P.halfW - 2);
+      }
+      if (r.angryT <= 0) r.angryAt = null;
+    }
 
     // ---- steer at a point down the road
     const aheadN = Math.ceil((7 + speed * 0.45) / P.ds);
