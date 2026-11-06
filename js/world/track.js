@@ -3,6 +3,7 @@
 // drives on depends on the world they're looking through. The spline sampling, auto-banking and ground frame come
 // from Absurd Combat Racing's TrackWorld; the multi-path, per-lens ground query is new.
 
+import { buildShapeCues } from './shapes.js';
 import * as THREE from '../../vendor/three.js';
 import { clamp, lerp, wrapAngle, mulberry32, smoothstep } from '../core/util.js';
 import { M, BOTH, RED, BLUE, solidIn, colorForMask, COLORS } from './shift.js';
@@ -394,6 +395,7 @@ export class TrackWorld {
     this.storms = layStorms(this);
     buildSigns(this);
     buildCovers(this);
+    buildShapeCues(this); // accessibility: a shape per world (shapes.js), shown from settings
     this.group.add(this.layers.build());
     this._f = {};
     this._g = { y: -1e4, nx: 0, ny: 1, nz: 0, lat: 0, path: null, i: 0, f: 0, rx: 1, rz: 0, mask: 0, onRoad: false };
@@ -978,7 +980,8 @@ export class TrackWorld {
 
   // ------------------------------------------------------------------ queries
   // Ground under (x, y, z) for a racer looking through `mode`. hints is a per-racer object { pathId: index }.
-  ground(x, y, z, hints, mode = BOTH) {
+  // (exclude: a strip to leave out, so a probe can ask what other road is there)
+  ground(x, y, z, hints, mode = BOTH, exclude = null) {
     const g = this._g;
     g.y = -1e4;
     g.onRoad = false;
@@ -990,6 +993,7 @@ export class TrackWorld {
     // road would grab you.
     const cur = hints._cur;
     for (const path of this.paths) {
+      if (path === exclude) continue;
       // cheap bounds reject
       if (y < path.minY - 8 || y > path.maxY + 60) {
         if (!(path.id in hints)) continue;
@@ -1062,14 +1066,22 @@ export class TrackWorld {
       if (solidIn(open, r.mode)) {
         // a fork opens the rail, but only where the fork's road is really there beside you: past its end (or where
         // it has climbed away) the rail holds, so a junction is never a hole to fall through
-        const px = r.pos.x + gx * side * 2.2;
-        const pz = r.pos.z + gz * side * 2.2;
+        // (any other strip counts: asking for the best strip let the one you're on win the probe at its own edge,
+        // and a fork that peels off gently was a wall you slid along. But every step across has to be road, this
+        // one or the other: where a fork has peeled away there's a gap between them, and that's a rail.)
         const h = (r._probe ||= {});
-        Object.assign(h, r.hints);
         const saved = (this._gSave ||= {});
         Object.assign(saved, g);
-        const g2 = this.ground(px, r.pos.y, pz, h, r.mode);
-        const ok = g2.onRoad && g2.path !== path;
+        let ok = true;
+        for (const d of [1.4, 2.6, 3.8]) {
+          if (Math.abs(lat + side * d) <= path.halfW + 0.2) continue;
+          Object.assign(h, r.hints);
+          const g2 = this.ground(r.pos.x + gx * side * d, r.pos.y, r.pos.z + gz * side * d, h, r.mode, path);
+          if (!g2.onRoad) {
+            ok = false;
+            break;
+          }
+        }
         Object.assign(g, saved);
         if (ok) return 0;
       }

@@ -16,6 +16,10 @@ import { BOTH, RED, BLUE } from './world/shift.js';
 import { CUPS, POINTS, loadStaff, recordCup, checkUnlocks, liveryFor } from './game/modes.js';
 import { Showroom } from './game/showroom.js';
 import { Online } from './net/online.js';
+import { EventRun, eventCourse } from './game/events.js';
+import { schoolMenu, eventHud, eventResults } from './ui/eventui.js';
+import { SCHOOL } from './game/school.js';
+import { applyAccess } from './core/access.js';
 
 class App {
   constructor() {
@@ -29,6 +33,7 @@ class App {
     this.paused = false;
     this.attract = null;
     this.applySettings(this.ui.settings);
+    applyAccess();
     this.renderer.onResize.push(() => this.onResize());
     this.last = performance.now();
     this.setupTouch();
@@ -150,6 +155,8 @@ class App {
   async startRace() {
     this.audio.init();
     const c = this.ui.choice;
+    // (RESTART from the pause menu lands here: an event restarts itself)
+    if (c.mode === 'event' && this.eventDef) return this.startEvent(this.eventDef);
     if (c.mode !== 'gp') this.gp = null;
     if (this.gp) c.track = this.gp.cup.tracks[this.gp.round];
     const def = trackById(c.track);
@@ -179,10 +186,52 @@ class App {
       laps: c.mode === 'tutorial' ? 1 : undefined,
     });
     this.race.setAspect(this.renderer.width / this.renderer.height);
+    applyAccess(this.race);
     this.ui.buildHud(this.race);
     this.paused = false;
     this.resultsShown = false;
     document.body.classList.add('racing');
+  }
+  // An event (events.js): a SHIFT SCHOOL drill or a SHIFT TOUR event, on a course or a strip of one.
+  startEvent(def) {
+    this.audio.init();
+    this.gp = null;
+    this.eventDef = def;
+    this.ui.choice.mode = 'event';
+    if (this.race) this.race.dispose();
+    this.audio.stopEngines();
+    this.audio.duckMusic(false);
+    this.showAttract(false);
+    this.hideCar();
+    this.recentUnlocks = [];
+    this.ui.clear();
+    this.input.twoPlayer = false;
+    const c = this.ui.choice;
+    this.race = new Race(this, eventCourse(def), {
+      kind: 'event',
+      car: c.car,
+      livery: liveryFor(c.car),
+      rivals: def.rivals || 0,
+      difficulty: this.ui.settings.difficulty,
+      assist: this.ui.settings.assist !== false,
+      autopilot: this.autopilot,
+    });
+    new EventRun(this.race, def);
+    this.race.setAspect(this.renderer.width / this.renderer.height);
+    applyAccess(this.race);
+    this.ui.buildHud(this.race);
+    this.paused = false;
+    this.resultsShown = false;
+    document.body.classList.add('racing');
+  }
+  // Leaving an event goes back to its list (SHIFT SCHOOL), not the title.
+  quitEvent() {
+    const def = this.eventDef;
+    this.quit();
+    if (def?.id.startsWith('school.')) schoolMenu(this.ui, Math.max(0, SCHOOL.findIndex((d) => d.id === def.id)));
+  }
+  openSchool() {
+    schoolMenu(this.ui);
   }
   // The guided first run: one lap of Core Circuit alone, with the lessons in Race.coachLessons.
   startTutorial() {
@@ -252,6 +301,7 @@ class App {
     this.input.twoPlayer = false;
     this.race = new Race(this, def, { kind: 'online', car: me?.car, livery: me?.livery, online: { slots: cfg.slots, mySlot, isHost } });
     this.race.setAspect(this.renderer.width / this.renderer.height);
+    applyAccess(this.race);
     this.ui.buildHud(this.race);
     this.paused = false;
     this.resultsShown = false;
@@ -315,11 +365,13 @@ class App {
         this.race.update(dt);
         this.net.tick(dt, this.race);
         this.ui.updateHud(this.race, dt);
+        if (this.race.event) eventHud(this.ui, this.race);
         if (this.race.state === 'finished') {
           this.race.finishT = (this.race.finishT || 0) + dt;
           if (this.race.finishT > 2.5 && !this.resultsShown) {
             this.resultsShown = true;
             if (this.race.tutorial) this.ui.tutorialDone();
+            else if (this.race.event) eventResults(this.ui, this.race);
             else this.ui.results(this.race);
           }
           if (this.resultsShown) this.ui.update();

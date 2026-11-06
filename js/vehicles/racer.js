@@ -10,6 +10,7 @@ import { buildBody, Trail } from './bodies.js';
 import { FORMS, addForms, updateForms } from './forms.js';
 import { bendRacer, lensHeld, PIPE, SCREW } from '../world/warp.js';
 import { DRIFT_COLORS } from '../game/feel.js';
+import { ACCESS } from '../core/access.js';
 
 const G_AIR = 27;
 const G_SLOPE = 14;
@@ -492,14 +493,14 @@ export class Racer {
     const m = this.model;
     const col = this.mode === RED ? COLORS.red : this.mode === BLUE ? COLORS.blue : 0xffffff;
     m.lineMat.color.set(col);
-    const flash = this.shiftT > 0 ? 1 + this.shiftT * 4 : 1;
+    const flash = this.shiftT > 0 ? 1 + this.shiftT * (ACCESS.calm ? 0.6 : 4) : 1;
     m.lineMat.color.multiplyScalar(flash);
     // the hull reflects the worlds you can see: red left and blue right in both, one colour through a single lens
     if (m.hullMat.uniforms) {
       const U = m.hullMat.uniforms;
       U.uL.value.set(this.mode === BLUE ? COLORS.blue : COLORS.red);
       U.uR.value.set(this.mode === RED ? COLORS.red : COLORS.blue);
-      U.uFlash.value = Math.max(0, this.shiftT || 0) * 2;
+      U.uFlash.value = Math.max(0, this.shiftT || 0) * (ACCESS.calm ? 0.3 : 2);
       if (this.livery?.paint === 'spectrum') U.uPaint.value.copy(m.accentMat.color);
     }
     const thrust = clamp(Math.abs(this.speed) / this.phys.topSpeed, 0, 1.4) + (this.boostTime > 0 ? 0.8 : 0);

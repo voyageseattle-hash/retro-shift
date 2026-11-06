@@ -48,7 +48,9 @@ export class Race {
     this.kind = opts.kind || (opts.rivals === 0 ? 'trial' : 'race');
     this.mono = this.kind === 'mono';
     this.tutorial = this.kind === 'tutorial';
-    this.solo = this.kind === 'trial' || this.mono || this.tutorial;
+    // an event (events.js: SHIFT SCHOOL drills, SHIFT TOUR events) is solo unless it brings rivals
+    this.isEvent = this.kind === 'event';
+    this.solo = this.kind === 'trial' || this.mono || this.tutorial || (this.isEvent && !opts.rivals);
     if (this.mono) def = monoDef(def);
     this.def = def;
     this.opts = opts;
@@ -164,7 +166,7 @@ export class Race {
     this.lastMode = BOTH;
     // ghosts: your best run and the staff run
     this.ghosts = [];
-    if (this.solo && !this.tutorial) {
+    if (this.solo && !this.tutorial && !this.isEvent) {
       this.recorder = new GhostRecorder();
       const mine = loadGhost(def.id, this.mono);
       if (mine && opts.showGhost !== false) this.addGhost(mine, 0xffffff, 'BEST');
@@ -705,6 +707,7 @@ export class Race {
     }
 
     if (this.recorder && this.state === 'race' && !p.finished) this.recorder.sample(this.raceTime, p);
+    this.event?.update(sim); // the event runner (events.js), when this race is an event
     // rivals talk when they get past you (not too often)
     if (this.state === 'race' && !this.solo && !this.split && !p.finished) {
       const place = this.placeOf(p);
