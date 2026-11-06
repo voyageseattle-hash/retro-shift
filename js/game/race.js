@@ -1214,8 +1214,10 @@ export class Race {
       if (Math.abs(tr.lat - pad.lat) > pad.w + 0.5) continue;
       if (r.padCool > this.t) continue;
       r.padCool = this.t + 0.6;
-      // a pad there only in one lens: shift onto it at the last moment for a PERFECT
-      const lens = !solidIn(pad.mask, BOTH);
+      // a pad there only in one lens, on a road that's there in all of them: shift onto it at the last moment for a
+      // PERFECT. (A pad on a road only one lens can see is the road's colour and you're on it anyway: a boost that
+      // keeps a running chain going, not a link of its own, or a long blue road would build a x5 by itself.)
+      const lens = !solidIn(pad.mask, BOTH) && solidIn(P.mask[pad.i], BOTH);
       const tm = lens ? shiftTiming(this, r) : null;
       if (tm === 'perfect') {
         r.giveBoost(1.6, 1.4);
