@@ -81,7 +81,7 @@ class App {
 
   onResize() {
     // a phone turned upright mid-race: the race waits under the turn-sideways card (css #rotate)
-    if (this.race && !this.race.online && !this.paused && this.race.state !== 'finished' && document.body.classList.contains('touch') && innerHeight > innerWidth * 1.15) this.pause();
+    if (this.race && !this.race.online && !this.paused && this.race.state !== 'finished' && document.body.classList.contains('touch') && matchMedia('(orientation: portrait) and (max-width: 640px)').matches) this.pause();
     const a = this.renderer.width / this.renderer.height;
     if (this.race) this.race.setAspect(a);
     this.showroom?.setAspect(a);
