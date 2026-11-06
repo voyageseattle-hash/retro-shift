@@ -11,6 +11,7 @@ export const PREMISE = [
 // keyed by car id: the rival who drives it
 export const DRIVERS = {
   vector: {
+    taunted: ['Cute horn. Save it for the podium you won’t see.', 'Honk all you like. I’m still in front of you.'],
     name: 'VEX',
     lens: 'both',
     bio: 'The veteran. Raced the Grid before it split and still drives like it never did.',
@@ -20,6 +21,7 @@ export const DRIVERS = {
     pass: 'Patience, rookie.',
   },
   scanline: {
+    taunted: ['Was that a horn or a squeak?', 'Oh, it’s ON. Red-line ON.'],
     name: 'LINA SCAN',
     lens: 'red',
     bio: 'Speed freak. Lives in the red world because the red world has fewer brakes.',
@@ -29,6 +31,7 @@ export const DRIVERS = {
     pass: 'See you never!',
   },
   polygon: {
+    taunted: ['Noted. Adjusting your threat level up 2 percent.', 'Honking costs you 0.4 seconds. I timed it.'],
     name: 'POLLY GONE',
     lens: 'blue',
     bio: 'Counts facets, measures angles, has a spreadsheet for every blue-only cut on the Grid.',
@@ -38,6 +41,7 @@ export const DRIVERS = {
     pass: 'Optimal line, sorry.',
   },
   chroma: {
+    taunted: ['Rude. Gorgeous, but rude.', 'Darling, don’t honk at the main character.'],
     name: 'KROMA',
     lens: 'both',
     bio: 'All style. Shifts for the light show, wins by accident, poses either way.',
@@ -47,6 +51,7 @@ export const DRIVERS = {
     pass: 'Mwah!',
   },
   raster: {
+    taunted: ['BEEP BEEP to you too, noob.', 'Achievement unlocked: made RAZ mad.'],
     name: 'RAZ',
     lens: 'red',
     bio: 'An 8-bit kid in a 3-D world. Thinks in pixels, talks in high scores.',
@@ -56,6 +61,7 @@ export const DRIVERS = {
     pass: 'Pixel perfect!',
   },
   glitch: {
+    taunted: ['h-h-honk? honk. HONK.', 'I heard that before you pressed it.'],
     name: 'GL1TCH',
     lens: 'blue',
     bio: 'Fell through the seam once and came back wrong. Nobody knows which world GL1TCH is in. Neither does GL1TCH.',

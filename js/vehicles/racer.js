@@ -8,6 +8,7 @@ import { clamp, damp, sign } from '../core/util.js';
 import { BOTH, RED, BLUE, SHIFT, LENS, solidIn, COLORS } from '../world/shift.js';
 import { buildBody, Trail } from './bodies.js';
 import { FORMS, addForms, updateForms } from './forms.js';
+import { bendRacer, lensHeld, PIPE, SCREW } from '../world/warp.js';
 
 const G_AIR = 27;
 const G_SLOPE = 14;
@@ -104,6 +105,13 @@ export class Racer {
     this.spinTime = 0;
     this.spinDir = 1;
     this.invuln = 0;
+    this.hp = 100; // the hull (race.js HULL)
+    this.hurtCd = 0;
+    // charges (game/items.js): a held one survives a respawn, the effects don't
+    this.cellT = this.empT = this.flipT = 0;
+    this.liftT = this.lanceT = this.braceT = 0;
+    if (this.beamT > 0) this.setBeam(false);
+    this.beamT = 0;
     this.suspension = 0;
     this.suspVel = 0;
     this.bodyRoll = 0;
@@ -135,7 +143,9 @@ export class Racer {
   }
   shiftTo(mode, session) {
     if (mode === this.mode) return false;
-    if (!this.canShift(mode)) {
+    // flipped or stalled by a rival's charge: the lens is held for you
+    // (and up a pipe wall or through a corkscrew the Blade can't let go)
+    if (!this.canShift(mode) || this.flipT > 0 || this.empT > 0 || lensHeld(this)) {
       session?.onShiftDenied?.(this);
       return false;
     }
@@ -145,6 +155,20 @@ export class Racer {
     if (this.mono) this.energy -= SHIFT.monoCost;
     session?.onShift?.(this, prev, mode);
     return true;
+  }
+  // A rival's charge moves your lens for you (FLIP, EMP): no SHIFT check, no cost.
+  forceMode(mode, session) {
+    if (mode === this.mode) return;
+    const prev = this.mode;
+    this.mode = mode;
+    this.shiftT = 0.35;
+    session?.onShift?.(this, prev, mode, true);
+  }
+  // LIGHTSPEED: the craft stretches into a streak of light
+  setBeam(on) {
+    const b = this.model.body;
+    if (on) b.scale.set(0.55, 0.45, 2.6);
+    else b.scale.set(1, 1, 1);
   }
   updateEnergy(dt, session) {
     this.shiftT = Math.max(0, this.shiftT - dt);
@@ -156,7 +180,9 @@ export class Racer {
     if (held) this.lensRoadT = 0.6;
     else this.lensRoadT = Math.max(0, (this.lensRoadT || 0) - dt);
     if (this.mode === BOTH) this.energy = Math.min(1, this.energy + SHIFT.recharge * dt);
-    else if (this.lensRoadT > 0 && solidIn(this.gnd.mask, this.mode)) {
+    else if (this.cellT > 0 || this.flipT > 0) {
+      // a LENS CELL pays for the lens; a FLIP holds you in one for free
+    } else if (this.lensRoadT > 0 && solidIn(this.gnd.mask, this.mode)) {
       // held by the road
     } else {
       this.energy -= SHIFT.drain * dt;
@@ -193,7 +219,7 @@ export class Racer {
     this.spinTime = Math.max(0, this.spinTime - dt);
     this.updateEnergy(dt, session);
 
-    let throttle = this.controlLocked ? 0 : ctl.throttle;
+    let throttle = this.controlLocked || this.empT > 0 ? 0 : ctl.throttle;
     let brake = this.controlLocked ? 0 : ctl.brake;
     let steer = this.controlLocked ? 0 : ctl.steer;
     if (this.spinTime > 0) {
@@ -223,7 +249,7 @@ export class Racer {
     if (this.grounded) {
       const boosting = this.boostTime > 0;
       const lens = LENS[this.mode] || LENS[BOTH];
-      const top = P.topSpeed * this.speedMul * lens.top * (boosting ? this.boostPower : 1);
+      const top = P.topSpeed * this.speedMul * lens.top * (boosting ? this.boostPower : 1) * (this.cellT > 0 && this.mode !== BOTH ? 1.06 : 1);
       if (throttle > 0 && vF < top) {
         const k = 1 - Math.pow(clamp(vF / top, 0, 1), 2);
         vF += P.accel * this.accelMul * lens.accel * throttle * (0.25 + 0.75 * k) * dt * (vF < 0 ? 2.5 : 1);
@@ -280,6 +306,7 @@ export class Racer {
       _v2.set(0, -G_SLOPE, 0);
       _v2.addScaledVector(n, -_v2.dot(n));
       this.vel.addScaledVector(_v2, dt);
+      this.bentGravity(g, dt);
     } else {
       this.slip = 0;
       // the Skimmer glides: once it has really left the road at speed its pads carry it, sinking no faster than a
@@ -339,6 +366,7 @@ export class Racer {
       }
       const impact = world.collideWalls(this, g2);
       if (impact > 4) session?.onWallHit?.(this, impact);
+      if (g2.path.warpK?.[g2.i] > 0 && this.bentRoad(g2, session)) return;
       if (this.grounded && g2.path) {
         this.lastSafe = { path: g2.path, i: g2.i };
       }
@@ -348,6 +376,56 @@ export class Racer {
       this.airTime += dt;
     }
     this.speed = this.vel.dot(this.forwardVec(_v));
+  }
+
+  // A pipe wall pulls you back down it (round the tube that's the strip's middle) unless you're going fast enough
+  // to stick: the Blade sticks at racing speed, everyone else only goes a little way up. (The flat physics knows no
+  // up but the world's, so the bend's gravity is put back here.)
+  bentGravity(g, dt) {
+    const P = g.path;
+    if (!P?.warpK || !(P.warpK[g.i] > 0) || P.warpKind[g.i] !== PIPE) return;
+    const k = P.warpK[g.i];
+    const Re = P.warpR[g.i] / k;
+    const th = g.lat / Re;
+    const v2 = this.vel.lengthSq();
+    // (toward the mouths the tube opens out and the grip goes with it, so the Blade slides back down to the road)
+    const stick = FORMS[this.mode]?.cling ? clamp(v2 / (Re * G_AIR * 1.4), 0, 0.92) * k * k * k : 0;
+    const pull = G_AIR * Math.sin(th) * (1 - stick);
+    this.vel.x -= g.rx * pull * dt;
+    this.vel.z -= g.rz * pull * dt;
+  }
+
+  // Round the top of a pipe and out the other side; off a corkscrew too slow to stay on it upside down.
+  bentRoad(g, session) {
+    const P = g.path;
+    if (P.warpKind[g.i] === PIPE) {
+      const e = P.ext[g.i];
+      if (P.warpK[g.i] > 0.97 && Math.abs(g.lat) > e) {
+        const s = Math.sign(g.lat);
+        this.pos.x -= g.rx * s * 2 * e;
+        this.pos.z -= g.rz * s * 2 * e;
+        this.hints[P.id] = g.i;
+      }
+      // the Blade upside down and crawling: it drops off the ceiling (back down onto the floor)
+      const th = (g.lat * P.warpK[g.i]) / P.warpR[g.i];
+      if (Math.cos(th) < -0.2 && Math.abs(this.speed) < 13 && this.grounded) {
+        const s = Math.sign(g.lat);
+        const back = g.lat - s * (P.halfW * 0.4);
+        this.pos.x -= g.rx * back;
+        this.pos.z -= g.rz * back;
+        this.vel.multiplyScalar(0.5);
+        session?.onPeel?.(this);
+      }
+      return false;
+    }
+    if (P.warpKind[g.i] === SCREW && P.cling?.[g.i] && this.grounded) {
+      const a = P.roll[g.i];
+      if (Math.cos(a) < -0.3 && Math.abs(this.speed) < 18) {
+        session?.onFell?.(this);
+        return true;
+      }
+    }
+    return false;
   }
 
   copyGround(g) {
@@ -377,11 +455,15 @@ export class Racer {
   // ------------------------------------------------------------ visuals
   syncVisual(dt) {
     const root = this.root;
-    root.position.copy(this.pos);
+    // on a bent road (warp.js) the craft is drawn where the bend puts it, standing on the bent surface
+    const V = (this.vis ||= { on: false, pos: new THREE.Vector3(), up: new THREE.Vector3(), fwd: new THREE.Vector3(), right: new THREE.Vector3() });
+    V.on = bendRacer(this, V);
+    root.position.copy(V.on ? V.pos : this.pos);
     this.suspVel += (-this.suspension * 90 - this.suspVel * 9) * dt;
     this.suspension = clamp(this.suspension + this.suspVel * dt, -0.25, 0.25);
     const target = _v2;
-    if (this.grounded) target.set(this.gnd.nx, this.gnd.ny, this.gnd.nz);
+    if (V.on) target.copy(V.up);
+    else if (this.grounded) target.set(this.gnd.nx, this.gnd.ny, this.gnd.nz);
     else {
       target.set(0, 1, 0);
       const hs = Math.hypot(this.vel.x, this.vel.z) + 1;
@@ -389,8 +471,10 @@ export class Racer {
       _v.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).multiplyScalar(-pitch);
       target.add(_v).normalize();
     }
-    if (dt > 0) this.up.lerp(target, 1 - Math.exp(-(this.grounded ? 14 : 3) * dt)).normalize();
-    const fwd = this.forwardVec(_fwd);
+    if (dt > 0) this.up.lerp(target, 1 - Math.exp(-(V.on ? 30 : this.grounded ? 14 : 3) * dt)).normalize();
+    // (half way round a pipe a lerp can pass through zero: snap)
+    if (V.on && this.up.dot(V.up) < 0.2) this.up.copy(V.up);
+    const fwd = V.on ? _fwd.copy(V.fwd) : this.forwardVec(_fwd);
     fwd.addScaledVector(this.up, -fwd.dot(this.up)).normalize();
     const left = _left.crossVectors(this.up, fwd).normalize();
     _m.makeBasis(left, this.up, fwd);
@@ -435,7 +519,8 @@ export class Racer {
     if (this.trailOn) {
       this.trail.setColor(this.boostTime > 0 ? 0xff4fd8 : base);
       const yaw = this.yaw;
-      _v.set(this.pos.x - Math.sin(yaw) * 2.1, this.pos.y + 0.45, this.pos.z - Math.cos(yaw) * 2.1);
+      if (V.on) _v.copy(V.pos).addScaledVector(V.fwd, -2.1).addScaledVector(V.up, 0.45);
+      else _v.set(this.pos.x - Math.sin(yaw) * 2.1, this.pos.y + 0.45, this.pos.z - Math.cos(yaw) * 2.1);
       this.trail.update(dt, _v, -Math.cos(yaw), Math.sin(yaw), clamp(Math.abs(this.speed) / this.phys.topSpeed, 0, 1) + (this.boostTime > 0 ? 0.4 : 0), this.grounded || this.airTime < 0.5);
     }
     m.glowMat.opacity = 0.34 + (this.drift.active ? 0.2 : 0);

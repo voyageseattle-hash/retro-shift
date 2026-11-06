@@ -1,5 +1,9 @@
 // Menus and the race HUD, all DOM over the WebGL canvas. Menus work with keyboard, gamepad, mouse and touch.
 
+import { drawPortrait } from './portraits.js';
+import { helmetPortrait, warmHelmets } from './helmets.js';
+import { ITEMS } from '../game/items.js';
+const ITEM_IDS = Object.keys(ITEMS);
 import { TRACKS } from '../world/tracks.js';
 import { TrackWorld } from '../world/track.js';
 import { CARS } from '../vehicles/racer.js';
@@ -137,9 +141,10 @@ export class UI {
       </div>
       <p class="rule"><b>TWO MACHINES IN ONE</b>: every craft is a red Blade docked in a blue Skimmer, and BOTH drives the pair, which jumps what the Blade clings to and the Skimmer glides. The boards before a drop, a crest, water, a slit, a wall run or a glide gap say which form reads it; pick the form, take the route, and watch your SHIFT.</p>
       <p class="rule">Shift into a wall at the last moment for a CLOSE PHASE boost. A road that only your lens can see doesn't drain SHIFT. Watch the road: if the strip under you is the colour you shifted away from, it's gone. Grab white shards for SHIFT, phase through walls for a little more.</p>
+      <p class="rule"><b>HULL</b>: hits take hull (the cells under SHIFT), they don't wreck you; only an empty hull comes apart, and it patches itself up between hits, faster in BOTH. <b>SEAM CHARGES</b>: drive through a prism gate to roll one, fire it with your CHARGE button: LENS CELL, EMP, FLIP, LIGHTSPEED, SEAM WALL or PATCH. <b>FORM MOVES</b>: the Skimmer LIFTs over trouble, the Blade LANCEs through a rival, the pair BRACEs behind a shield. <b>LAUNCHERS</b>: a hole in one lens is a ramp in the other. Honk at a rival to taunt them, if you can take the heat.</p>
       <p class="rule"><b>STORMS</b>: meteors fall in the red world, lightning strikes in the blue. Dodge the rings, or shift to the other lens, where the storm isn't, and lose that lens's shortcuts.</p>
       <p class="rule"><b>ROAD WORKS</b> on Fractal Route move to a new stretch every lap: blue barriers shut the left lane, a red digger shuts the right, and the crane's load swings over the slit between. RED opens the left lane, BLUE the right. <b>ECHO RUINS</b> shakes itself apart over three laps: a quake, then lava (BLUE cools it, RED and BOTH burn), then the plates split and the road you learned is gone. Hold speed for the rift; RED clings down the drop and the slab, BLUE glides.</p>
-      <p class="rule"><b>HEAVY TRAFFIC</b> (Grid City): every car on the road is in one world. Weave through it in BOTH, or shift to a lens to clear half the road and give up that lens's routes. Rear-end one flat out and you both come apart. <b>POLICE CHASE</b> (Void Field): once a lap a getaway car and three cruisers tear through the field. Cruisers ram and fire lasers, each shot marked by rings a beat before it lands. The chase only exists in BOTH: hold a lens to drive straight through it, and mind that lens's holes in the road.</p>
+      <p class="rule"><b>HEAVY TRAFFIC</b> (Grid City): every car on the road is in one world. Weave through it in BOTH, or shift to a lens to clear half the road and give up that lens's routes. Rear-end one flat out and it comes apart, and so does a good piece of your hull. <b>POLICE CHASE</b> (Void Field): once a lap a getaway car and three cruisers tear through the field. Cruisers ram and fire lasers, each shot marked by rings a beat before it lands. The chase only exists in BOTH: hold a lens to drive straight through it, and mind that lens's holes in the road.</p>
       <p class="rule"><b>MONO RUN</b> takes BOTH away: your BOTH button swaps RED and BLUE, each swap costs SHIFT, and nothing refills it but shards and phasing.</p>
       <table class="keys">
         <tr><td>Drive</td><td>${g('W')} ${g('A')} ${g('S')} ${g('D')} / arrows</td><td>RT · LT · stick</td></tr>
@@ -754,6 +759,8 @@ export class UI {
 
   // ------------------------------------------------------------------ HUD
   buildHud(race) {
+    // render the rivals' helmets now, between frames, so the first radio call doesn't stall a frame
+    warmHelmets(race.racers.filter((r) => !r.isPlayer && !r.human).map((r) => [r.car.id, r.color]));
     const H = this.hudRoot;
     const n = race.split ? 2 : 1;
     const view = `
@@ -768,11 +775,14 @@ export class UI {
           <span class="chip blue" data-m="4"><kbd></kbd>BLUE</span>
         </div>
         <div class="h-energy"><i></i><span>SHIFT</span></div>
+        <div class="h-form"><kbd></kbd><b></b><i><u></u></i></div>
+        <div class="h-hull">${'<i></i>'.repeat(10)}<span>HULL</span></div>
       </div>
+      <div class="h-item"><kbd></kbd><b></b><small></small></div>
       <div class="h-center"></div>
       <div class="h-tip"></div>
       <div class="h-controls"></div>
-      <div class="h-comms"><b></b><span></span></div>
+      <div class="h-comms"><img class="h-helmet h-face-img" alt="" hidden><canvas class="h-face" width="144" height="144"></canvas><div><i><u></u></i><b></b><span></span></div></div>
       <div class="h-count"></div>
       <div class="h-wrong">WRONG WAY<small>TURN AROUND</small></div>
       <div class="h-flash"></div>`;
@@ -802,6 +812,16 @@ export class UI {
         chips: [...V.querySelectorAll('.h-chips .chip')],
         energy: q('.h-energy i'),
         energyBox: q('.h-energy'),
+        hull: q('.h-hull'),
+        form: q('.h-form'),
+        formKey: q('.h-form kbd'),
+        formName: q('.h-form b'),
+        formBar: q('.h-form u'),
+        item: q('.h-item'),
+        itemKey: q('.h-item kbd'),
+        itemName: q('.h-item b'),
+        itemTip: q('.h-item small'),
+        hullCells: [...V.querySelectorAll('.h-hull i')],
         center: q('.h-center'),
         tip: q('.h-tip'),
         controls: q('.h-controls'),
@@ -866,6 +886,14 @@ export class UI {
 
   hudEvent(race, h, e, k, echo) {
     switch (e.type) {
+      case 'hurt':
+        h.flash.className = 'h-flash on hurt';
+        void h.flash.offsetWidth;
+        h.flash.className = 'h-flash go hurt';
+        h.hull.classList.remove('hit');
+        void h.hull.offsetWidth;
+        h.hull.classList.add('hit');
+        break;
       case 'shift': {
         h.flash.className = `h-flash on m${e.mode}`;
         void h.flash.offsetWidth;
@@ -905,13 +933,34 @@ export class UI {
       case 'comms': {
         const c = h.comms;
         c.querySelector('b').textContent = `${e.name} · ${e.car}`;
+        // their face, lip-flapping for as long as the line takes to say
+        // their helmet (a line drawing if the portrait couldn't be rendered), lit up while they talk
+        const face = c.querySelector('.h-face');
+        const img = c.querySelector('.h-helmet');
+        const url = helmetPortrait(e.id, e.color);
+        clearInterval(h.faceTimer);
+        clearTimeout(h.talkTimer);
+        if (url) {
+          img.src = url;
+          img.hidden = false;
+          face.hidden = true;
+        } else {
+          img.hidden = true;
+          face.hidden = false;
+          drawPortrait(face, e.id, e.color, 0, 0);
+        }
+        c.classList.add('talking');
+        h.talkTimer = setTimeout(() => c.classList.remove('talking'), Math.min(3600, 500 + e.text.length * 52));
         c.querySelector('b').style.color = hex(e.color);
         c.querySelector('span').textContent = e.text;
         c.style.setProperty('--c', hex(e.color));
         c.classList.add('on');
         if (!echo) this.app.audio.radio(e.id, e.text, e.kind === 'lose' ? 'lose' : 'talk');
         clearTimeout(h.commsTimer);
-        h.commsTimer = setTimeout(() => c.classList.remove('on'), 4200);
+        h.commsTimer = setTimeout(() => {
+          c.classList.remove('on');
+          clearInterval(h.faceTimer);
+        }, 4200);
         break;
       }
       case 'finish':
@@ -930,7 +979,7 @@ export class UI {
       if (h[`_${key}`] === v) return;
       h[`_${key}`] = v;
       if (key === 'lap') node.innerHTML = v;
-      else if (key === 'driftCls' || key === 'energyCls') node.className = v;
+      else if (key === 'driftCls' || key === 'energyCls' || key === 'hullCls' || key === 'itemCls' || key === 'formCls') node.className = v;
       else node.textContent = v;
     };
     set(h.place, 'place', String(place));
@@ -950,6 +999,45 @@ export class UI {
     const width = `${(p.energy * 100).toFixed(1)}%`;
     if (h._width !== width) h.energy.style.width = h._width = width;
     set(h.energyBox, 'energyCls', `h-energy m${p.mode}${p.energy < 0.25 ? ' low' : ''}${h.energyBox.classList.contains('deny') ? ' deny' : ''}`);
+    // the form's move: its name in the lens colour, and a bar that fills as it recharges
+    {
+      const name = p.mode === BLUE ? 'LIFT' : p.mode === RED ? 'LANCE' : 'BRACE';
+      set(h.formName, 'formName', name);
+      set(h.formKey, 'formKey', this.lensGlyph(race, k, 'form'));
+      const cd = Math.max(0, p.formCd || 0);
+      const full = { LIFT: 5, LANCE: 6, BRACE: 8 }[name];
+      const w = `${Math.round((1 - Math.min(1, cd / full)) * 100)}%`;
+      if (h._formW !== w) h.formBar.style.width = h._formW = w;
+      set(h.form, 'formCls', `h-form m${p.mode}${cd <= 0 ? ' ready' : ''}`);
+    }
+    // the SEAM CHARGE slot: spinning through the charges while it rolls, then the one you hold and its button
+    if (race.items?.on) {
+      let id = null;
+      let cls = 'h-item';
+      if (p.rollT > 0) {
+        id = ITEM_IDS[Math.floor(race.t * 14) % ITEM_IDS.length];
+        cls += ' on rolling';
+      } else if (p.item) {
+        id = p.item;
+        cls += ' on';
+      }
+      set(h.item, 'itemCls', cls);
+      if (id) {
+        const it = ITEMS[id];
+        set(h.itemName, 'itemName', it.name);
+        set(h.itemTip, 'itemTip', p.rollT > 0 ? '' : it.tip);
+        set(h.itemKey, 'itemKey', this.lensGlyph(race, k, 'fire'));
+        if (h._itemColor !== it.color) h.item.style.setProperty('--ic', (h._itemColor = it.color));
+      }
+    }
+    // the hull: ten cells, white while it's sound, orange once it's hurt, red and blinking when one more hit ends it
+    const hp = Math.ceil(((p.hp ?? 100) / 100) * 10 - 0.001);
+    const hullCls = `h-hull${hp <= 3 ? ' crit' : hp <= 6 ? ' hurt' : ''}${h.hull.classList.contains('hit') ? ' hit' : ''}`;
+    if (h._hp !== hp) {
+      h._hp = hp;
+      h.hullCells.forEach((c, i) => c.classList.toggle('off', i >= hp));
+    }
+    set(h.hull, 'hullCls', hullCls);
     h.wrong.classList.toggle('on', (p.wrongWay || 0) > 0.8 && race.state === 'race' && !p.finished);
     const mode = MODE_NAME[p.mode];
     if (h.root.dataset.mode !== mode) h.root.dataset.mode = mode;
@@ -958,7 +1046,7 @@ export class UI {
     h.controls.classList.toggle('on', pre);
     if (pre) {
       const g = (key) => `<kbd>${this.lensGlyph(race, k, key)}</kbd>`;
-      const html = `<div><span>GAS ${g('gas')}</span><span>BRAKE ${g('brake')}</span><span>STEER ${g('steer')}</span><span>DRIFT ${g('drift')}</span></div>
+      const html = `<div><span>GAS ${g('gas')}</span><span>BRAKE ${g('brake')}</span><span>STEER ${g('steer')}</span><span>DRIFT ${g('drift')}</span>${race.items?.on ? `<span>CHARGE ${g('fire')}</span>` : ''}${!race.split && !race.solo ? `<span>HORN ${g('horn')}</span>` : ''}</div>
         <div><span class="red">RED ${g('red')}</span><span class="both">${race.mono ? 'SWAP' : 'BOTH'} ${g('both')}</span><span class="blue">BLUE ${g('blue')}</span></div>
         <p>${race.mono ? 'SWAP flips your lens.' : 'RED is fastest · BLUE grips and drifts · BOTH refills SHIFT'}</p>`;
       if (h.controlsHtml !== html) h.controls.innerHTML = h.controlsHtml = html;

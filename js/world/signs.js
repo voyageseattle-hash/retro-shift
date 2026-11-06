@@ -127,6 +127,9 @@ export function buildSigns(world) {
     else addSign(world, main, back(main, f.at, 70), 0, 'CREST', 'RED STAYS DOWN · BLUE FLIES', M.ALL);
   }
   for (const w of def.water || []) addSign(world, main, back(main, w.at, 70), 0, 'WATER', 'BLUE SKIMS IT', M.B);
+  // the bent road (warp.js)
+  for (const w of def.pipes || []) addSign(world, main, back(main, w.at, 70), 0, 'FULL PIPE', 'RED RIDES THE WALLS AND ROOF', M.ALL);
+  for (const w of def.screws || []) addSign(world, main, back(main, w.at, 80), 0, 'CORKSCREW', 'RED RIDES IT · OTHERS JUMP', M.ALL);
   // a storm ahead, in its world's colour (it goes with that world, like the storm)
   for (const z of world.storms || []) {
     addSign(world, main, back(main, z.u0 + 0.035, 120), 0, z.name, z.kind === 'meteor' ? 'RED WORLD · GO BLUE OR RIDE IT OUT' : 'BLUE WORLD · GO RED OR RIDE IT OUT', z.mask);

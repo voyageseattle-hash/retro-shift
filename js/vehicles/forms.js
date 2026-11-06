@@ -23,15 +23,16 @@ export const FORMS = {
 
 // Each craft's pair: deck plan (nose width, tail width, length), deck height, fans, wheel size and spokes, fin,
 // rear wing (low: a low wing on tall endplates; high: a high wing on pylons; pylon: a mid wing on twin pylons).
+// kit: each craft's signature pieces (deckKit / bladeKit), so the eight read apart at a glance and in every form
 const VARIANT = {
-  vector: { nose: 0.55, tail: 1.25, len: 4.2, h: 0.42, fans: 2, r: 0.62, spokes: 8, fin: 'swept', wing: 'low' },
-  scanline: { nose: 0.35, tail: 1.1, len: 4.6, h: 0.36, fans: 2, r: 0.66, spokes: 6, fin: 'tall', wing: 'high' },
-  polygon: { nose: 0.9, tail: 1.3, len: 3.9, h: 0.46, fans: 2, r: 0.58, spokes: 10, fin: 'twin', wing: 'pylon' },
-  chroma: { nose: 0.6, tail: 1.35, len: 4.3, h: 0.4, fans: 1, r: 0.62, spokes: 12, fin: 'swept', wing: 'low' },
-  raster: { nose: 0.45, tail: 1.0, len: 4.8, h: 0.34, fans: 2, r: 0.7, spokes: 6, fin: 'tall', wing: 'high' },
-  glitch: { nose: 0.8, tail: 1.2, len: 4.0, h: 0.44, fans: 1, r: 0.6, spokes: 8, fin: 'twin', wing: 'pylon' },
-  dash: { nose: 0.3, tail: 0.8, len: 4.4, h: 0.3, fans: 1, r: 0.6, spokes: 6, fin: 'swept', wing: 'low' },
-  greatwedge: { nose: 1.0, tail: 1.45, len: 4.6, h: 0.55, fans: 2, r: 0.7, spokes: 10, fin: 'tall', wing: 'high' },
+  vector: { nose: 0.55, tail: 1.25, len: 4.2, h: 0.42, fans: 2, r: 0.62, spokes: 8, fin: 'swept', wing: 'low', kit: 'canard' },
+  scanline: { nose: 0.35, tail: 1.1, len: 4.6, h: 0.36, fans: 2, r: 0.66, spokes: 6, fin: 'tall', wing: 'high', kit: 'needle' },
+  polygon: { nose: 0.9, tail: 1.3, len: 3.9, h: 0.46, fans: 2, r: 0.58, spokes: 10, fin: 'twin', wing: 'pylon', kit: 'outrigger' },
+  chroma: { nose: 0.6, tail: 1.35, len: 4.3, h: 0.4, fans: 1, r: 0.62, spokes: 12, fin: 'swept', wing: 'low', kit: 'halo' },
+  raster: { nose: 0.45, tail: 1.0, len: 4.8, h: 0.34, fans: 2, r: 0.7, spokes: 6, fin: 'tall', wing: 'high', kit: 'pixel' },
+  glitch: { nose: 0.8, tail: 1.2, len: 4.0, h: 0.44, fans: 1, r: 0.6, spokes: 8, fin: 'twin', wing: 'pylon', kit: 'shards' },
+  dash: { nose: 0.3, tail: 0.8, len: 4.4, h: 0.3, fans: 1, r: 0.6, spokes: 6, fin: 'swept', wing: 'low', kit: 'pencil' },
+  greatwedge: { nose: 1.0, tail: 1.45, len: 4.6, h: 0.55, fans: 2, r: 0.7, spokes: 10, fin: 'tall', wing: 'high', kit: 'shark' },
 };
 
 const SLOT = 0.42; // the channel's half width
@@ -308,6 +309,7 @@ function buildBlade(v, paint) {
   if (v.fin === 'tall') fin([[0, fy, -0.9], [0, fy + 0.72, -1.75], [0, fy + 0.6, -2.0], [0, fb, -1.6]]);
   else if (v.fin === 'twin') for (const x of [-0.22, 0.22]) fin([[x, fy, -0.95], [x * 2.2, fy + 0.5, -1.7], [x * 2.0, fy + 0.4, -1.9], [x * 1.6, fb, -1.5]]);
   else fin([[0, fy, -0.75], [0, fy + 0.4, -1.65], [0, fy + 0.3, -2.0], [0, fb, -1.6]]);
+  bladeKit(H, v, T, top);
   H.setPaint(paint, 0.65);
   const g = H.build();
   // the wheel spins on its own; drawn after the housing glass so it shows through it
@@ -416,7 +418,213 @@ function deckSide(H, v, s) {
     }
   }
   wing(H, v, s, zb);
+  deckKit(H, v, s, rings);
   return fan;
+}
+
+// A closed box of panels, edged in `arr`: centre, half sizes. sweep leans its top back along z.
+function box(H, [cx, cy, cz], [hx, hy, hz], arr, sweep = 0) {
+  const p = (x, y, z) => [cx + x, cy + y, cz + z + (y > 0 ? -sweep : 0)];
+  const b = [p(-hx, -hy, hz), p(hx, -hy, hz), p(hx, -hy, -hz), p(-hx, -hy, -hz)];
+  const t = [p(-hx, hy, hz), p(hx, hy, hz), p(hx, hy, -hz), p(-hx, hy, -hz)];
+  for (let k = 0; k < 4; k++) H.quad(b[k], b[(k + 1) % 4], t[(k + 1) % 4], t[k]);
+  H.quad(...t);
+  H.loop(arr, t);
+  for (let k = 0; k < 4; k++) H.seg(arr, b[k], t[k]);
+}
+
+// The Skimmer half's signature pieces (s: which side).
+function deckKit(H, v, s, rings) {
+  const P = (x, y, z) => [x * s, y, z];
+  const zf = deckFront(v);
+  const zb = deckBack(v);
+  const outer = (z) => SLOT + (z > zf - 1.2 ? lerp(0.1, v.nose, (zf - z) / 1.2) : lerp(v.nose, v.tail, Math.min(1, (zf - 1.2 - z) / (zf - zb - 1.2))));
+  switch (v.kit) {
+    case 'canard': {
+      // VECTOR: swept canards off the nose, each with a lit endplate
+      const z = zf - 0.75;
+      const x0 = outer(z) - 0.05;
+      const y = deckTop(v, z) - 0.06;
+      const w = [P(x0, y, z + 0.3), P(x0 + 0.62, y + 0.06, z - 0.1), P(x0 + 0.62, y + 0.06, z - 0.42), P(x0, y, z - 0.3)];
+      H.quad(...w);
+      H.loop(H.R, w);
+      const e = [P(x0 + 0.62, y - 0.12, z - 0.05), P(x0 + 0.62, y + 0.2, z - 0.15), P(x0 + 0.62, y + 0.2, z - 0.45), P(x0 + 0.62, y - 0.12, z - 0.45)];
+      H.lamp(e);
+      H.loop(H.A, e);
+      break;
+    }
+    case 'needle': {
+      // SCANLINE: a long knife-edge strake down each flank, running out past the tail
+      const a = rings[3][3];
+      const b = rings[rings.length - 1][3];
+      const st = [[a[0], a[1], a[2]], [b[0] + 0.12 * s, b[1] + 0.22, zb - 0.5], [b[0] + 0.12 * s, b[1] + 0.02, zb - 0.5], [a[0], a[1] - 0.02, a[2]]];
+      H.quad(...st);
+      H.loop(H.R, st);
+      H.seg(H.A, st[0], st[1]);
+      break;
+    }
+    case 'outrigger': {
+      // POLYGON: an outrigger pod on a pair of struts off each flank (a trimaran), its own fan glowing at the back
+      const x = SLOT + v.tail + 0.42;
+      const y = DECK_Y + 0.22;
+      const Zs = [1.25, 0.95, -0.6, zb + 0.15];
+      const R = [0.04, 0.17, 0.2, 0.17];
+      const pod = Zs.map((z, k) => circle(x * s, y, z, R[k], 6));
+      for (let k = 0; k < pod.length - 1; k++) for (let i = 0; i < 6; i++) {
+        H.quad(pod[k][i], pod[k][(i + 1) % 6], pod[k + 1][(i + 1) % 6], pod[k + 1][i]);
+        if (i % 2 === 0) H.seg(k === 1 ? H.R : H.L, pod[k][i], pod[k + 1][i]);
+      }
+      H.loop(H.R, pod[pod.length - 1]);
+      H.lamp(circle(x * s, y, zb + 0.14, 0.12, 6), true);
+      for (const z of [0.4, -1.0]) {
+        const xi = outer(z) - 0.1;
+        const st = [P(xi, deckTop(v, z) - 0.12, z + 0.12), P(x - 0.12, y + 0.08, z + 0.1), P(x - 0.12, y + 0.08, z - 0.1), P(xi, deckTop(v, z) - 0.12, z - 0.12)];
+        H.quad(...st);
+        H.loop(H.L, st);
+      }
+      break;
+    }
+    case 'halo': {
+      // CHROMA: a sweeping fender arc of light over each flank
+      const pts = [];
+      for (let k = 0; k <= 10; k++) {
+        const z = lerp(1.5, -1.5, k / 10);
+        pts.push(P(outer(z) - 0.05, deckTop(v, z) + 0.06 + Math.sin((k / 10) * Math.PI) * 0.32, z));
+      }
+      for (let k = 0; k < pts.length - 1; k++) {
+        H.seg(H.A, pts[k], pts[k + 1]);
+        const a = pts[k];
+        const b = pts[k + 1];
+        H.quad(a, b, [b[0], b[1] - 0.05, b[2]], [a[0], a[1] - 0.05, a[2]]);
+      }
+      break;
+    }
+    case 'pixel': {
+      // RASTER: three stepped block fins up each flank, tallest at the back
+      for (let k = 0; k < 3; k++) {
+        const z = -0.2 - k * 0.55;
+        const x = outer(z) - 0.22;
+        box(H, P(x, deckTop(v, z) + 0.08 + k * 0.08, z), [0.09, 0.08 + k * 0.08, 0.2], k === 2 ? H.R : H.L);
+        H.lamp([P(x - 0.09, deckTop(v, z) + 0.17 + k * 0.16, z + 0.205), P(x + 0.09, deckTop(v, z) + 0.17 + k * 0.16, z + 0.205), P(x + 0.09, deckTop(v, z) + 0.1 + k * 0.16, z + 0.205), P(x - 0.09, deckTop(v, z) + 0.1 + k * 0.16, z + 0.205)]);
+      }
+      break;
+    }
+    case 'shards': {
+      // GLITCH: pieces of the flank that came loose and float a hand's width off it, lit along their edges
+      const at = [[1.1, 0.24, 0.32], [0.1, 0.32, 0.28], [-0.9, 0.2, 0.36]];
+      for (const [z, dy, dx] of at) {
+        const x = outer(z) + dx * (s > 0 ? 1 : 0.6);
+        const y = deckTop(v, z) * 0.6 + dy;
+        const q = [P(x, y + 0.18, z + 0.28), P(x + 0.08, y + 0.2, z - 0.24), P(x + 0.04, y - 0.12, z - 0.3), P(x - 0.04, y - 0.16, z + 0.2)];
+        H.quad(...q);
+        H.loop(s > 0 ? H.A : H.R, q);
+      }
+      break;
+    }
+    case 'shark': {
+      // GREAT WEDGE: teeth along the nose, and three lit gill slits down each flank
+      const z0 = zf - 0.15;
+      for (let k = 0; k < 4; k++) {
+        const z = z0 - k * 0.22;
+        const x = lerp(0.12, outer(z), 0.85);
+        const y = DECK_Y + 0.02;
+        const t = [P(x - 0.06, y + 0.02, z + 0.05), P(x + 0.06, y + 0.02, z - 0.05), P(x + 0.06, y - 0.16, z)];
+        H.lamp(t);
+        H.loop(H.R, t);
+      }
+      for (let k = 0; k < 3; k++) {
+        const z = 0.9 - k * 0.22;
+        const x = outer(z) + 0.1;
+        const y = DECK_Y + (deckTop(v, z) - DECK_Y) * 0.45;
+        H.lamp([P(x, y + 0.14, z), P(x, y + 0.14, z - 0.05), P(x, y - 0.1, z - 0.09), P(x, y - 0.1, z - 0.04)]);
+      }
+      break;
+    }
+  }
+}
+
+// The Blade's signature pieces. T: the fuselage's ridge heights; top: the housing's top.
+function bladeKit(H, v, T, top) {
+  switch (v.kit) {
+    case 'canard': {
+      // a roll hoop behind the canopy
+      const hoop = [];
+      for (let k = 0; k <= 8; k++) {
+        const a = Math.PI * (k / 8);
+        hoop.push([Math.cos(a) * 0.5, top - 0.25 + Math.sin(a) * 0.42, -0.8]);
+      }
+      for (let k = 0; k < hoop.length - 1; k++) {
+        H.seg(H.R, hoop[k], hoop[k + 1]);
+        H.quad(hoop[k], hoop[k + 1], [hoop[k + 1][0], hoop[k + 1][1], -0.92], [hoop[k][0], hoop[k][1], -0.92]);
+      }
+      break;
+    }
+    case 'needle': {
+      // a long lance of a nose, lit at the tip
+      const base = [[0, 0.5, 2.4], [0.08, 0.56, 2.4], [0, 0.62, 2.4], [-0.08, 0.56, 2.4]];
+      const tip = [0, 0.55, 3.45];
+      for (let k = 0; k < 4; k++) {
+        H.tri(base[k], base[(k + 1) % 4], tip, 0.8);
+        H.seg(k % 2 ? H.R : H.L, base[k], tip);
+      }
+      H.lamp([[0, 0.53, 3.3], [0.03, 0.55, 3.45], [0, 0.57, 3.3]]);
+      break;
+    }
+    case 'outrigger': {
+      // a pair of ram intakes either side of the cowl
+      for (const x of [-0.36, 0.36]) box(H, [x, 0.62, 1.3], [0.07, 0.07, 0.3], H.L);
+      break;
+    }
+    case 'halo': {
+      // a halo of light standing over the wheel housing
+      const pts = [];
+      for (let k = 0; k <= 24; k++) {
+        const a = (k / 24) * Math.PI * 2;
+        pts.push([Math.cos(a) * 0.62, top + 0.35 + Math.sin(a) * 0.62 * 0.35, -0.25 + Math.sin(a) * 0.62]);
+      }
+      for (let k = 0; k < pts.length - 1; k++) H.seg(H.A, pts[k], pts[k + 1]);
+      for (const x of [-0.3, 0.3]) H.seg(H.L, [x, top - 0.05, -0.25], [x * 1.9, top + 0.3, -0.25]);
+      break;
+    }
+    case 'pixel': {
+      // a block tail, a grid of square lamps across it
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) {
+        if ((i + j) % 2) continue;
+        const x = -0.18 + i * 0.18;
+        const y = T[6] - 0.02 - j * 0.12;
+        H.lamp([[x - 0.06, y, -1.77], [x + 0.06, y, -1.77], [x + 0.06, y - 0.1, -1.77], [x - 0.06, y - 0.1, -1.77]]);
+      }
+      box(H, [0, top + 0.06, -0.55], [0.12, 0.06, 0.12], H.L);
+      break;
+    }
+    case 'shards': {
+      // a broken-off fin, floating just above where it should be
+      const q = [[0.05, top + 0.25, -0.5], [0.12, top + 0.75, -1.2], [0.08, top + 0.62, -1.5], [0.02, top + 0.2, -1.0]];
+      H.loop(H.A, q);
+      H.cquad(...q);
+      break;
+    }
+    case 'pencil': {
+      // DASH: a sharpened pencil tip of a nose: a bare-wood cone, a graphite point
+      const ring6 = circle(0, 0.55, 2.4, 0.16, 6);
+      const tip = [0, 0.55, 3.15];
+      for (let k = 0; k < 6; k++) {
+        H.tri(ring6[k], ring6[(k + 1) % 6], tip, 0.9);
+        H.seg(H.L, ring6[k], tip);
+      }
+      H.loop(H.R, ring6);
+      const g6 = circle(0, 0.55, 2.95, 0.045, 6);
+      for (let k = 0; k < 6; k++) H.lamp([g6[k], g6[(k + 1) % 6], tip]);
+      break;
+    }
+    case 'shark': {
+      // a great dorsal fin
+      const f = [[0, top - 0.05, -0.1], [0, top + 1.05, -0.95], [0, top + 0.95, -1.25], [0, top - 0.1, -1.0]];
+      H.loop(H.R, f);
+      H.quad(...f, 0.7);
+      break;
+    }
+  }
 }
 
 // The inside of a fan duct: a tube from the mouth at z0 forward to a back plate at z1, with longitudinal lines,

@@ -5,13 +5,14 @@
 
 import * as THREE from '../../vendor/three.js';
 import { clamp, lerp, wrapAngle, mulberry32, smoothstep } from '../core/util.js';
-import { M, BOTH, solidIn, colorForMask, COLORS } from './shift.js';
+import { M, BOTH, RED, BLUE, solidIn, colorForMask, COLORS } from './shift.js';
 import { Layers } from './layers.js';
 import { buildDecor } from './decor.js';
 import { buildSigns } from './signs.js';
 import { buildCovers } from './covers.js';
 import { layStorms } from './storms-def.js';
 import { layFormRoutes, addSlit } from './formroutes.js';
+import { layWarps, buildWarps, PIPE } from './warp.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -198,6 +199,64 @@ export class Path {
     const b = this.point(i + 1, lat, h, _b);
     return out.copy(a).lerp(b, t);
   }
+  // The road as it's drawn: point(), bent where a pipe curls it up or a corkscrew rolls it (warp.js). Off those it
+  // is point() exactly.
+  wpoint(i, lat, h = 0, out = new THREE.Vector3()) {
+    const j = this.wrap(Math.round(i));
+    if (!this.warpK?.[j] && !this.warpK?.[this.wrap(j + 1)]) return this.point(i, lat, h, out);
+    return this.bend(i, lat, h, out);
+  }
+  // Bent point at (fractional) sample fi: out = the place, nOut = the surface's up there, rOut = the way across it.
+  bend(fi, lat, h, out, nOut, rOut) {
+    let i0 = Math.floor(fi);
+    const t = this.closed ? fi - i0 : clamp(fi - i0, 0, 1);
+    i0 = this.wrap(i0);
+    const i1 = this.wrap(i0 + 1);
+    const L = (a) => a[i0] + (a[i1] - a[i0]) * t;
+    const cx = L(this.px);
+    const cy = L(this.py);
+    const cz = L(this.pz);
+    let rx = L(this.thz) * -1;
+    let rz = L(this.thx);
+    const rl = Math.hypot(rx, rz) || 1;
+    rx /= rl;
+    rz /= rl;
+    let nx = L(this.nx);
+    let ny = L(this.ny);
+    let nz = L(this.nz);
+    const nl = Math.hypot(nx, ny, nz) || 1;
+    nx /= nl;
+    ny /= nl;
+    nz /= nl;
+    const k = this.warpK ? L(this.warpK) : 0;
+    const kind = this.warpKind ? this.warpKind[i0] || this.warpKind[i1] : 0;
+    let x = lat;
+    let y = h;
+    let sn = 0; // surface normal and across, as (right, up) parts
+    let cs = 1;
+    if (kind === 1 && k > 1e-4) {
+      // pipe: the strip wrapped round a circle of radius R/k sitting on the road (k = 1: the tube itself)
+      const Re = (this.warpR[i0] || this.warpR[i1]) / k;
+      const th = lat / Re;
+      sn = Math.sin(th);
+      cs = Math.cos(th);
+      x = Re * sn - sn * h;
+      y = Re * (1 - cs) + cs * h;
+    } else if (kind === 2) {
+      // corkscrew: the strip rolled by `roll` about a line rc above the road
+      const rc = this.warpR[i0] || this.warpR[i1];
+      const a = L(this.roll);
+      sn = Math.sin(a);
+      cs = Math.cos(a);
+      const y0 = h - rc;
+      x = lat * cs - y0 * sn;
+      y = lat * sn + y0 * cs + rc;
+    }
+    out.set(cx + rx * x + nx * y, cy + ny * y, cz + rz * x + nz * y);
+    if (nOut) nOut.set(-rx * sn + nx * cs, ny * cs, -rz * sn + nz * cs).normalize();
+    if (rOut) rOut.set(rx * cs + nx * sn, ny * sn, rz * cs + nz * sn).normalize();
+    return out;
+  }
   index(f) {
     return this.wrap(Math.round(f * (this.closed ? this.N : this.N - 1)));
   }
@@ -315,16 +374,19 @@ export class TrackWorld {
     this.animated = [];
     this.obstacles = [];
     this.pads = [];
+    this.launchers = [];
     this.shards = [];
     this.buildMain();
     this.buildBranches();
     this.applyGaps();
     layFormRoutes(this);
+    layWarps(this);
     this.minY = Math.min(...this.paths.map((p) => p.minY));
     this.maxY = Math.max(...this.paths.map((p) => p.maxY));
     this.floorY = this.minY - (def.floorDrop ?? 26);
     if (opts.preview) return;
     this.buildRoads();
+    buildWarps(this);
     this.buildFeatures();
     this.buildWater();
     this.buildStart();
@@ -465,7 +527,9 @@ export class TrackWorld {
         path.glide ||= new Uint8Array(path.N);
         for (let k = 0; k < n; k++) path.glide[path.wrap(i0 + k)] = 1;
       }
-      if (g.noRails) for (let k = 0; k < n; k++) path.railL[path.wrap(i0 + k)] = path.railR[path.wrap(i0 + k)] = 0;
+      // A stretch that some lens still has keeps its rails (they're there in that lens, gone with the road in the
+      // others): falling off is for the planned places, a gap in your lens and a glide gap, never off a side.
+      if (g.noRails && (g.glide || !g.mask)) for (let k = 0; k < n; k++) path.railL[path.wrap(i0 + k)] = path.railR[path.wrap(i0 + k)] = 0;
     }
     for (const r of this.def.noRails || []) {
       const i0 = main.index(r.at);
@@ -542,40 +606,60 @@ export class TrackWorld {
         const ml = mid ?? COLORS.red;
         const mr = mid ?? COLORS.blue;
         // fill
-        L.roadQuad(mask, path.point(i, -hw, -0.02, v[0]), path.point(j, -hw, -0.02, v[1]), path.point(j, hw, -0.02, v[2]), path.point(i, hw, -0.02, v[3]));
+        L.roadQuad(mask, path.wpoint(i, -hw, -0.02, v[0]), path.wpoint(j, -hw, -0.02, v[1]), path.wpoint(j, hw, -0.02, v[2]), path.wpoint(i, hw, -0.02, v[3]));
         // glowing edges (ribbons a little in from the edge, lying on the road)
         for (const [side, col] of [[-1, lc], [1, rc]]) {
-          const a = path.point(i, side * hw, 0.04, new THREE.Vector3());
-          const b = path.point(j, side * hw, 0.04, new THREE.Vector3());
-          const c = path.point(j, side * (hw - 0.45), 0.04, new THREE.Vector3());
-          const d = path.point(i, side * (hw - 0.45), 0.04, new THREE.Vector3());
+          const a = path.wpoint(i, side * hw, 0.04, new THREE.Vector3());
+          const b = path.wpoint(j, side * hw, 0.04, new THREE.Vector3());
+          const c = path.wpoint(j, side * (hw - 0.45), 0.04, new THREE.Vector3());
+          const d = path.wpoint(i, side * (hw - 0.45), 0.04, new THREE.Vector3());
           L.quad(mask, a, b, c, d, col);
           // the edge light spilling across the wet-black road, like the key art's reflections
-          const e = path.point(j, side * (hw - 3.2), 0.035, new THREE.Vector3());
-          const f = path.point(i, side * (hw - 3.2), 0.035, new THREE.Vector3());
+          const e = path.wpoint(j, side * (hw - 3.2), 0.035, new THREE.Vector3());
+          const f = path.wpoint(i, side * (hw - 3.2), 0.035, new THREE.Vector3());
           L.quadFade(mask, d, c, e, f, col, 0.07, 0);
-          // rails
-          const rail = side < 0 ? path.railL[i] : path.railR[i];
+          // rails: a curved lip rising out of the road's edge into a bumper (a course with an open look, edge 'lip', has
+          // only the lip: a bowl's rim, no fence)
+          // (a pipe has no rails: its walls are the tube)
+          const rail = (side < 0 ? path.railL[i] : path.railR[i]) && !(path.warpKind?.[i] === PIPE && path.warpK[i] > 0.05);
           if (rail) {
-            const ra = path.point(i, side * (hw + 0.2), 1.1, new THREE.Vector3());
-            const rb = path.point(j, side * (hw + 0.2), 1.1, new THREE.Vector3());
-            const rd = path.point(i, side * (hw + 0.2), 0.75, new THREE.Vector3());
-            const rcp = path.point(j, side * (hw + 0.2), 0.75, new THREE.Vector3());
+            const lipH = this.def.edge === 'lip' ? 1.15 : 0.75;
+            let p0 = path.wpoint(i, side * (hw - 0.5), 0.045, new THREE.Vector3());
+            let p1 = path.wpoint(j, side * (hw - 0.5), 0.045, new THREE.Vector3());
+            for (let s = 1; s <= 3; s++) {
+              const a = (s / 3) * Math.PI * 0.5;
+              const lat = hw - 0.5 + (1 - Math.cos(a)) * 0.7;
+              const y = 0.045 + Math.sin(a) * lipH;
+              const q0 = path.wpoint(i, side * lat, y, new THREE.Vector3());
+              const q1 = path.wpoint(j, side * lat, y, new THREE.Vector3());
+              L.quad(mask, p0, p1, q1, q0, col, 0.16 + s * 0.1);
+              p0 = q0;
+              p1 = q1;
+            }
+            if (this.def.edge === 'lip') {
+              if (i % 3 === 0) L.line(mask, path.wpoint(i, side * (hw - 0.5), 0.05, _a), path.wpoint(i, side * (hw + 0.2), lipH, _b), col);
+              continue;
+            }
+            const ra = path.wpoint(i, side * (hw + 0.2), 1.1, new THREE.Vector3());
+            const rb = path.wpoint(j, side * (hw + 0.2), 1.1, new THREE.Vector3());
+            const rd = path.wpoint(i, side * (hw + 0.2), 0.75, new THREE.Vector3());
+            const rcp = path.wpoint(j, side * (hw + 0.2), 0.75, new THREE.Vector3());
             L.quad(mask, ra, rb, rcp, rd, col, 0.8);
-            if (i % 4 === 0) L.line(mask, path.point(i, side * (hw + 0.2), 0, _a), path.point(i, side * (hw + 0.2), 1.1, _b), col);
+            if (i % 4 === 0) L.line(mask, path.wpoint(i, side * (hw + 0.2), 0, _a), path.wpoint(i, side * (hw + 0.2), 1.1, _b), col);
           }
         }
         // grid: cross ribs and lane lines
-        if (i % 2 === 0) L.line(mask, path.point(i, -hw, 0.03, _a), path.point(i, hw, 0.03, _b), (i >> 1) % 2 ? ml : mr);
-        for (const f of [-1 / 3, 1 / 3]) L.line(mask, path.point(i, f * hw * 2 * 0.75, 0.03, _a), path.point(j, f * hw * 2 * 0.75, 0.03, _b), f < 0 ? ml : mr);
-        for (const f of [-2 / 3, 0, 2 / 3]) if (i % 3 !== 2 && f !== 0) L.line(mask, path.point(i, f * hw, 0.03, _a), path.point(j, f * hw, 0.03, _b), f < 0 ? ml : mr);
+        if (i % 2 === 0) L.line(mask, path.wpoint(i, -hw, 0.03, _a), path.wpoint(i, hw, 0.03, _b), (i >> 1) % 2 ? ml : mr);
+        for (const f of [-1 / 3, 1 / 3]) L.line(mask, path.wpoint(i, f * hw * 2 * 0.75, 0.03, _a), path.wpoint(j, f * hw * 2 * 0.75, 0.03, _b), f < 0 ? ml : mr);
+        for (const f of [-2 / 3, 0, 2 / 3]) if (i % 3 !== 2 && f !== 0) L.line(mask, path.wpoint(i, f * hw, 0.03, _a), path.wpoint(j, f * hw, 0.03, _b), f < 0 ? ml : mr);
         // underside and supports for raised road
-        if (i % 2 === 0) {
-          L.line(mask, path.point(i, -hw, -0.6, _a), path.point(j, -hw, -0.6, _b), lc);
-          L.line(mask, path.point(i, hw, -0.6, _a), path.point(j, hw, -0.6, _b), rc);
+        const bent = path.warpK?.[i] > 0;
+        if (i % 2 === 0 && !bent) {
+          L.line(mask, path.wpoint(i, -hw, -0.6, _a), path.wpoint(j, -hw, -0.6, _b), lc);
+          L.line(mask, path.wpoint(i, hw, -0.6, _a), path.wpoint(j, hw, -0.6, _b), rc);
         }
-        const p = path.point(i, 0, 0, _c);
-        if (i % 18 === 0 && p.y - this.floorY > 6 && !this.def.noPylons) {
+        const p = path.wpoint(i, 0, 0, _c);
+        if (i % 18 === 0 && p.y - this.floorY > 6 && !this.def.noPylons && !bent) {
           const pc = (i / 18) % 2 ? 0x6a1020 : 0x0c3a6a;
           L.lineXYZ(M.ALL, p.x, p.y - 0.6, p.z, p.x, this.floorY, p.z, pc);
           L.lineXYZ(M.ALL, p.x - 1.5, this.floorY, p.z, p.x + 1.5, this.floorY, p.z, pc);
@@ -658,9 +742,35 @@ export class TrackWorld {
       else this.addObstacle(o);
     }
     for (const b of def.boosts || []) this.addPad(b);
+    // LAUNCHERS: a hole in your world is a ramp in the other one. Before each stretch of main road that's missing in
+    // a lens, that lens gets a launcher, there only for it, that throws you up and over the hole. (More can be laid by
+    // hand with def.launchers.)
+    for (const g of def.gaps || []) {
+      if (g.path || !g.mask) continue;
+      for (const lens of [RED, BLUE]) {
+        if (solidIn(g.mask, lens)) continue;
+        const m = this.main;
+        this.addLauncher({ at: g.at - 16 / m.length, mask: lens === RED ? M.RO : M.BO, over: (g.len ?? 40) + 22 });
+      }
+    }
+    for (const l of def.launchers || []) this.addLauncher(l);
+    for (const l of this.warpLaunchers || []) this.addLauncher(l);
     for (const s of def.shards || []) {
       const n = s.n ?? 3;
       for (let k = 0; k < n; k++) this.addShard({ ...s, at: s.at + k * (s.gap ?? 0.006) });
+    }
+    // and a line of shards wherever the main road goes a long way without any, weaving across it, so there's always
+    // some SHIFT ahead (not in an obstacle field or a lens gap, where you have other things to do)
+    const m = this.main;
+    const taken = this.shards.filter((s) => s.path === m).map((s) => s.i / m.N);
+    const busy = (u) =>
+      this.obstacles.some((o) => o.path === m && Math.abs(((o.i / m.N - u + 1.5) % 1) - 0.5) < 0.025) ||
+      [-0.01, 0, 0.01, 0.02].some((d) => m.mask[m.index((u + d + 1) % 1)] !== M.ALL);
+    for (let k = 0; k < 6; k++) {
+      const u = 0.08 + k / 6;
+      if (taken.some((t) => Math.abs(((t - u + 1.5) % 1) - 0.5) < 0.07) || busy(u)) continue;
+      const lat = [0.45, -0.45, 0][k % 3];
+      for (let q = 0; q < 3; q++) this.addShard({ at: u + q * 0.006, lat: lat * (1 - q * 0.5) });
     }
     // shards laid along a branch (a long lens-only road refills you on the way)
     for (const p of this.paths) {
@@ -758,16 +868,57 @@ export class TrackWorld {
     const w = 2.4;
     for (let k = 0; k < 3; k++) {
       const i0 = path.wrap(i + k * 2);
-      const tip = path.point(i0 + 2, lat, 0.06, new THREE.Vector3());
-      const l0 = path.point(i0, lat - w, 0.06, new THREE.Vector3());
-      const l1 = path.point(i0 + 1, lat - w, 0.06, new THREE.Vector3());
-      const r0 = path.point(i0, lat + w, 0.06, new THREE.Vector3());
-      const r1 = path.point(i0 + 1, lat + w, 0.06, new THREE.Vector3());
-      const tip2 = path.point(i0 + 1, lat, 0.06, new THREE.Vector3());
+      const tip = path.wpoint(i0 + 2, lat, 0.06, new THREE.Vector3());
+      const l0 = path.wpoint(i0, lat - w, 0.06, new THREE.Vector3());
+      const l1 = path.wpoint(i0 + 1, lat - w, 0.06, new THREE.Vector3());
+      const r0 = path.wpoint(i0, lat + w, 0.06, new THREE.Vector3());
+      const r1 = path.wpoint(i0 + 1, lat + w, 0.06, new THREE.Vector3());
+      const tip2 = path.wpoint(i0 + 1, lat, 0.06, new THREE.Vector3());
       L.quad(mask, l0, tip2, tip, l1, col, 1.2);
       L.quad(mask, r0, tip2, tip, r1, col, 1.2);
     }
     this.pads.push({ path, i, f: path.frac(i), lat, w, len: path.ds * 3.5, mask });
+  }
+
+  // A launcher: a raised chevron ramp with an arch over it, in one lens's colour. `over`: metres it has to clear.
+  addLauncher(l) {
+    const path = this.pathOf(l);
+    const i = path.index(l.at);
+    const lat = (l.lat ?? 0) * path.halfW;
+    const mask = l.mask ?? M.RO;
+    const col = colorForMask(mask);
+    const L = this.layers;
+    const w = path.halfW - 1.5;
+    // the ramp: chevrons climbing toward the lip
+    const n = 6;
+    for (let k = 0; k < n; k++) {
+      const i0 = path.wrap(i + k);
+      const y0 = 0.06 + (k / n) * 0.9;
+      const y1 = 0.06 + ((k + 1) / n) * 0.9;
+      const tip = path.point(i0 + 1, lat, y1, new THREE.Vector3());
+      const l0 = path.point(i0, lat - w, y0, new THREE.Vector3());
+      const r0 = path.point(i0, lat + w, y0, new THREE.Vector3());
+      const c0 = path.point(i0, lat, y0 + 0.02, new THREE.Vector3());
+      L.quad(mask, l0, c0, tip, path.point(i0 + 1, lat - w, y1, new THREE.Vector3()), col, 0.5 + k * 0.12);
+      L.quad(mask, r0, c0, tip, path.point(i0 + 1, lat + w, y1, new THREE.Vector3()), col, 0.5 + k * 0.12);
+      L.line(mask, l0, tip, col);
+      L.line(mask, r0, tip, col);
+    }
+    // the arch over the lip, and an up arrow in it
+    const top = path.point(path.wrap(i + n), lat, 0, new THREE.Vector3());
+    const right = new THREE.Vector3(path.rightX(path.wrap(i + n)), 0, path.rightZ(path.wrap(i + n)));
+    let prev = null;
+    for (let k = 0; k <= 12; k++) {
+      const a = (k / 12) * Math.PI;
+      const p = top.clone().addScaledVector(right, -Math.cos(a) * (w + 0.6)).setY(top.y + Math.sin(a) * 5.5);
+      if (prev) L.line(mask, prev, p, col);
+      prev = p;
+    }
+    const up = (dx, dy, ex, ey) => L.line(mask, top.clone().addScaledVector(right, dx).setY(top.y + dy), top.clone().addScaledVector(right, ex).setY(top.y + ey), col);
+    up(0, 1.4, 0, 4.2);
+    up(-1, 3.2, 0, 4.2);
+    up(1, 3.2, 0, 4.2);
+    this.launchers.push({ path, i, f: path.frac(i), lat, w, len: path.ds * n, mask, over: l.over ?? 50 });
   }
 
   addShard(s) {
@@ -781,9 +932,10 @@ export class TrackWorld {
     root.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), mats.wire));
     const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.45), mats.solid);
     root.add(core);
-    path.point(i, lat, 1.4, root.position);
+    path.wpoint(i, lat, 1.4, root.position);
     this.group.add(root);
-    const sh = { path, i, f: path.frac(i), lat, mask, root, taken: 0, y0: root.position.y };
+    // `at`: where it's picked up, on the flat strip the physics drives (the same place unless the road is bent there)
+    const sh = { path, i, f: path.frac(i), lat, mask, root, taken: 0, y0: root.position.y, at: path.point(i, lat, 1.4, new THREE.Vector3()) };
     this.shards.push(sh);
     this.animated.push((t, dt) => {
       root.rotation.y = t * 2.2 + i;
@@ -847,7 +999,11 @@ export class TrackWorld {
       // a little grace past the edge of the strip you're on: at speed a hard corner can carry you past its rail for
       // a step before the rail pushes you back, and that step shouldn't drop you through the world
       // (a wide craft is still on the road with its middle a little past the edge)
-      if (Math.abs(f.lat) > path.halfW + (path.id === cur ? 1.4 : 0.35) + (hints._w || 0)) continue;
+      // (a pipe's strip reaches up its walls and round its ceiling for a craft that clings)
+      // (+4: the mouth closes in quickly at speed, and the rails squeeze you back down it (collideWalls) only while
+      // you're still on it)
+      const wide = hints._cling && path.ext?.[f.i] > path.halfW ? path.ext[f.i] + 4 : path.halfW;
+      if (Math.abs(f.lat) > wide + (path.id === cur ? 1.4 : 0.35) + (hints._w || 0)) continue;
       if (!solidIn(f.mask, mode)) continue;
       // a wall-run holds only a craft that clings (the Blade); the others find nothing under them
       if (path.cling?.[f.i] && !hints._cling) continue;
@@ -890,24 +1046,58 @@ export class TrackWorld {
   collideWalls(r, g) {
     if (!g.onRoad) return 0;
     const path = g.path;
-    const hw = path.halfW - r.halfW;
+    const wide = r.hints._cling && path.ext?.[g.i] > path.halfW ? path.ext[g.i] : path.halfW;
+    // all the way round a pipe there's no wall to hit: racer.js carries you over the top
+    if (wide > path.halfW && path.warpK[g.i] > 0.97) return 0;
+    const hw = wide - r.halfW;
     const lat = g.lat;
     if (Math.abs(lat) <= hw) return 0;
     const side = Math.sign(lat);
     const rail = side < 0 ? path.railL[g.i] : path.railR[g.i];
+    const gx = g.rx;
+    const gz = g.rz;
     if (!rail) {
       const open = (side < 0 ? path.jL : path.jR)?.[g.i];
-      if (!open || solidIn(open, r.mode)) return 0;
+      if (!open) return 0;
+      if (solidIn(open, r.mode)) {
+        // a fork opens the rail, but only where the fork's road is really there beside you: past its end (or where
+        // it has climbed away) the rail holds, so a junction is never a hole to fall through
+        const px = r.pos.x + gx * side * 2.2;
+        const pz = r.pos.z + gz * side * 2.2;
+        const h = (r._probe ||= {});
+        Object.assign(h, r.hints);
+        const saved = (this._gSave ||= {});
+        Object.assign(saved, g);
+        const g2 = this.ground(px, r.pos.y, pz, h, r.mode);
+        const ok = g2.onRoad && g2.path !== path;
+        Object.assign(g, saved);
+        if (ok) return 0;
+      }
     }
     const push = Math.abs(lat) - hw;
-    r.pos.x -= g.rx * side * push;
-    r.pos.z -= g.rz * side * push;
-    const vn = r.vel.x * g.rx * side + r.vel.z * g.rz * side;
+    r.pos.x -= gx * side * push;
+    r.pos.z -= gz * side * push;
+    const vn = r.vel.x * gx * side + r.vel.z * gz * side;
     if (vn > 0) {
-      r.vel.x -= g.rx * side * vn * 1.35;
-      r.vel.z -= g.rz * side * vn * 1.35;
-      // scrape
-      r.vel.multiplyScalar(1 - clamp(vn * 0.012, 0, 0.25));
+      // a bumper, not a wall: it takes the speed going into it, gives a little back, and keeps most of the speed
+      // along it
+      r.vel.x -= gx * side * vn * 1.18;
+      r.vel.z -= gz * side * vn * 1.18;
+      r.vel.multiplyScalar(1 - clamp(vn * 0.005, 0, 0.1));
+      // and the curved lip turns the nose along the road, so a hard hit becomes a slide down the rail instead of a
+      // bounce back across the road into the other one
+      const hx = Math.sin(r.yaw);
+      const hz = Math.cos(r.yaw);
+      const hn = hx * gx * side + hz * gz * side;
+      if (hn > 0.05) {
+        const tx = hx - gx * side * hn;
+        const tz = hz - gz * side * hn;
+        let d = Math.atan2(tx, tz) - r.yaw;
+        d = Math.atan2(Math.sin(d), Math.cos(d));
+        const k = clamp(vn / 25, 0.15, 0.6);
+        r.yaw += d * k;
+        r.yawRate *= 1 - k;
+      }
     }
     return Math.max(0, vn);
   }
@@ -919,7 +1109,7 @@ export class TrackWorld {
     for (let k = 0; k < m.N; k++) {
       const j = m.wrap(i - k);
       let ok = true;
-      for (let q = -3; q <= 12; q++) if (!solidIn(m.mask[m.wrap(j + q)], mode)) ok = false;
+      for (let q = -3; q <= 12; q++) if (!solidIn(m.mask[m.wrap(j + q)], mode) || m.cling?.[m.wrap(j + q)] || m.warpK?.[m.wrap(j + q)] > 0) ok = false;
       for (const o of this.obstacles) if (o.path === m && Math.abs(o.i - j) < 10) ok = false;
       if (ok) {
         i = j;

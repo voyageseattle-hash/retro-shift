@@ -1091,10 +1091,10 @@ export class Quake {
           R.app.audio.play('scrape');
         }
       }
-      if (r.lavaT > 1.0) {
-        if (r.isPlayer) R.emitP(r, 'popup', { text: 'BURNED', color: '#ff7a2a' });
-        r.lavaT = 0;
-        R.wreck(r, null);
+      // lava burns the hull away while you're in it: about two seconds from full
+      if (r.lavaT > 0.25) {
+        if (r.hp <= 50 * dt + 1 && r.isPlayer) R.emitP(r, 'popup', { text: 'BURNED', color: '#ff7a2a' });
+        R.hurt(r, 50 * dt, null, null, true);
       }
     }
     // the volcanoes aim at anyone not in blue, every few seconds
@@ -1232,8 +1232,9 @@ export class Quake {
       if (Math.abs(r.pos.y - b.y) > 6) continue;
       if (d2 < 2.6 ** 2) {
         if (r.isPlayer) R.emitP(r, 'popup', { text: 'LAVA BOMB', color: '#ff7a2a' });
-        R.wreck(r, null);
+        if (!R.hurt(r, 55) && r.spinOut(1, Math.random() < 0.5 ? -1 : 1)) r.vel.multiplyScalar(0.5);
       } else if (d2 < b.radius ** 2) {
+        if (R.hurt(r, 14)) continue;
         if (r.spinOut(0.8, Math.random() < 0.5 ? -1 : 1)) r.vel.multiplyScalar(0.55);
         R.scrape(r, 14, _d.set(r.pos.x - b.x, 0, r.pos.z - b.z).normalize());
         if (r.isPlayer) {
