@@ -394,9 +394,11 @@ export class Audio {
     for (const n of ev.notes) {
       inst(this, t, n + tr, dur, ev.vel, dest, {
         from: ev.slide && ev.from !== null ? ev.from + tr : null,
+        prev: ev.from !== null && ev.from !== undefined ? ev.from + tr : null,
         slide: ev.slide,
         accent: ev.accent,
         cut,
+        duty: m.duty,
       });
     }
   }
