@@ -5,6 +5,7 @@ import { el, Menu } from './ui.js';
 import { formatTime } from '../core/util.js';
 import { SCHOOL, nextDrill } from '../game/school.js';
 import { eventBest } from '../game/events.js';
+import { BOTH, RED, BLUE } from '../world/shift.js';
 
 const TIER = [
   { name: 'NO MEDAL', color: '#8a7aa8' },
@@ -21,7 +22,7 @@ export function schoolMenu(ui, focus = 0) {
   ui.hideHud();
   ui.app.showAttract(true);
   const s = el('div', 'screen school');
-  s.innerHTML = '<h2>SHIFT SCHOOL</h2><div class="sub">Six short drills, one for each thing a course asks of you. Earn gold in all six and you are ready for anything.</div>';
+  s.innerHTML = '<h2>SHIFT SCHOOL</h2><div class="sub">Seven short drills, one for each thing a course asks of you. Start with THREE FORMS. Earn gold in all seven and you are ready for anything.</div>';
   const wrap = el('div', 'school-wrap');
   const list = el('div', 'list');
   const info = el('div', 'school-info');
@@ -40,11 +41,39 @@ export function schoolMenu(ui, focus = 0) {
     return {
       label: `<span class="sd-num">${d.num}</span>${d.title}<i class="sd-medal" style="--mc:${t.color}" title="${t.name}">${b?.tier ? '●' : '○'}</i>`,
       onFocus: () => show(d),
-      action: () => ui.app.startEvent(d),
+      action: () => drillBrief(ui, d),
     };
   });
   items.push({ label: 'BACK', action: () => ui.title(), onFocus: () => (info.innerHTML = '') });
   ui.menu = new Menu(ui.app, list, items, { focus, onBack: () => ui.title() });
+  ui.menu.nodes.forEach((n) => list.appendChild(n));
+}
+
+// The three lenses as cards: which form each one is, its button, and whether this drill uses it.
+const LENSES = [
+  { m: RED, cls: 'red', name: 'RED', form: 'THE BLADE', job: 'Fastest. Clings to the road, fits a slit, rides a wall run.', key: 'red' },
+  { m: BOTH, cls: 'both', name: 'BOTH', form: 'THE PAIR', job: 'Steady. Sees both worlds and refills SHIFT.', key: 'both' },
+  { m: BLUE, cls: 'blue', name: 'BLUE', form: 'THE SKIMMER', job: 'Grips. Skims water and glides a gap.', key: 'blue' },
+];
+export function lensCards(ui, allowed = [RED, BOTH, BLUE]) {
+  return `<div class="lens-cards">${LENSES.map(
+    (l) => `<div class="lens-card ${l.cls}${allowed.includes(l.m) ? '' : ' off'}"><b>${l.name}</b><span class="lc-form">${l.form}</span><span class="lc-key">${ui.app.input.glyph(l.key)}</span><p>${allowed.includes(l.m) ? l.job : 'Not in this drill.'}</p></div>`,
+  ).join('')}</div>`;
+}
+
+// Before a drill: what it teaches, the steps, and the lenses it uses (a drill only lets you shift to those).
+export function drillBrief(ui, d) {
+  ui.clear();
+  const s = el('div', 'screen school brief');
+  const allowed = d.lenses || d.rules?.lens || [RED, BOTH, BLUE];
+  s.innerHTML = `<h2>${d.num}. ${d.title}</h2><div class="sub">${d.blurb}</div>
+    ${lensCards(ui, allowed)}
+    <ol class="brief-how">${d.how.map((h) => `<li>${h}</li>`).join('')}</ol>`;
+  const list = el('div', 'list row');
+  s.appendChild(list);
+  ui.root.appendChild(s);
+  const back = () => schoolMenu(ui, Math.max(0, SCHOOL.indexOf(d)));
+  ui.menu = new Menu(ui.app, list, [{ label: 'GO', action: () => ui.app.startEvent(d) }, { label: 'BACK', action: back }], { onBack: back });
   ui.menu.nodes.forEach((n) => list.appendChild(n));
 }
 
@@ -62,7 +91,7 @@ export function eventHud(ui, race) {
   const h = ev.hud();
   const t = TIER[h.tier];
   const val = h.kind === 'count' ? `${Math.round(h.value)} / ${fmt('count', h.target)}` : fmt(h.kind, h.value);
-  const html = `<b>${h.title}</b><span class="ev-val">${val}</span>${h.timeLeft != null ? `<span class="ev-time">${Math.ceil(h.timeLeft)}s</span>` : ''}<i style="color:${t.color}">${h.failed ? 'FAILED' : h.kind === 'count' || h.kind === 'survive' ? t.name : `GOLD ${fmt(h.kind, h.target)}`}</i>`;
+  const html = `<b>${h.title}</b><span class="ev-val">${val}</span>${h.timeLeft != null ? `<span class="ev-time">${Math.ceil(h.timeLeft)}s</span>` : ''}${h.note ? `<span class="ev-note">${h.note}</span>` : ''}<i style="color:${t.color}">${h.failed ? 'FAILED' : h.kind === 'count' || h.kind === 'survive' ? t.name : `GOLD ${fmt(h.kind, h.target)}`}</i>`;
   if (box._html !== html) box.innerHTML = box._html = html;
 }
 
@@ -85,7 +114,7 @@ export function eventResults(ui, race) {
   const next = school ? nextDrill(d.id) : null;
   const items = [
     { label: 'RETRY', action: () => ui.app.startEvent(d) },
-    ...(next && !ev.failed ? [{ label: `NEXT · ${next.title}`, action: () => ui.app.startEvent(next) }] : []),
+    ...(next && !ev.failed ? [{ label: `NEXT · ${next.title}`, action: () => drillBrief(ui, next) }] : []),
     { label: school ? 'SHIFT SCHOOL' : 'BACK', action: () => ui.app.quitEvent() },
   ];
   ui.menu = new Menu(ui.app, list, items, { focus: next && ev.tier > 0 ? 1 : 0, onBack: () => ui.app.quitEvent() });

@@ -614,7 +614,7 @@ export class UI {
           'Hold a lens and SHIFT drains. BOTH fills it back up.',
           'RED is the Blade: it clings to drops and crests, fits a slit, rides a wall run. BLUE is the Skimmer: it skims water and glides a gap.',
           'Every course hides shortcuts and boost pads that only one lens can see. Watch for the signs.',
-          'Grand Prix is waiting. HOW TO PLAY has every button.',
+          'Grand Prix is waiting. New to the three forms? SHIFT SCHOOL has a one-minute drill for each. HOW TO PLAY has every button.',
         ],
       },
       () => this.app.quit(),
