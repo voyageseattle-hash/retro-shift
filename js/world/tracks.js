@@ -297,7 +297,11 @@ export const TRACKS = [
           [-271.8, -66.9, 28.0], [-289.0, -77.3, 24.4], [-306.1, -87.6, 21.2], [-318.9, -95.4, 19.1], [-336.1, -105.8, 16.7],
           [-348.9, -113.6, 15.2], [-363.5, -122.3, 13.8], [-373.5, -130.5, 13.2], [-377.0, -146.5, 13.0],
         ],
-      }],
+      },
+      // the form route (formroutes.js): on the run home, a wall only the Blade rides. (A slit and then a wall run on
+      // the climb both stalled rivals: they reach it short of SHIFT and speed, so the climb keeps its corkscrew instead.)
+      { from: P(37, 0.0), to: P(38, 0.9), mask: M.ALL, side: 1, lift: 8, label: 'WALL RUN', sub: 'RED CLINGS · OTHERS FALL', wallrun: { from: 0.28, to: 0.76, bank: 0.95 } },
+      ],
       gaps: [
         { at: P(6, 0), len: 30, mask: M.R, noRails: false },
         { at: P(14, 0), len: 30, mask: M.B, noRails: false },
@@ -310,7 +314,7 @@ export const TRACKS = [
       ],
       // the CORKSCREW (warp.js): the road rolls a full turn; the Blade rides it upside down, BOTH and BLUE launch through it
       screws: [{ at: P(34, 0.2), len: 140 }],
-      boosts: [{ at: P(1, 0.5) }, { at: P(12, 0.5) }, { at: P(24, 0.5) }, { at: P(34, 0.05), mask: M.RO }, { at: P(18, 0.5), mask: M.BO }, { at: P(35, 0.5), mask: M.BO }],
+      boosts: [{ at: P(1, 0.5) }, { at: P(12, 0.5) }, { at: P(24, 0.5) }, { at: P(34, 0.05), mask: M.RO }, { at: P(18, 0.5), mask: M.BO }, { at: P(35, 0.5), mask: M.BO }, { path: 'b1', at: 0.85 }],
       tips: [{ at: P(33, 0.7), text: 'CORKSCREW: RED RIDES IT UPSIDE DOWN · BOTH AND BLUE TAKE THE LAUNCHER', key: 'red' }],
       shards: [{ at: P(8, 0.2), n: 3 }, { at: P(20, 0.2), n: 3 }, { at: P(36, 0.6), n: 3, mask: M.R }],
     }),
