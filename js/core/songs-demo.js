@@ -228,4 +228,75 @@ const coinop = song({
   form: ['A', 'B', 'A'],
 });
 
-export const DEMOS = { matinee, chip, coinop };
+
+// ------------------------------------------------------------------ 1b. NEON MATINEE
+// The matinee's surf guitar and theremin on top of the game's synthwave/EBM engine room: four-on-the-floor kick,
+// a gated 16th-note bass line under every lens, sidechained saw pads and an arpeggiator.
+const M = matinee.parts;
+const neon = song({
+  name: 'Neon Matinee',
+  bpm: 128,
+  tonic: 64,
+  delayBeats: 0.75,
+  pumpDepth: 0.6,
+  kit: { kick: 'punch', snare: 'crack' },
+  mix: {
+    kick: { drum: 'kick', vol: 0.6 },
+    clap: { drum: 'clap', vol: 0.8, verb: 0.3 },
+    snare: { drum: 'snare', vol: 0.9, verb: 0.25 },
+    hat: { drum: 'hat', vol: 1.9, pan: 0.22 },
+    ohat: { drum: 'ohat', vol: 1.4, pan: 0.28 },
+    crash: { drum: 'crash', vol: 0.75, pan: -0.25, verb: 0.25 },
+    fx: { mode: 'fx', vol: 0.8, verb: 0.35 },
+    // the engine room: in every lens
+    ebm: { inst: 'bass', mode: 'bass', oct: 2, vol: 0.35, cut: 900, pump: true },
+    // red: surf guitar and gated saw stabs
+    lead: { inst: 'surf', mode: 'notes', vol: 1.4, verb: 0.45, delay: 0.24, pan: -0.15, world: 'red' },
+    stab: { inst: 'stab', mode: 'chord', oct: 4, vol: 1.0, pan: -0.35, world: 'red' },
+    // blue: theremin, pumped saw pad, glass arpeggio
+    theremin: { inst: 'theremin', mode: 'notes', vol: 0.55, verb: 0.55, delay: 0.25, pan: 0.15, world: 'blue' },
+    pad: { inst: 'pad', mode: 'chord', oct: 4, vol: 0.9, pump: true, verb: 0.35, world: 'blue' },
+    arp: { inst: 'pluck', mode: 'arp', oct: 5, vol: 0.7, pan: 0.35, delay: 0.3, verb: 0.3, world: 'blue' },
+  },
+  parts: {
+    A: {
+      bars: 8,
+      chords: 'Em C Am B7',
+      crash: true,
+      tracks: {
+        lead: M.A.tracks.lead,
+        theremin: M.A.tracks.theremin,
+        ebm: '.xxx.xxx.xoo.xxx',
+        stab: '..x...x...x..x..',
+        pad: 'x---------------',
+        arp: '0123012301230123',
+        kick: 'x...x...x...x...',
+        clap: '....x.......x...',
+        hat: 'x.x.x.x.x.x.x.x.',
+        ohat: '..x...x...x...x.',
+        fx: R(7) + '|R---------------',
+      },
+    },
+    B: {
+      bars: 8,
+      chords: 'C D Em Em C D B7 B7',
+      crash: true,
+      tracks: {
+        lead: M.B.tracks.lead,
+        theremin: M.B.tracks.theremin,
+        ebm: '.xxx.xxx.xxx.xox',
+        stab: 'x..x..x...x.x...',
+        pad: 'x---------------',
+        arp: '0.1.2.3.2.1.2.3.',
+        kick: 'x...x...x...x...',
+        clap: '....x.......x...',
+        snare: rep('................', 8, '....x...x.x.xxxx'),
+        hat: 'xoxoxoxoxoxoxoxo',
+        ohat: '..x...x...x...x.',
+      },
+    },
+  },
+  form: ['A', 'B', 'A'],
+});
+
+export const DEMOS = { matinee, neon, chip, coinop };
