@@ -232,7 +232,7 @@ export const DRUMS = {
   kick(A, t, v, out, o = {}) {
     const style = o.style || 'punch';
     const P = {
-      punch: { f0: 170, f1: 48, bend: 0.055, decay: 0.34, click: 0.5, curve: 'warm' },
+      punch: { f0: 175, f1: 52, bend: 0.05, decay: 0.26, click: 0.7, curve: 'warm' },
       hard: { f0: 230, f1: 50, bend: 0.045, decay: 0.3, click: 0.7, curve: 'drive' },
       boom: { f0: 130, f1: 38, bend: 0.1, decay: 0.8, click: 0.3, curve: 'soft' },
       soft: { f0: 120, f1: 50, bend: 0.06, decay: 0.24, click: 0.15, curve: 'soft' },

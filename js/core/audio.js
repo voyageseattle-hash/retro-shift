@@ -358,6 +358,8 @@ export class Audio extends Engine {
   // ------------------------------------------------------------ music
   playCourse(courseId) {
     this.world = 'both';
+    this.flags.hot = false;
+    this.flags.lap = 1;
     this.playSong(SONGS[COURSE_SONG[courseId]] || SONGS.circuit);
   }
   playTitle() {
@@ -401,7 +403,7 @@ export class Audio extends Engine {
       const dz = r.pos.z - listener.pos.z;
       const dy = r.pos.y - listener.pos.y;
       const d = Math.hypot(dx, dy, dz) + 0.001;
-      const vol = r.respawnT > 0 ? 0 : clamp(1 - d / 140, 0, 1) ** 2 * 0.9;
+      const vol = r.respawnT > 0 ? 0 : clamp(1 - d / 140, 0, 1) ** 2 * 0.6;
       // right of the listener = -fwd.z, fwd.x (our road convention)
       const side = (dx * -listener.fwd.z + dz * listener.fwd.x) / d;
       e.pan.pan.setTargetAtTime(clamp(-side, -0.95, 0.95), this.now(), 0.05);
@@ -499,20 +501,30 @@ export class Audio extends Engine {
     if (!this.ctx || this.ctx.state !== 'running') return;
     const t = this.now();
     const W = this.sfxWet;
+    // The sounds a player can set off many times a second (shifting, grinding a rail, mashing a shift with no
+    // energy) are rate-limited, so they read as one event and not a buzz.
+    const lim = { shift: 0.07, scrape: 0.22, wall: 0.25, denied: 0.35, smash: 0.08, phase: 0.12, shard: 0.04 }[name];
+    if (lim) {
+      const last = this.throttle.get(`rs-${name}`) ?? -1;
+      if (t - last < lim) return;
+      this.throttle.set(`rs-${name}`, t);
+    }
     switch (name) {
       case 'shift': {
-        // a filtered whoosh: up into red, down into blue, a chord swell back into both
-        const [a, b] = arg === RED ? [500, 4200] : arg === BLUE ? [5000, 300] : [900, 1800];
-        this.swell(t, 0.42, 0.5, W, 'bandpass', a, b, 3);
+        // a filtered whoosh: up into red, down into blue, a chord swell back into both. It's the button players
+        // press most, so it's short and soft, and never quite the same twice.
+        const [a, b] = arg === RED ? [600, 3400] : arg === BLUE ? [4200, 380] : [900, 1700];
+        const j = 0.94 + Math.random() * 0.12;
+        this.swell(t, 0.3, 0.26, W, 'bandpass', a * j, b * j, 1.6);
         const base = arg === RED ? 57 : arg === BLUE ? 64 : 60;
         const type = arg === RED ? 'sawtooth' : arg === BLUE ? 'sine' : 'triangle';
-        for (const [k, iv] of [0, 7, 12].entries()) this.tone(type, mtof(base + iv), t + k * 0.03, 0.32, 0.07, W, { filter: arg === RED ? 2400 : 5000 });
-        this.thump(t, 90, 40, 0.18, 0.25);
+        for (const [k, iv] of [0, 7, 12].entries()) this.tone(type, mtof(base + iv) * j, t + k * 0.025, 0.22, 0.04, W, { filter: arg === RED ? 1800 : 4000 });
+        this.thump(t, 90, 40, 0.14, 0.16);
         break;
       }
       case 'denied':
-        this.tone('square', 110, t, 0.16, 0.12, this.sfxDry, { filter: 900 });
-        this.tone('square', 104, t + 0.08, 0.16, 0.1, this.sfxDry, { filter: 900 });
+        this.tone('square', 110, t, 0.12, 0.07, this.sfxDry, { filter: 700 });
+        this.tone('square', 104, t + 0.07, 0.12, 0.06, this.sfxDry, { filter: 700 });
         break;
       case 'phase':
         this.tone('sine', mtof(84), t, 0.22, 0.07, W, { fm: [3.5, 0.6] });
@@ -532,9 +544,14 @@ export class Audio extends Engine {
         super.play('crunch');
         super.play('hit');
         break;
-      case 'scrape':
-        super.play('clank', 0.6);
+      case 'scrape': {
+        // grinding along a rail: a short gritty rasp with a few sparks (it used to ring a metal clank 12 times a second)
+        const f = 900 + Math.random() * 700;
+        this.noiseHit(t, 0.16, 0.16, this.sfxDirty, 'bandpass', f, 1.4, f * 0.6);
+        this.noiseHit(t, 0.05, 0.07, this.sfxDry, 'highpass', 5000);
+        this.thump(t, 120, 60, 0.06, 0.18);
         break;
+      }
       case 'wreck':
         // the crash, then the car's lines raining down like glass
         super.play('wreck');
@@ -576,6 +593,10 @@ export class Audio extends Engine {
       case 'finish':
         this.stinger(arg === 1 ? 'win' : 'lose');
         super.play('finish');
+        break;
+      case 'lap':
+        super.play('lap');
+        this.setLap(Math.max(2, this.flags.lap));
         break;
       case 'finalLap':
         this.setFinalLap(true);

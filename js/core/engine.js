@@ -44,7 +44,7 @@ export class Audio {
     this.pendingSong = null;
     this.engines = [];
     this.throttle = new Map();
-    this.flags = { hot: false, danger: false, pause: false, drop: false };
+    this.flags = { hot: false, danger: false, pause: false, drop: false, lap: 1 };
     this.manifest = null;
     this.manifestBase = '';
     this.files = new Map();
@@ -103,7 +103,12 @@ export class Audio {
     this.musicFilter.frequency.value = 20000;
     this.musicFilter.Q.value = 0.8;
     this.music = g(this.musicVolume);
-    this.musicIn.connect(this.musicFilter).connect(this.music).connect(this.glue);
+    // Nothing useful lives under ~35 Hz on laptop or TV speakers; it only eats headroom and makes the limiter pump.
+    const musicHP = ctx.createBiquadFilter();
+    musicHP.type = 'highpass';
+    musicHP.frequency.value = 36;
+    musicHP.Q.value = 0.7;
+    this.musicIn.connect(musicHP).connect(this.musicFilter).connect(this.music).connect(this.glue);
 
     // Long reverb for the music.
     this.verbIn = g(1);
@@ -139,7 +144,11 @@ export class Audio {
 
     // Effects bus: dry, roomy and dirty entry points.
     this.sfx = g(this.sfxVolume);
-    this.sfx.connect(this.glue);
+    const sfxHP = ctx.createBiquadFilter();
+    sfxHP.type = 'highpass';
+    sfxHP.frequency.value = 30;
+    sfxHP.Q.value = 0.7;
+    this.sfx.connect(sfxHP).connect(this.glue);
     this.sfxDry = g(1);
     this.sfxDry.connect(this.sfx);
     const room = ctx.createConvolver();
@@ -275,6 +284,7 @@ export class Audio {
     this.songToken++;
     this.flags.hot = false;
     this.flags.danger = false;
+    this.flags.lap = 1;
     this.updateMusicFilter();
     const t = this.now() + 0.08;
     const out = this.ctx.createGain();
@@ -285,7 +295,7 @@ export class Audio {
     if (custom) return this.playFileSong(def, custom, out, t);
     const pump = this.ctx.createGain();
     pump.connect(out);
-    this.song = this.makeSeq(def, out, pump, t, 0);
+    this.song = this.makeSeq(def, out, pump, t, def.transpose || 0);
     this.setDelayTime(((def.delayBeats || 0.75) * 60) / def.bpm);
     if (!this.offline) this.song.timer = setInterval(() => this.schedule(this.song), 25);
     this.schedule(this.song);
@@ -340,6 +350,9 @@ export class Audio {
       if (ev.cond === 'hot' && !hot) continue;
       if (ev.cond === 'cool' && hot) continue;
       if (ev.cond === 'danger' && !danger) continue;
+      // lap layers: !l2 joins from lap 2 (and on the final lap), !l1 only plays on lap 1
+      if (ev.cond === 'l2' && this.flags.lap < 2 && !hot) continue;
+      if (ev.cond === 'l1' && (this.flags.lap >= 2 || hot)) continue;
       this.trigger(song, ev, t, sd);
     }
     if (s === 0 && part.crash && mix.crash) DRUMS.crash(this, t, 0.9, this.channel(song, 'crash').in);
@@ -488,8 +501,13 @@ export class Audio {
   setFinalLap(on, sting = true) {
     if (this.flags.hot === on) return;
     this.flags.hot = on;
+    if (on) this.flags.lap = Math.max(this.flags.lap, 2);
     if (on && sting) this.stinger('finalLap');
     this.updateStems();
+  }
+  // Lap 2 on brings in the songs' !l2 layers (open hats, claps, arps), so the music builds as the race does.
+  setLap(n) {
+    this.flags.lap = n;
   }
   // Pass the player's health 0..1 every frame; hysteresis stops it flickering.
   setHealth(h01) {
@@ -688,9 +706,9 @@ export class Audio {
         break;
       }
       case 'hit': {
-        const f = r(1700, 2600);
-        this.tone('sine', f, t, 0.09, 0.14 * v, wet, { fm: [2.76, 1.2], slideTo: f * 0.8 });
-        this.noiseHit(t, 0.03, 0.2 * v, dry, 'highpass', 4500);
+        const f = r(1100, 1600);
+        this.tone('sine', f, t, 0.08, 0.09 * v, wet, { fm: [2.76, 1.0], slideTo: f * 0.8 });
+        this.noiseHit(t, 0.03, 0.14 * v, dry, 'highpass', 3500);
         this.thump(t, 220, 90, 0.05, 0.2 * v);
         break;
       }
@@ -1142,7 +1160,12 @@ export class Audio {
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
     lp.frequency.value = 600;
-    lp.Q.value = 2.5;
+    lp.Q.value = 1.3;
+    // Keeps the engine's rumble above what speakers can play, so it doesn't eat the mix's headroom.
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 62;
+    hp.Q.value = 0.7;
     const o1 = ctx.createOscillator();
     o1.type = 'sawtooth';
     const o2 = ctx.createOscillator();
@@ -1150,8 +1173,8 @@ export class Audio {
     const o3 = ctx.createOscillator();
     o3.type = 'sine';
     const g1 = g(0.25);
-    const g2 = g(0.16);
-    const g3 = g(0.55);
+    const g2 = g(0.08);
+    const g3 = g(0.3);
     o1.connect(g1).connect(shaper);
     o2.connect(g2).connect(shaper);
     shaper.connect(lp);
@@ -1161,10 +1184,10 @@ export class Audio {
     throb.type = 'triangle';
     const tg = g(0.25);
     throb.connect(tg).connect(am.gain);
-    lp.connect(am).connect(out).connect(this.sfx);
-    // Inverter whine.
+    lp.connect(am).connect(hp).connect(out).connect(this.sfx);
+    // Inverter whine: a soft triangle kept low and quiet (a pure sine up near 3 kHz cut through everything).
     const whine = ctx.createOscillator();
-    whine.type = 'sine';
+    whine.type = 'triangle';
     const wg = g(0);
     whine.connect(wg).connect(this.sfx);
     // Wind.
@@ -1172,8 +1195,9 @@ export class Audio {
     wind.buffer = this.buffers.noise;
     wind.loop = true;
     const wf = ctx.createBiquadFilter();
-    wf.type = 'lowpass';
-    wf.frequency.value = 700;
+    wf.type = 'bandpass';
+    wf.frequency.value = 650;
+    wf.Q.value = 0.5;
     const windG = g(0);
     wind.connect(wf).connect(windG).connect(this.sfx);
     // Tyre screech.
@@ -1182,8 +1206,8 @@ export class Audio {
     sq.loop = true;
     const sqf = ctx.createBiquadFilter();
     sqf.type = 'bandpass';
-    sqf.frequency.value = 1800;
-    sqf.Q.value = 7;
+    sqf.frequency.value = 1100;
+    sqf.Q.value = 2.2;
     const sqg = g(0);
     sq.connect(sqf).connect(sqg).connect(this.sfx);
     for (const o of [o1, o2, o3, throb, whine, wind, sq]) o.start(t);
@@ -1201,22 +1225,23 @@ export class Audio {
     const base = (38 + gear * 7 + within * 34 + boost * 22) * eng.pitch * (0.9 + rpm * 0.2);
     eng.o1.frequency.setTargetAtTime(base, t, 0.05);
     eng.o2.frequency.setTargetAtTime(base * 0.5, t, 0.05);
-    eng.o3.frequency.setTargetAtTime(base * 0.25, t, 0.05);
+    eng.o3.frequency.setTargetAtTime(base, t, 0.05);
     eng.throb.frequency.setTargetAtTime(base * 0.25, t, 0.05);
-    eng.whine.frequency.setTargetAtTime(300 + speed01 * 2400 * eng.pitch + boost * 900, t, 0.08);
-    eng.wg.gain.setTargetAtTime((0.008 + speed01 * 0.02 + boost * 0.035) * volume, t, 0.1);
+    eng.whine.frequency.setTargetAtTime(240 + speed01 * 900 * eng.pitch + boost * 380, t, 0.08);
+    eng.wg.gain.setTargetAtTime((0.003 + speed01 * 0.006 + boost * 0.012) * volume, t, 0.1);
     eng.lp.frequency.setTargetAtTime(420 + throttle * 1000 + speed01 * 1400 + boost * 1800, t, 0.08);
-    eng.out.gain.setTargetAtTime((0.1 + throttle * 0.08 + boost * 0.06) * volume, t, 0.08);
+    eng.out.gain.setTargetAtTime((0.075 + throttle * 0.06 + boost * 0.05) * volume, t, 0.08);
     eng.windG.gain.setTargetAtTime(speed01 * speed01 * 0.07 * volume, t, 0.2);
-    eng.sqg.gain.setTargetAtTime(clamp(slip, 0, 1) * 0.12 * volume, t, 0.05);
-    eng.sqf.frequency.setTargetAtTime(1400 + speed01 * 900, t, 0.1);
+    // Tyres: a soft hiss that only comes in on a real slide, so a long drift doesn't whistle the whole way round.
+    eng.sqg.gain.setTargetAtTime(clamp((slip - 0.15) / 0.85, 0, 1) * 0.06 * volume, t, 0.08);
+    eng.sqf.frequency.setTargetAtTime(900 + speed01 * 500, t, 0.1);
     // Lifting off at speed pops the exhaust.
-    if (eng.lastThrottle > 0.7 && throttle < 0.2 && speed01 > 0.45 && t - eng.popT > 0.8) {
+    if (eng.lastThrottle > 0.7 && throttle < 0.2 && speed01 > 0.45 && t - eng.popT > 2.5) {
       eng.popT = t;
       const n = 1 + Math.floor(Math.random() * 3);
       for (let i = 0; i < n; i++) {
         const at = t + 0.05 + i * (0.07 + Math.random() * 0.06);
-        this.sound('backfire', at, 0.5 * volume);
+        this.sound('backfire', at, 0.3 * volume);
       }
     }
     eng.lastThrottle = throttle;
