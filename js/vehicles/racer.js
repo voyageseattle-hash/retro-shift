@@ -9,6 +9,8 @@ import { BOTH, RED, BLUE, SHIFT, LENS, solidIn, COLORS } from '../world/shift.js
 import { buildBody, Trail } from './bodies.js';
 import { FORMS, addForms, updateForms } from './forms.js';
 import { bendRacer, lensHeld, PIPE, SCREW } from '../world/warp.js';
+import { DRIFT_COLORS } from '../game/feel.js';
+import { ACCESS } from '../core/access.js';
 
 const G_AIR = 27;
 const G_SLOPE = 14;
@@ -494,14 +496,14 @@ export class Racer {
     const m = this.model;
     const col = this.mode === RED ? COLORS.red : this.mode === BLUE ? COLORS.blue : 0xffffff;
     m.lineMat.color.set(col);
-    const flash = this.shiftT > 0 ? 1 + this.shiftT * 4 : 1;
+    const flash = this.shiftT > 0 ? 1 + this.shiftT * (ACCESS.calm ? 0.6 : 4) : 1;
     m.lineMat.color.multiplyScalar(flash);
     // the hull reflects the worlds you can see: red left and blue right in both, one colour through a single lens
     if (m.hullMat.uniforms) {
       const U = m.hullMat.uniforms;
       U.uL.value.set(this.mode === BLUE ? COLORS.blue : COLORS.red);
       U.uR.value.set(this.mode === RED ? COLORS.red : COLORS.blue);
-      U.uFlash.value = Math.max(0, this.shiftT || 0) * 2;
+      U.uFlash.value = Math.max(0, this.shiftT || 0) * (ACCESS.calm ? 0.3 : 2);
       if (this.livery?.paint === 'spectrum') U.uPaint.value.copy(m.accentMat.color);
     }
     const thrust = clamp(Math.abs(this.speed) / this.phys.topSpeed, 0, 1.4) + (this.boostTime > 0 ? 0.8 : 0);
@@ -518,15 +520,21 @@ export class Racer {
       if (L.glow === 'spectrum') m.glowMat.color.copy(m.accentMat.color);
     }
     const base = L.trail === 'spectrum' || (L.trail === undefined && L.paint === 'spectrum') ? m.accentMat.color.getHex() : hexOf(L.trail);
-    m.flameMat.color.set(this.boostTime > 0 ? 0xff4fd8 : this.drift.level >= 2 ? 0xff8a3a : 0x8ac8ff); // blue-white exhaust; the trail carries the livery
+    // blue-white exhaust (the trail carries the livery); a drift's stage colours it BLUE, RED, then flickering PRISM,
+    // and a turbo burns in the colour of the stage that fired it
+    const dl = this.drift.active ? this.drift.level : 0;
+    if (dl) this.turboCol = DRIFT_COLORS[dl];
+    else if (this.boostTime <= 0) this.turboCol = 0;
+    const fc = dl === 3 && Math.floor(this.animT * 30) % 3 === 0 ? 0xffffff : dl ? DRIFT_COLORS[dl] : this.boostTime > 0 ? this.turboCol || 0xff4fd8 : 0x8ac8ff;
+    m.flameMat.color.set(fc);
     if (this.trailOn) {
-      this.trail.setColor(this.boostTime > 0 ? 0xff4fd8 : base);
+      this.trail.setColor(this.boostTime > 0 ? this.turboCol || 0xff4fd8 : base);
       const yaw = this.yaw;
       if (V.on) _v.copy(V.pos).addScaledVector(V.fwd, -2.1).addScaledVector(V.up, 0.45);
       else _v.set(this.pos.x - Math.sin(yaw) * 2.1, this.pos.y + 0.45, this.pos.z - Math.cos(yaw) * 2.1);
       this.trail.update(dt, _v, -Math.cos(yaw), Math.sin(yaw), clamp(Math.abs(this.speed) / this.phys.topSpeed, 0, 1) + (this.boostTime > 0 ? 0.4 : 0), this.grounded || this.airTime < 0.5);
     }
-    m.glowMat.opacity = 0.34 + (this.drift.active ? 0.2 : 0);
+    m.glowMat.opacity = 0.34 + (this.drift.active ? 0.12 + 0.08 * this.drift.level : 0);
     // spinning out after a hit
     if (this.invuln > 0 && this.drawIn === undefined) root.visible = Math.floor(this.invuln * 14) % 2 === 0 || this.invuln < 0.2;
     else root.visible = true;

@@ -150,11 +150,13 @@ export class ChaseCamera {
     const lookTarget = _l.copy(A).addScaledVector(f, 6 * dir * v.scale);
     lookTarget.y += 1.4 * v.scale + Math.sin(pitch) * 6 * dir;
     this.look.lerp(lookTarget, 1 - Math.exp(-14 * dt));
-    this.fov = damp(this.fov, 62 + sp * 20 + (boosting ? 12 : 0), 3, dt);
+    // the view stretches with speed (a touch more past top speed, on a boost or a downhill), so fast reads as fast
+    this.fov = damp(this.fov, 61 + sp * 22 + Math.max(0, sp - 1) * 10 + (boosting ? 13 : 0), 3, dt);
     // a constant fine buzz near top speed
     if (sp > 0.8 && v.grounded) this.shake = Math.max(this.shake, Math.min(0.12, (sp - 0.8) * 0.3) * this.shakeScale);
     // Lean into drifts a touch.
-    const rollT = flying ? -(v.bank || 0) * 0.18 : v.drift.active && v.grounded ? -v.drift.dir * 0.035 : clamp(-v.yawRate * 0.012, -0.02, 0.02);
+    // (a drift leans harder as it charges through its stages)
+    const rollT = flying ? -(v.bank || 0) * 0.18 : v.drift.active && v.grounded ? -v.drift.dir * (0.03 + 0.01 * v.drift.level) : clamp(-v.yawRate * 0.012, -0.02, 0.02);
     this.roll = damp(this.roll, rollT * this.shakeScale, 5, dt);
     this.apply(dt);
   }

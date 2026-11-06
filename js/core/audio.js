@@ -564,6 +564,26 @@ export class Audio extends Engine {
       case 'turbo':
         super.play(`miniturbo${clamp(arg || 1, 1, 3)}`);
         break;
+      case 'driftStage':
+        // a drift charging up a stage (feel.js): BLUE, RED, PRISM, each a step higher
+        super.play(`drift${clamp(arg || 1, 1, 3)}`, 0.8);
+        break;
+      case 'whoosh': {
+        // a rival going past close: a short band of air sweeping down, panned to the side it passes on
+        const o = arg || {};
+        const v = o.v ?? 0.6;
+        let dest = this.sfxDry || this.sfx;
+        if (this.ctx.createStereoPanner) {
+          const p = this.ctx.createStereoPanner();
+          p.pan.value = clamp(o.pan || 0, -1, 1);
+          p.connect(dest);
+          dest = p;
+          setTimeout(() => p.disconnect(), 900);
+        }
+        this.swell(t, 0.42, 0.22 * v, dest, 'bandpass', 2600, 520, 1.1);
+        this.noiseHit(t + 0.12, 0.2, 0.08 * v, dest, 'lowpass', 900, 0.8, 300);
+        break;
+      }
       case 'wall':
         super.play('crunch');
         super.play('hit');

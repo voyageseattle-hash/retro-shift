@@ -14,6 +14,7 @@ import { monoDef, medalFor, recordMedal } from './modes.js';
 import { driverOf, pick } from './story.js';
 import { Debris } from './wreck.js';
 import { SpeedLines } from './speedlines.js';
+import { Feel } from './feel.js';
 import { Storms } from './storms.js';
 import { Traffic } from './traffic.js';
 import { Police } from './police.js';
@@ -49,7 +50,9 @@ export class Race {
     this.kind = opts.kind || (opts.rivals === 0 ? 'trial' : 'race');
     this.mono = this.kind === 'mono';
     this.tutorial = this.kind === 'tutorial';
-    this.solo = this.kind === 'trial' || this.mono || this.tutorial;
+    // an event (events.js: SHIFT SCHOOL drills, SHIFT TOUR events) is solo unless it brings rivals
+    this.isEvent = this.kind === 'event';
+    this.solo = this.kind === 'trial' || this.mono || this.tutorial || (this.isEvent && !opts.rivals);
     if (this.mono) def = monoDef(def);
     this.def = def;
     this.opts = opts;
@@ -82,6 +85,7 @@ export class Race {
     this.scene.add(this.debris.mesh);
     this.speedLines = new SpeedLines();
     this.scene.add(this.speedLines.mesh);
+    this.feel = new Feel(this); // drift stages, surface rumble, pass-bys (feel.js)
     this.storms = new Storms(this);
     this.traffic = new Traffic(this);
     this.police = new Police(this);
@@ -169,7 +173,7 @@ export class Race {
     this.lastMode = BOTH;
     // ghosts: your best run and the staff run
     this.ghosts = [];
-    if (this.solo && !this.tutorial) {
+    if (this.solo && !this.tutorial && !this.isEvent) {
       this.recorder = new GhostRecorder();
       const mine = loadGhost(def.id, this.mono);
       if (mine && opts.showGhost !== false) this.addGhost(mine, 0xffffff, 'BEST');
@@ -796,6 +800,7 @@ export class Race {
     }
 
     if (this.recorder && this.state === 'race' && !p.finished) this.recorder.sample(this.raceTime, p);
+    this.event?.update(sim); // the event runner (events.js), when this race is an event
     // rivals talk when they get past you (not too often)
     if (this.state === 'race' && !this.solo && !this.split && !p.finished) {
       const place = this.placeOf(p);
@@ -853,6 +858,7 @@ export class Race {
       cam.update(dt, pl, this.world, C[k].look);
     });
     this.dtLast = dt;
+    this.feel.update(dt);
     if (!this.split) this.env.update(dt, this.t, this.cam.camera);
     if (!this.split) {
       const k = (p.respawnT > 0 || !p.grounded ? 0 : Math.abs(p.speed) / p.phys.topSpeed) + (p.boostTime > 0 ? 0.3 : 0);

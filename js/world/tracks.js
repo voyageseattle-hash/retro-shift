@@ -97,10 +97,14 @@ export const TRACKS = [
       branches: [
         { from: P(1, 0.6), to: P(5, 0.3), mask: M.RO, side: 1, lift: 18, label: 'RED OVERPASS' },
         { from: P(9, 0.2), to: P(13, 0.2), mask: M.BO, side: -1, lift: 10, label: 'BLUE-ONLY CUT' },
+        // the form routes (formroutes.js): off the top deck, a gap only the Skimmer glides; down the far side, a wall
+        // only the Blade rides
+        { from: P(2, 0.3), to: P(4, 0.7), mask: M.ALL, side: -1, lift: 4, label: 'GLIDE GAP', sub: 'BLUE FLOATS IT', profile: [{ at: 0.5, kind: 'step', drop: 3.5, len: 55, end: 0.82 }] },
+        { from: P(10, 0.3), to: P(12, 0.8), mask: M.ALL, side: 1, lift: 8, label: 'WALL RUN', sub: 'RED CLINGS · OTHERS FALL', wallrun: { from: 0.28, to: 0.76, bank: 0.95 } },
       ],
-      gaps: [{ at: P(6, 0.2), len: 40, mask: M.B, noRails: true }],
+      gaps: [{ at: P(6, 0.2), len: 40, mask: M.B, noRails: true }, { path: 'b2', at: 0.5, len: 48, glide: true, noRails: true }],
       obstacles: [...chicane(P(3, 0.1), 0.012, 4), wall(P(7, 0.5), M.R), ...field(P(10, 0.2), 0.06, 8, 7)],
-      boosts: [{ at: P(0, 0.4) }, { at: P(8, 0.5), lat: 0.5, mask: M.BO }, { at: P(12, 0.3), mask: M.RO, lat: -0.4 }, { at: P(14, 0.3), mask: M.RO }],
+      boosts: [{ at: P(0, 0.4) }, { at: P(8, 0.5), lat: 0.5, mask: M.BO }, { at: P(12, 0.3), mask: M.RO, lat: -0.4 }, { at: P(14, 0.3), mask: M.RO }, { path: 'b2', at: 0.8 }, { path: 'b3', at: 0.85 }],
       shards: [{ at: P(2, 0.2), n: 3 }, { at: P(8, 0.2), lat: -0.4, n: 3 }, { at: P(15, 0.2), n: 3, mask: M.R }],
     }),
   }),
@@ -125,6 +129,10 @@ export const TRACKS = [
         // the secret one: red-only, behind a hatch, around the block field
         // (leaves from inside the third tunnel, skips the overlap-only gap and the block field)
         { from: 830 / 1007, to: 960 / 1007, mask: M.RO, side: 1, lift: 3, label: 'SECRET BORE', hatch: true, shards: [{ at: 0.3 }, { at: 0.55 }, { at: 0.8 }] },
+        // the form routes (formroutes.js): outside the tunnels past both lens gaps, a gap only the Skimmer glides; and
+        // a narrow line past the blue wall through a slit only the Blade fits
+        { from: P(2, 0.1), to: P(4, 0.3), mask: M.ALL, side: -1, lift: 5, label: 'GLIDE GAP', sub: 'BLUE FLOATS IT', profile: [{ at: 0.5, kind: 'step', drop: 3.5, len: 55, end: 0.82 }] },
+        { from: P(6, 0.3), to: P(8, 0.0), mask: M.ALL, side: 1, lift: 3, label: 'THE SLIT', sub: 'ONLY THE RED BLADE FITS' },
       ],
       // the FULL PIPE (warp.js): the road curls up into a tube; the Blade rides its walls and roof, past the floor's boost
       pipes: [{ at: P(1, 0.04), len: 175, ramp: 26 }],
@@ -132,9 +140,10 @@ export const TRACKS = [
         { at: P(2, 0.3), len: 34, mask: M.R, noRails: true },
         { at: P(3, 0.5), len: 34, mask: M.B, noRails: true },
         { at: P(9, 0.4), len: 30, mask: M.X, noRails: true },
+        { path: 'b2', at: 0.5, len: 48, glide: true, noRails: true },
       ],
-      obstacles: [...chicane(P(0, 0.4), 0.01, 6), wall(P(6, 0.2), M.B), ...field(P(10, 0.1), 0.05, 6, 11)],
-      boosts: [{ at: P(1, 0.6) }, { at: P(7, 0.2), mask: M.BO }, { at: P(11, 0.3) }, { at: P(6, 0.7), mask: M.BO }, { at: P(1, 0.45), lat: 2.95, mask: M.RO }, { at: P(1, 0.45), lat: -2.95, mask: M.RO }],
+      obstacles: [...chicane(P(0, 0.4), 0.01, 6), wall(P(6, 0.2), M.B), ...field(P(10, 0.1), 0.05, 6, 11), { type: 'slit', path: 'b3', at: 0.5 }],
+      boosts: [{ at: P(1, 0.6) }, { at: P(7, 0.2), mask: M.BO }, { at: P(11, 0.3) }, { at: P(6, 0.7), mask: M.BO }, { at: P(1, 0.45), lat: 2.95, mask: M.RO }, { at: P(1, 0.45), lat: -2.95, mask: M.RO }, { path: 'b2', at: 0.8 }, { path: 'b3', at: 0.72 }],
       shards: [{ at: P(1, 0.1), n: 4 }, { at: P(5, 0.1), n: 3, lat: 0.4 }, { at: P(8, 0.6), n: 3, mask: M.B }, { at: P(1, 0.25), lat: 2.2, n: 3, gap: 0.004, mask: M.RO }, { at: P(1, 0.3), lat: -2.6, n: 3, gap: 0.004, mask: M.RO }],
       tips: [{ at: P(0, 0.85), text: 'FULL PIPE AHEAD: THE RED BLADE RIDES THE WALLS AND ROOF', key: 'red' }],
     }),
@@ -158,10 +167,14 @@ export const TRACKS = [
       branches: [
         { from: P(1, 0.5), to: P(8, 0.2), mask: M.BO, side: 1, lift: 14, label: 'BLUE SKYWAY' },
         { from: P(10, 0.5), to: P(13, 0.3), mask: M.RO, side: 1, lift: 6, bulge: 30, label: 'RED-ONLY ORBIT' },
+        // the form routes (formroutes.js): a leap between the outer loops only the Skimmer glides, and a narrow line
+        // inside the last bend through a slit only the Blade fits
+        { from: P(8, 0.2), to: P(10, 0.2), mask: M.ALL, side: -1, lift: 6, label: 'GLIDE GAP', sub: 'BLUE FLOATS IT', profile: [{ at: 0.5, kind: 'step', drop: 3.5, len: 55, end: 0.82 }] },
+        { from: P(11, 0.7), to: P(13, 0.7), mask: M.ALL, side: -1, lift: 3, label: 'THE SLIT', sub: 'ONLY THE RED BLADE FITS' },
       ],
-      gaps: [{ at: P(5, 0.0), len: 50, mask: M.R, noRails: true }, { at: P(11, 0.3), len: 40, mask: M.B, noRails: true }],
-      obstacles: [wall(P(3, 0.3), M.B), ...field(P(8, 0.4), 0.06, 7, 19), block(P(14, 0.3), -0.5, M.R, 4), block(P(14, 0.35), 0.5, M.B, 4)],
-      boosts: [{ at: P(0, 0.3) }, { at: P(6, 0.5) }, { at: P(9, 0.5), mask: M.RO }, { at: P(12, 0.5), mask: M.BO }],
+      gaps: [{ at: P(5, 0.0), len: 50, mask: M.R, noRails: true }, { at: P(11, 0.3), len: 40, mask: M.B, noRails: true }, { path: 'b2', at: 0.5, len: 52, glide: true, noRails: true }],
+      obstacles: [{ type: 'slit', path: 'b3', at: 0.5 }, wall(P(3, 0.3), M.B), ...field(P(8, 0.4), 0.06, 7, 19), block(P(14, 0.3), -0.5, M.R, 4), block(P(14, 0.35), 0.5, M.B, 4)],
+      boosts: [{ at: P(0, 0.3) }, { at: P(6, 0.5) }, { at: P(9, 0.5), mask: M.RO }, { at: P(12, 0.5), mask: M.BO }, { path: 'b2', at: 0.8 }, { path: 'b3', at: 0.72 }],
       shards: [{ at: P(2, 0.2), n: 3 }, { at: P(7, 0.3), n: 3 }, { at: P(13, 0.5), n: 3, mask: M.B }],
     }),
   }),
@@ -224,14 +237,23 @@ export const TRACKS = [
       [200, -200, 22], [100, -100, 18],
     ],
     features: (P) => ({
-      branches: [{ from: P(3, 0.6), to: P(6, 0.5), mask: M.X, side: -1, lift: 0, bulge: -40, label: 'OVERLAP RIDGE' }],
+      branches: [
+        { from: P(3, 0.6), to: P(6, 0.5), mask: M.X, side: -1, lift: 0, bulge: -40, label: 'OVERLAP RIDGE' },
+        // the form routes (formroutes.js): across the open field, a gap only the Skimmer glides; on the way home, a
+        // wall only the Blade rides
+        { from: P(4, 0.2), to: P(5, 0.7), mask: M.ALL, side: 1, lift: 3, label: 'GLIDE GAP', sub: 'BLUE FLOATS IT',
+          // (the field climbs here, so the far side is set well down)
+          profile: [{ at: 0.5, kind: 'step', drop: 6, len: 55, end: 0.82 }] },
+        { from: P(7, 0.75), to: P(9, 0.5), mask: M.ALL, side: -1, lift: 9, label: 'WALL RUN', sub: 'RED CLINGS · OTHERS FALL', wallrun: { from: 0.28, to: 0.76, bank: 0.95 } },
+      ],
       gaps: [
         { at: P(1, 0.1), len: 40, mask: M.R, noRails: true },
         { at: P(1, 0.6), len: 40, mask: M.B, noRails: true },
         { at: P(7, 0.3), len: 60, mask: M.RO, noRails: true },
+        { path: 'b1', at: 0.5, len: 50, glide: true, noRails: true },
       ],
       obstacles: [...field(P(2, 0.2), 0.1, 12, 31), ...field(P(5, 0.1), 0.09, 10, 37), ...field(P(8, 0.4), 0.05, 6, 41)],
-      boosts: [{ at: P(0, 0.4) }, { at: P(4, 0.3), mask: M.BO }, { at: P(6, 0.2), mask: M.RO }],
+      boosts: [{ at: P(0, 0.4) }, { at: P(4, 0.3), mask: M.BO }, { at: P(6, 0.2), mask: M.RO }, { path: 'b1', at: 0.8 }, { path: 'b2', at: 0.85 }],
       shards: [{ at: P(0, 0.7), n: 3 }, { at: P(4, 0.6), n: 4 }, { at: P(6, 0.9), n: 3, mask: M.R }],
       // the police chase (game/police.js): set off as you cross `at`, off the edge at `out`, signed at `sign`
       chase: { at: P(0, 0.1), out: P(6, 0.75), sign: P(0, 0.5) },
@@ -314,13 +336,19 @@ export const TRACKS = [
       branches: [
         { from: P(1, 0.3), to: P(5, 0.7), mask: M.RO, side: 1, lift: 8, label: 'RED FOLD' },
         { from: P(9, 0.2), to: P(14, 0.4), mask: M.BO, side: -1, lift: 10, label: 'BLUE FOLD' },
+        // the form routes (formroutes.js): a narrow line past the blue gap through a slit only the Blade fits, and a
+        // wall over the red gap that only the Blade rides; the Skimmer gets the water on the run home
+        { from: P(5, 0.9), to: P(8, 0.3), mask: M.ALL, side: 1, lift: 3, label: 'THE SLIT', sub: 'ONLY THE RED BLADE FITS' },
+        { from: P(15, 0.2), to: P(18, 0.2), mask: M.ALL, side: 1, lift: 9, label: 'WALL RUN', sub: 'RED CLINGS · OTHERS FALL', wallrun: { from: 0.28, to: 0.76, bank: 0.95 } },
       ],
+      water: [{ at: P(18, 0.55), len: 60 }],
       gaps: [{ at: P(6, 0.4), len: 30, mask: M.B, noRails: true }, { at: P(16, 0.3), len: 30, mask: M.R, noRails: true }],
       obstacles: [
         ...chicane(P(3, 0.0), 0.008, 5), wall(P(7, 0.3), M.R), ...chicane(P(11, 0.2), 0.008, 5, M.B, M.R),
         ...field(P(17, 0.1), 0.04, 6, 51),
+        { type: 'slit', path: 'b2', at: 0.5 },
       ],
-      boosts: [{ at: P(0, 0.5) }, { at: P(8, 0.4) }, { at: P(15, 0.5), mask: M.BO }, { at: P(18, 0.5) }, { at: P(7, 0.7), mask: M.RO }],
+      boosts: [{ at: P(0, 0.5) }, { at: P(8, 0.4) }, { at: P(15, 0.5), mask: M.BO }, { at: P(18, 0.5) }, { at: P(7, 0.7), mask: M.RO }, { path: 'b2', at: 0.72 }, { path: 'b3', at: 0.85 }],
       shards: [{ at: P(2, 0.3), n: 3 }, { at: P(10, 0.2), n: 3 }, { at: P(16, 0.8), n: 3 }],
     }),
   }),
@@ -345,10 +373,14 @@ export const TRACKS = [
         { from: P(1, 0.1), to: P(4, 0.0), mask: M.BO, side: 1, lift: 20, bulge: -30, label: 'BLUE STRAND' },
         { from: P(5, 0.2), to: P(8, 0.3), mask: M.BO, side: 1, lift: 6, label: 'BLUE-ONLY WIRE' },
         { from: P(7, 0.6), to: P(10, 0.4), mask: M.RO, side: -1, lift: 12, label: 'RED-ONLY WIRE' },
+        // the form routes (formroutes.js): a wall past the red gap only the Blade rides, and a gap past the blue one
+        // only the Skimmer glides
+        { from: P(4, 0.3), to: P(6, 0.5), mask: M.ALL, side: -1, lift: 9, label: 'WALL RUN', sub: 'RED CLINGS · OTHERS FALL', wallrun: { from: 0.28, to: 0.76, bank: 0.95 } },
+        { from: P(8, 0.6), to: P(10, 0.5), mask: M.ALL, side: 1, lift: 5, label: 'GLIDE GAP', sub: 'BLUE FLOATS IT', profile: [{ at: 0.5, kind: 'step', drop: 3.5, len: 55, end: 0.82 }] },
       ],
-      gaps: [{ at: P(2, 0.4), len: 40, mask: M.X, noRails: true }, { at: P(6, 0.2), len: 40, mask: M.R, noRails: true }, { at: P(9, 0.2), len: 40, mask: M.B, noRails: true }],
+      gaps: [{ at: P(2, 0.4), len: 40, mask: M.X, noRails: true }, { at: P(6, 0.2), len: 40, mask: M.R, noRails: true }, { at: P(9, 0.2), len: 40, mask: M.B, noRails: true }, { path: 'b5', at: 0.5, len: 48, glide: true, noRails: true }],
       obstacles: [...field(P(3, 0.4), 0.04, 6, 61), wall(P(5, 0.6), M.B), ...chicane(P(10, 0.2), 0.01, 3)],
-      boosts: [{ at: P(0, 0.2) }, { at: P(4, 0.4), mask: M.RO }, { at: P(7, 0.3), mask: M.BO }, { at: P(8, 0.6), mask: M.BO }],
+      boosts: [{ at: P(0, 0.2) }, { at: P(4, 0.4), mask: M.RO }, { at: P(7, 0.3), mask: M.BO }, { at: P(8, 0.6), mask: M.BO }, { path: 'b4', at: 0.85 }, { path: 'b5', at: 0.8 }],
       shards: [{ at: P(1, 0.6), n: 3 }, { at: P(5, 0.0), n: 3 }, { at: P(9, 0.6), n: 3 }],
     }),
   }),
@@ -372,15 +404,20 @@ export const TRACKS = [
       branches: [
         { from: P(1, 0.3), to: P(4, 0.3), mask: M.BO, side: 1, lift: 0, bulge: -60, label: 'BLUE ECHO' },
         { from: P(6, 0.5), to: P(9, 0.4), mask: M.RO, side: 1, lift: 14, bulge: -40, label: 'RED ECHO' },
+        // the form routes (formroutes.js): across the first red gap, a gap only the Skimmer glides; over the third, a
+        // broken wall only the Blade rides
+        { from: P(2, 0.4), to: P(3, 0.8), mask: M.ALL, side: -1, lift: 5, label: 'GLIDE GAP', sub: 'BLUE FLOATS IT', profile: [{ at: 0.5, kind: 'step', drop: 3.5, len: 55, end: 0.82 }] },
+        { from: P(7, 0.6), to: P(9, 0.0), mask: M.ALL, side: -1, lift: 9, label: 'WALL RUN', sub: 'RED CLINGS · OTHERS FALL', wallrun: { from: 0.28, to: 0.76, bank: 0.95 } },
       ],
       gaps: [
         { at: P(2, 0.6), len: 40, mask: M.R, noRails: true },
         { at: P(5, 0.3), len: 40, mask: M.B, noRails: true },
         { at: P(8, 0.4), len: 40, mask: M.R, noRails: true },
         { at: P(10, 0.5), len: 34, mask: M.X, noRails: true },
+        { path: 'b2', at: 0.5, len: 48, glide: true, noRails: true },
       ],
       obstacles: [wall(P(1, 0.1), M.R), ...field(P(3, 0.3), 0.05, 8, 71), ...chicane(P(7, 0.5), 0.01, 4)],
-      boosts: [{ at: P(0, 0.5) }, { at: P(4, 0.6), mask: M.RO }, { at: P(9, 0.7), mask: M.BO }, { at: P(6, 0.2), mask: M.RO }, { at: P(11, 0.3), mask: M.RO }],
+      boosts: [{ at: P(0, 0.5) }, { at: P(4, 0.6), mask: M.RO }, { at: P(9, 0.7), mask: M.BO }, { at: P(6, 0.2), mask: M.RO }, { at: P(11, 0.3), mask: M.RO }, { path: 'b2', at: 0.8 }, { path: 'b3', at: 0.85 }],
       shards: [{ at: P(1, 0.6), n: 3 }, { at: P(5, 0.7), n: 3 }, { at: P(10, 0.1), n: 3 }],
     }),
   }),

@@ -375,3 +375,34 @@ body:not(.racing) #touch { display: none; }
 #splash.on .power { display: none; }
 #splash:not(.on) .logo > div, #splash:not(.on) .presents { animation: none; }
 @keyframes blink { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ---- SHIFT SCHOOL and events (ui/eventui.js) ---- */
+.school-wrap { display: flex; gap: 22px; align-items: flex-start; justify-content: center; flex-wrap: wrap; width: min(980px, 100%); }
+.school-wrap .list { min-width: min(320px, 90vw); }
+.school-wrap .item { display: flex; align-items: center; gap: 10px; }
+.sd-num { font-family: 'Russo One', sans-serif; color: var(--violet); min-width: 1.2em; }
+.sd-medal { margin-left: auto; font-style: normal; color: var(--mc); text-shadow: 0 0 10px var(--mc); }
+.school-info { flex: 1 1 320px; max-width: 520px; min-height: 240px; padding: 16px 20px; background: var(--panel); border: 1.5px solid rgba(176, 76, 255, 0.45); }
+.school-info h3 { margin: 0 0 8px; font-family: 'Russo One', sans-serif; font-style: italic; letter-spacing: 0.06em; }
+.school-info p { margin: 0 0 10px; color: #e0d4ff; line-height: 1.4; }
+.school-info ul { margin: 0 0 12px; padding-left: 18px; color: #c8b8ff; line-height: 1.5; }
+.school-medals, .event-results .targets { display: flex; gap: 14px; flex-wrap: wrap; }
+.school-best { margin-top: 10px; color: var(--dim); letter-spacing: 0.08em; }
+.h-event { position: absolute; top: max(14px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%) skewX(-10deg); display: flex; gap: 14px; align-items: baseline; padding: 6px 16px; background: var(--panel); border: 1.5px solid var(--violet); letter-spacing: 0.1em; white-space: nowrap; }
+.h-event b { font-family: 'Russo One', sans-serif; font-style: italic; }
+.h-event .ev-val { font-size: 22px; font-weight: 700; }
+.h-event .ev-time { color: #ffd04a; }
+.h-event i { font-style: normal; font-size: 13px; }
+.event-results .ev-score { font-size: 28px; font-weight: 700; letter-spacing: 0.08em; }
+@media (max-width: 640px) { .h-event { top: 64px; font-size: 13px; } .h-event .ev-val { font-size: 17px; } }
+
+/* ---- accessibility (ui/access.js, core/access.js) ---- */
+body.calm .h-flash { display: none; }
+body.shapes .chip.red::before { content: '▲'; font-size: 0.85em; }
+body.shapes .chip.blue::before { content: '●'; font-size: 0.85em; }
+body.shapes .chip.both::before { content: '◆'; font-size: 0.85em; }
+.keylist .item { display: flex; justify-content: space-between; align-items: center; gap: 18px; }
+.keylist kbd { font: inherit; padding: 1px 10px; border: 1px solid rgba(255, 255, 255, 0.4); min-width: 3em; text-align: center; }
+.keylist kbd.wait { color: #ffd04a; border-color: #ffd04a; animation: blink 0.8s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0.35; } }
+.screen.keys .list { max-height: 62vh; overflow-y: auto; }

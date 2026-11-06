@@ -1,3 +1,4 @@
+import { ACCESS } from './access.js';
 import * as THREE from '../../vendor/three.js';
 
 // Ported from Absurd Combat Racing (bloom + grade composer), retuned for neon wireframe.
@@ -179,8 +180,9 @@ export class Renderer {
   setGrade(id, aberr = 0, flash = 0) {
     const g = this.gradeState;
     g.id = id;
-    g.aberr = aberr;
-    g.flash = flash;
+    // (reduced flashing: hits and lightning only tint the screen)
+    g.aberr = ACCESS.calm ? aberr * 0.25 : aberr;
+    g.flash = ACCESS.calm ? flash * 0.15 : flash;
   }
   splitComposer(w, h) {
     const pr = this.renderer.getPixelRatio();

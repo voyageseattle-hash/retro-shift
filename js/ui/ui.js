@@ -16,8 +16,9 @@ import { CUPS, POINTS, TROPHY, getProgress, saveProgress as saveProgressUI, meda
 import { loadGhost } from '../game/ghost.js';
 import { playerName, setPlayerName, courseName, MAX_PLAYERS } from '../net/online.js';
 import { PREMISE, CUP_STORY, SECRET_SCENES, DRIVERS } from '../game/story.js';
+import { accessScreen } from './access.js';
 
-const el = (tag, cls, html) => {
+export const el = (tag, cls, html) => {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
   if (html != null) e.innerHTML = html;
@@ -29,7 +30,7 @@ export const MODE_TITLE = { race: 'SINGLE RACE', trial: 'TIME TRIAL', mono: 'MON
 export const LOGO = `<div class="logo"><span class="retro">RETRO</span><span class="shift">SHIFT</span></div>`;
 
 // ------------------------------------------------------------------ generic focusable list
-class Menu {
+export class Menu {
   constructor(app, root, items, opts = {}) {
     this.app = app;
     this.root = root;
@@ -120,6 +121,7 @@ export class UI {
       { label: 'ONLINE', action: () => (this.app.audio.announce('online'), this.onlineMenu()) },
       { label: 'GARAGE', action: () => this.garage() },
       { label: 'FIRST RUN', action: () => this.app.startTutorial() },
+      { label: 'SHIFT SCHOOL', action: () => this.app.openSchool() },
       { label: 'HOW TO PLAY', action: () => this.howTo() },
       { label: 'SETTINGS', action: () => this.settingsScreen() },
     ];
@@ -181,6 +183,7 @@ export class UI {
       { label: '', cycle: (d) => ((S.difficulty = (S.difficulty + d + 3) % 3), save(), refresh()), action: () => items[2].cycle(1) },
       { label: '', cycle: (d) => ((S.quality = quals[(quals.indexOf(S.quality) + d + quals.length) % quals.length]), save(), refresh()), action: () => items[3].cycle(1) },
       { label: '', cycle: () => ((S.assist = S.assist === false), save(), refresh()), action: () => items[4].cycle(1) },
+      { label: 'ACCESSIBILITY', action: () => accessScreen(this) },
       { label: 'BACK', action: () => this.title() },
     ];
     s.appendChild(list);
