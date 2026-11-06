@@ -38,17 +38,27 @@ Then go to `http://localhost:4173`. `?track=core` (or any course id) jumps strai
 
 | Action | Keyboard | Gamepad |
 | --- | --- | --- |
-| Drive | W A S D / arrows | RT, LT, left stick |
+| Drive | W A S D / arrows | RT / R2 (or A / ✕), LT / L2, left stick |
 | Drift (hold, release for a turbo) | Space | X / □ |
 | Shift to RED | Left Shift, Q or 1 | LB / L1 |
 | Shift to BLUE | Right Shift, E or 3 | RB / R1 |
-| Back to BOTH (or press your lens again) | Both Shifts together, F or 2 | Y / △ |
-| Look back / Reset | C / R | RS / View |
-| Pause | Esc / P | Start |
+| Back to BOTH (or press your lens again) | Both Shifts together, F or 2 | LB+RB / L1+R1, D-pad ▲ |
+| Form move (LIFT, LANCE, BRACE) | Z or Left Ctrl | Y / △ |
+| Fire your SEAM CHARGE | X | B / ○ |
+| Horn (honk at a rival to taunt them) | H or V | LS / L3 |
+| Look back / Reset | C / R | RS / R3, View / Share |
+| Pause | Esc / P | Start / Options |
 
 On Windows, tapping Shift five times fast opens the Sticky Keys prompt. A browser game can't block it, but you can switch it off in Settings > Accessibility > Keyboard.
 
 Touch controls appear on phones and tablets.
+
+## Hull, charges and moves
+
+- **Hull**: a hit takes a share of your hull (the ten cells under SHIFT) instead of wrecking you; only a car with nothing left comes apart. A hull above 60% always survives one hit. It patches itself up after a few quiet seconds, faster in BOTH. The rails are bumpers that turn you along the road; falling off only happens at the planned holes.
+- **SEAM CHARGES**: drive through a gate of red-and-blue prisms to roll one. LENS CELL (six seconds of free lens), EMP (stalls every car near you), FLIP (throws everyone else into the other world and holds them there), LIGHTSPEED (you become a beam of light that burns anyone crossing your trail), SEAM WALL (a block behind you, solid in your lens's world) and PATCH (half your hull back). The back of the field rolls the big ones. Not in Time Trial, Mono Run or online.
+- **Form moves**: the Skimmer LIFTs and floats over what's in front of it, the Blade LANCEs through whoever's ahead, the pair BRACEs behind a shield that sends a ram back.
+- **Launchers**: before a hole in one lens's road, the other lens has a ramp, there only for it, that throws you over.
 
 ## Modes
 
