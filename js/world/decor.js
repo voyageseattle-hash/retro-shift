@@ -36,6 +36,19 @@ function clear(world, p, r) {
   return true;
 }
 
+// Would a tower `h` tall at p reach up into a road above it? clear() only looks within 40 m of the base, so a
+// raised shortcut higher than that could have a skyscraper growing through it.
+function roadOver(world, p, r, h) {
+  for (const path of world.paths) {
+    for (let i = 0; i < path.N; i += 3) {
+      const dx = path.px[i] - p.x;
+      const dz = path.pz[i] - p.z;
+      if (dx * dx + dz * dz < (path.halfW + r) ** 2 && path.py[i] > p.y && path.py[i] < p.y + h + 4) return true;
+    }
+  }
+  return false;
+}
+
 const alt = (i, s) => ((i + (s > 0 ? 1 : 0)) % 2 ? M.R : M.B);
 
 // Arches spanning the road at sample i.
@@ -58,7 +71,10 @@ const DECOR = {
       q.y = world.floorY;
       if (!clear(world, q, 10)) return;
       const h = 20 + rng() * 70;
-      L.tower(alt(i, s), q.x, q.y, q.z, 8 + rng() * 8, h, 8 + rng() * 8, rng() * 3);
+      const w = 8 + rng() * 8;
+      const d = 8 + rng() * 8;
+      const yaw = rng() * 3;
+      if (!roadOver(world, q, 10, h)) L.tower(alt(i, s), q.x, q.y, q.z, w, h, d, yaw);
     });
   },
 
@@ -79,7 +95,8 @@ const DECOR = {
     beside(main, 11, 30, (p, i, s) => {
       p.y = world.floorY;
       if (!clear(world, p, 14)) return;
-      L.tower(alt(i, s), p.x, p.y, p.z, 10, 30 + rng() * 60, 10, 0);
+      const h = 30 + rng() * 60;
+      if (!roadOver(world, p, 14, h)) L.tower(alt(i, s), p.x, p.y, p.z, 10, h, 10, 0);
     });
   },
 
@@ -194,12 +211,16 @@ const DECOR = {
       q.y = world.floorY;
       if (!clear(world, q, 6)) return;
       const h = p.y - world.floorY + 12 + rng() * 80;
-      L.tower(alt(i, s), q.x, q.y, q.z, 6 + rng() * 6, h, 6 + rng() * 6, Math.atan2(main.thx[i], main.thz[i]));
+      const w = 6 + rng() * 6;
+      const d = 6 + rng() * 6;
+      if (!roadOver(world, q, 6, h)) L.tower(alt(i, s), q.x, q.y, q.z, w, h, d, Math.atan2(main.thx[i], main.thz[i]));
     });
     beside(main, 7, 40, (p, i, s) => {
       p.y = world.floorY;
       if (!clear(world, p, 18)) return;
-      L.tower(alt(i + 1, s), p.x, p.y, p.z, 14, 60 + rng() * 120, 14, rng());
+      const h = 60 + rng() * 120;
+      const yaw = rng();
+      if (!roadOver(world, p, 18, h)) L.tower(alt(i + 1, s), p.x, p.y, p.z, 14, h, 14, yaw);
     });
     for (let i = 15; i < main.N; i += 55) {
       const a = main.point(i, -(main.halfW + 9), 22);
