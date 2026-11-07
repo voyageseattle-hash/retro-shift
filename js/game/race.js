@@ -96,6 +96,7 @@ export class Race {
     this.quake = new Quake(this);
     this.scene.add(this.works.group, this.quake.group);
     this.slowT = 0;
+    this.slowLen = 0.9; // (so a slow-motion beat never divides by nothing)
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
     // browser simulates only its own racers (the host also runs the AI); everyone else is a puppet fed by the network.
     this.online = opts.online || null;

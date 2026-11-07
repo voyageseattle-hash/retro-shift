@@ -361,7 +361,9 @@ class App {
   }
 
   frame(now) {
-    const dt = Math.min(0.05, (now - this.last) / 1000);
+    // (the first frame's timestamp can be older than the constructor's clock reading: a step back in time left a
+    // race's slow-motion timer running with no length, and the NaN step after it broke the traffic for good)
+    const dt = Math.min(0.05, Math.max(0, (now - this.last) / 1000));
     this.last = now;
     this.input.update();
     this.renderer.trackFrame(dt);
