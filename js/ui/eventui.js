@@ -55,9 +55,10 @@ const LENSES = [
   { m: BOTH, cls: 'both', name: 'BOTH', form: 'THE PAIR', job: 'Steady. Sees both worlds and refills SHIFT.', key: 'both' },
   { m: BLUE, cls: 'blue', name: 'BLUE', form: 'THE SKIMMER', job: 'Grips. Skims water and glides a gap.', key: 'blue' },
 ];
-export function lensCards(ui, allowed = [RED, BOTH, BLUE]) {
+// offText: what a lens card says when the event switches that lens off
+export function lensCards(ui, allowed = [RED, BOTH, BLUE], offText = 'Not in this drill.') {
   return `<div class="lens-cards">${LENSES.map(
-    (l) => `<div class="lens-card ${l.cls}${allowed.includes(l.m) ? '' : ' off'}"><b>${l.name}</b><span class="lc-form">${l.form}</span><span class="lc-key">${ui.app.input.glyph(l.key)}</span><p>${allowed.includes(l.m) ? l.job : 'Not in this drill.'}</p></div>`,
+    (l) => `<div class="lens-card ${l.cls}${allowed.includes(l.m) ? '' : ' off'}"><b>${l.name}</b><span class="lc-form">${l.form}</span><span class="lc-key">${ui.app.input.glyph(l.key)}</span><p>${allowed.includes(l.m) ? l.job : offText}</p></div>`,
   ).join('')}</div>`;
 }
 
