@@ -18,6 +18,8 @@ import { Showroom } from './game/showroom.js';
 import { Online } from './net/online.js';
 import { EventRun, eventCourse } from './game/events.js';
 import { schoolMenu, eventHud, eventResults } from './ui/eventui.js';
+import { tourMenu, legMenu, tourHud, tourResults } from './ui/tourui.js';
+import { tourEvent, legEvents } from './game/tour.js';
 import { SCHOOL } from './game/school.js';
 import { applyAccess } from './core/access.js';
 
@@ -214,6 +216,7 @@ class App {
       car: c.car,
       livery: liveryFor(c.car),
       rivals: def.rivals || 0,
+      rivalCars: def.rivalCars,
       difficulty: this.ui.settings.difficulty,
       assist: this.ui.settings.assist !== false,
       autopilot: this.autopilot,
@@ -226,14 +229,18 @@ class App {
     this.resultsShown = false;
     document.body.classList.add('racing');
   }
-  // Leaving an event goes back to its list (SHIFT SCHOOL), not the title.
+  // Leaving an event goes back to its list (SHIFT SCHOOL, or the SHIFT TOUR leg), not the title.
   quitEvent() {
     const def = this.eventDef;
     this.quit();
     if (def?.id.startsWith('school.')) schoolMenu(this.ui, Math.max(0, SCHOOL.findIndex((d) => d.id === def.id)));
+    else if (def?.tour) legMenu(this.ui, def.leg, Math.max(0, legEvents(def.leg).indexOf(tourEvent(def.id))));
   }
   openSchool() {
     schoolMenu(this.ui);
+  }
+  openTour() {
+    tourMenu(this.ui);
   }
   // The guided first run: one lap of Core Circuit alone, with the lessons in Race.coachLessons.
   startTutorial() {
@@ -367,13 +374,13 @@ class App {
         this.race.update(dt);
         this.net.tick(dt, this.race);
         this.ui.updateHud(this.race, dt);
-        if (this.race.event) eventHud(this.ui, this.race);
+        if (this.race.event) (this.race.event.def.tour ? tourHud : eventHud)(this.ui, this.race);
         if (this.race.state === 'finished') {
           this.race.finishT = (this.race.finishT || 0) + dt;
           if (this.race.finishT > 2.5 && !this.resultsShown) {
             this.resultsShown = true;
             if (this.race.tutorial) this.ui.tutorialDone();
-            else if (this.race.event) eventResults(this.ui, this.race);
+            else if (this.race.event) (this.race.event.def.tour ? tourResults : eventResults)(this.ui, this.race);
             else this.ui.results(this.race);
           }
           if (this.resultsShown) this.ui.update();

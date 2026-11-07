@@ -112,7 +112,9 @@ export class Race {
       const pIndex = S ? (S.slot === this.online.mySlot ? 0 : -1) : k === field ? 0 : this.split && k === field - 1 ? 1 : -1;
       const isPlayer = pIndex >= 0;
       const pCar = pIndex === 1 ? CARS.find((c) => c.id === opts.car2) || CARS[1] : playerCar;
-      const car = S ? CARS.find((c) => c.id === S.car) || CARS[0] : isPlayer ? pCar : others2[k % others2.length];
+      // (an event can name its rivals' cars: a SHIFT TOUR duel is against one driver in particular)
+      const wanted = !S && !isPlayer && opts.rivalCars?.[k] && CARS.find((c) => c.id === opts.rivalCars[k]);
+      const car = S ? CARS.find((c) => c.id === S.car) || CARS[0] : isPlayer ? pCar : wanted || others2[k % others2.length];
       const name = isPlayer ? (this.split ? `P${pIndex + 1}` : 'YOU') : S?.human ? S.name : car.name;
       const r = new Racer(car, { isPlayer, index: k, name, livery: isPlayer ? (pIndex === 1 ? opts.livery2 : opts.livery) : S?.livery || null });
       if (isPlayer) r.pIndex = pIndex;
@@ -559,7 +561,8 @@ export class Race {
     dmg *= Math.sqrt(1 / (r.mass || 1)) * (r.isPlayer ? 0.85 : 1);
     if (!steady && r.hurtCd > 0) dmg *= 0.35; // two touches in the same crash count as one
     const before = r.hp;
-    if (before > HULL_FLOOR && dmg >= before) dmg = before - 6 - Math.random() * 4;
+    // (a worn hull, a SHIFT TOUR takedown quota's rivals, gets no such grace)
+    if (before > HULL_FLOOR && dmg >= before && !r.worn) dmg = before - 6 - Math.random() * 4;
     r.hp = before - dmg;
     r.lastHurtT = this.t;
     if (!steady) r.hurtCd = 0.35;
@@ -590,7 +593,7 @@ export class Race {
   // A hull left alone patches itself up, faster in BOTH; a hurt hull trails smoke and sparks so you can see it.
   hull(r, dt) {
     if (r.hurtCd > 0) r.hurtCd -= dt;
-    if (r.hp < HULL && this.t - (r.lastHurtT ?? -99) > HULL_REPAIR.wait) r.hp = Math.min(HULL, r.hp + (r.mode === BOTH ? HULL_REPAIR.both : HULL_REPAIR.rate) * dt);
+    if (r.hp < HULL && !r.worn && this.t - (r.lastHurtT ?? -99) > HULL_REPAIR.wait) r.hp = Math.min(HULL, r.hp + (r.mode === BOTH ? HULL_REPAIR.both : HULL_REPAIR.rate) * dt);
     if (r.hp < 65 && this.near(r)) {
       const bad = 1 - r.hp / 65;
       r.smokeT = (r.smokeT || 0) - dt;

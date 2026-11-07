@@ -115,6 +115,7 @@ export class UI {
     const list = el('div', 'list');
     const items = [
       { label: 'GRAND PRIX', action: () => ((this.choice.mode = 'gp'), this.app.audio.announce('grandprix'), this.cupSelect()) },
+      { label: 'SHIFT TOUR', action: () => this.app.openTour() },
       { label: 'SINGLE RACE', action: () => ((this.choice.mode = 'race'), this.app.audio.announce('ready'), this.trackSelect()) },
       { label: 'TIME TRIAL', action: () => ((this.choice.mode = 'trial'), this.app.audio.announce('timetrial'), this.trackSelect()) },
       { label: 'MONO RUN', action: () => ((this.choice.mode = 'mono'), this.app.audio.announce('monorun'), this.trackSelect()) },

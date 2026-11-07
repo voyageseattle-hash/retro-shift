@@ -525,3 +525,40 @@ body.shapes .lens-card.red b::before { content: '▲ '; }
 body.shapes .lens-card.blue b::before { content: '● '; }
 .pop .coach-job { color: #fff; text-shadow: 0 0 3px #000, 0 0 10px rgba(0, 0, 0, 0.8); }
 .pop:has(.coach-job) { text-shadow: 0 0 3px #000, 0 0 12px rgba(0, 0, 0, 0.85), 0 0 18px currentColor; }
+
+/* ---------------------------------------------------------------- SHIFT TOUR (ui/tourui.js) */
+.stars { color: #ffd04a; letter-spacing: 0.12em; text-shadow: 0 0 10px rgba(255, 208, 74, 0.55); white-space: nowrap; }
+.stars i { font-style: normal; color: rgba(216, 200, 255, 0.22); text-shadow: none; }
+.tour .tour-total, .tour-results .tour-total { margin: -4px auto 12px; text-align: center; letter-spacing: 0.16em; color: #e0d4ff; }
+.tour .tour-total b, .tour-results .tour-total b { font-size: 22px; color: #fff; }
+.tour-results .tour-total { margin: 4px 0 0; }
+.tour-results .tour-total em { font-style: normal; color: #ffd04a; font-weight: 700; }
+.tour-tag { display: inline-block; margin: 0 auto 10px; padding: 2px 12px; border: 1.5px solid var(--violet); color: #e8dcff; font-size: 12px; letter-spacing: 0.2em; transform: skewX(-10deg); background: rgba(176, 76, 255, 0.12); }
+.screen.tour > .tour-tag, .tour-results > .tour-tag { display: block; width: max-content; }
+.school-info .tour-tag { margin: 0 0 10px; }
+.school-wrap .item .leg-count, .school-wrap .item .sd-stars { margin-left: auto; font-style: normal; font-size: 14px; letter-spacing: 0.08em; color: #e0d4ff; }
+.school-wrap .item.locked { opacity: 0.45; border-style: dashed; }
+.leg-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.leg-list li { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: baseline; color: #e0d4ff; }
+.leg-list li .sd-num { font-style: normal; margin-right: 8px; }
+.leg-list li em { font-style: normal; font-size: 11px; letter-spacing: 0.16em; color: var(--dim); }
+.leg-list.shut { opacity: 0.5; }
+.tour-need { margin: 0 0 10px; color: #ffd04a; letter-spacing: 0.12em; }
+.tour-targets { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin: 8px 0 0; letter-spacing: 0.08em; }
+.tour-targets b { color: #fff; }
+.school-info .tour-targets { justify-content: flex-start; }
+.brief.tour .tour-targets { margin: 0 auto 14px; }
+.bigstars { font-size: 60px; line-height: 1; }
+.bigstars .stars { letter-spacing: 0.04em; text-shadow: 0 0 18px rgba(255, 208, 74, 0.8), 0 0 40px rgba(255, 208, 74, 0.4); }
+.bigstars.none { font-family: 'Russo One', sans-serif; font-style: italic; font-size: 26px; color: var(--dim); }
+.tour-open { color: #ffd04a; font-family: 'Russo One', sans-serif; font-style: italic; letter-spacing: 0.1em; text-shadow: 0 0 12px rgba(255, 208, 74, 0.6); }
+.h-event.tour .stars { font-size: 16px; }
+.h-event.tour .ev-time { font-size: 13px; }
+.h-event.tour .ev-fail { color: #ff4a6a; }
+.h-event.warn { border-color: #ff4a6a; box-shadow: 0 0 16px rgba(255, 74, 106, 0.6); animation: tourWarn 0.5s ease-in-out infinite alternate; }
+@keyframes tourWarn { from { background: var(--panel); } to { background: rgba(120, 10, 30, 0.82); } }
+@media (max-width: 640px), (max-height: 480px) {
+  .h-event.tour { max-width: 92vw; flex-wrap: wrap; justify-content: center; row-gap: 2px; }
+  .h-event.tour .ev-note { font-size: 11px; }
+  .bigstars { font-size: 44px; }
+}
