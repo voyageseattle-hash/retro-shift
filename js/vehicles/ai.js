@@ -288,6 +288,18 @@ export class RaceAI {
     } else if (Math.abs(err) > 1.4 && r.speed < 6) {
       this.turn = 1.5;
       this.turnDir = Math.sign(-err) || 1;
+    } else if (Math.abs(err) > 2 && r.speed > 6 && r.track) {
+      // driving back down the road at speed (spun round by a hit, then lined up backwards by a rail): the aim point
+      // is behind us, and the short way round to it can be into the rail, which lines us up backwards again, so a
+      // rival would grind down the rail at full throttle until it dropped into a gap. Brake, and swing round
+      // through the middle of the road instead.
+      const along = r.vel.x * P.thx[pi] + r.vel.z * P.thz[pi];
+      if (along < -2) {
+        // (facing back down the road, negative steer turns the nose toward +lat)
+        ctl.steer = r.track.lat < 0 ? -1 : 1;
+        ctl.throttle = r.speed > 16 ? 0 : 0.6;
+        ctl.brake = r.speed > 16 ? 1 : 0;
+      }
     }
   }
 

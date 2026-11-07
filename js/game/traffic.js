@@ -392,7 +392,7 @@ export class Traffic {
       // racers hit it (only those in its world, and only once it's fully there)
       if (car.alpha > 0.6) {
         for (const r of R.racers) {
-          if (r.puppet || r.respawnT > 0 || !solidIn(car.mask, r.mode)) continue;
+          if (r.puppet || r.respawnT > 0 || r.respawnGrace > 0 || !solidIn(car.mask, r.mode)) continue;
           const hit = hitRacer(car, r);
           if (hit) this.collide(car, r, hit);
           else if (r.isPlayer && car.hornCd <= 0) {

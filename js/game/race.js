@@ -14,6 +14,7 @@ import { monoDef, medalFor, recordMedal } from './modes.js';
 import { driverOf, pick } from './story.js';
 import { Debris } from './wreck.js';
 import { SpeedLines } from './speedlines.js';
+import { Feel } from './feel.js';
 import { Storms } from './storms.js';
 import { Traffic } from './traffic.js';
 import { Police } from './police.js';
@@ -21,6 +22,8 @@ import { Items, ITEMS } from './items.js';
 import { Reflection } from './reflect.js';
 import { Construction } from './construction.js';
 import { Quake } from './quake.js';
+import { chainMove, chainTick, chainEnd, shiftTiming, perfectFx, newChain, newTally } from './chain.js';
+import { PIPE } from '../world/warp.js';
 import { disposeTree } from '../core/renderer.js';
 
 const _v = new THREE.Vector3();
@@ -47,7 +50,9 @@ export class Race {
     this.kind = opts.kind || (opts.rivals === 0 ? 'trial' : 'race');
     this.mono = this.kind === 'mono';
     this.tutorial = this.kind === 'tutorial';
-    this.solo = this.kind === 'trial' || this.mono || this.tutorial;
+    // an event (events.js: SHIFT SCHOOL drills, SHIFT TOUR events) is solo unless it brings rivals
+    this.isEvent = this.kind === 'event';
+    this.solo = this.kind === 'trial' || this.mono || this.tutorial || (this.isEvent && !opts.rivals);
     if (this.mono) def = monoDef(def);
     this.def = def;
     this.opts = opts;
@@ -66,6 +71,8 @@ export class Race {
     this.state = 'intro'; // intro, countdown, race, finished
     this.countdown = 3.999;
     this.introT = 0;
+    // skipping the fly-by takes a fresh press (see the intro in update)
+    this.skipArmed = false;
     this.racers = [];
     this.finishOrder = [];
     this.tipShown = new Set();
@@ -78,6 +85,7 @@ export class Race {
     this.scene.add(this.debris.mesh);
     this.speedLines = new SpeedLines();
     this.scene.add(this.speedLines.mesh);
+    this.feel = new Feel(this); // drift stages, surface rumble, pass-bys (feel.js)
     this.storms = new Storms(this);
     this.traffic = new Traffic(this);
     this.police = new Police(this);
@@ -104,7 +112,9 @@ export class Race {
       const pIndex = S ? (S.slot === this.online.mySlot ? 0 : -1) : k === field ? 0 : this.split && k === field - 1 ? 1 : -1;
       const isPlayer = pIndex >= 0;
       const pCar = pIndex === 1 ? CARS.find((c) => c.id === opts.car2) || CARS[1] : playerCar;
-      const car = S ? CARS.find((c) => c.id === S.car) || CARS[0] : isPlayer ? pCar : others2[k % others2.length];
+      // (an event can name its rivals' cars: a SHIFT TOUR duel is against one driver in particular)
+      const wanted = !S && !isPlayer && opts.rivalCars?.[k] && CARS.find((c) => c.id === opts.rivalCars[k]);
+      const car = S ? CARS.find((c) => c.id === S.car) || CARS[0] : isPlayer ? pCar : wanted || others2[k % others2.length];
       const name = isPlayer ? (this.split ? `P${pIndex + 1}` : 'YOU') : S?.human ? S.name : car.name;
       const r = new Racer(car, { isPlayer, index: k, name, livery: isPlayer ? (pIndex === 1 ? opts.livery2 : opts.livery) : S?.livery || null });
       if (isPlayer) r.pIndex = pIndex;
@@ -131,6 +141,15 @@ export class Race {
       r.lapStart = 0;
       r.finished = false;
       r.respawnT = 0;
+      // the SHIFT CHAIN, and the moves the results screen tells (game/chain.js)
+      r.chain = newChain();
+      r.tally = newTally();
+      // best time through each third of the lap, for the results screen. The first lap's clock starts at GO, so its
+      // first sector does too (the grid counts as sector 1), and a lap's three sectors add up to the lap.
+      r.sectors = [Infinity, Infinity, Infinity];
+      r.sec = Math.max(0, Math.floor(r.prog * 3));
+      r.secStart = 0;
+      r.secFull = true;
       if (!isPlayer && !r.puppet) {
         const skill = clamp([0.55, 0.75, 0.92][diff] + (k / field) * 0.1 + rand(-0.05, 0.05), 0.3, 1);
         r.ai = new RaceAI(r, this.world, skill);
@@ -162,7 +181,7 @@ export class Race {
     this.lastMode = BOTH;
     // ghosts: your best run and the staff run
     this.ghosts = [];
-    if (this.solo && !this.tutorial) {
+    if (this.solo && !this.tutorial && !this.isEvent) {
       this.recorder = new GhostRecorder();
       const mine = loadGhost(def.id, this.mono);
       if (mine && opts.showGhost !== false) this.addGhost(mine, 0xffffff, 'BEST');
@@ -184,6 +203,11 @@ export class Race {
     this.ghosts.push(g);
   }
 
+  // A rival gets on the radio in a moment (one call waits at a time, and not too often).
+  radioSoon(r, kind, delay) {
+    if (this.radioLater || this.t - (this.radioT ?? -99) < 9) return;
+    this.radioLater = { r, kind, t: this.t + delay };
+  }
   // A rival gets on the radio.
   comms(r, kind) {
     const d = r && !r.human && driverOf(r.car.id);
@@ -192,6 +216,7 @@ export class Race {
     if (!text) return;
     const msg = { id: r.car.id, name: d.name, car: r.car.name, color: r.color, text, kind };
     this.emit('comms', msg);
+    this.radioT = this.t;
     return msg;
   }
 
@@ -389,12 +414,84 @@ export class Race {
       this.emitP(r, 'denied');
     }
   }
+  // Every lens move lands here (the kinds are listed in game/chain.js): the tally for the results screen, then the
+  // SHIFT CHAIN. Returns the chain's length. (An event, game/events.js, listens in by wrapping it.)
+  onMove(r, kind, data = {}) {
+    const t = r.tally;
+    if (t) {
+      if (kind === 'perfect') t.perfect++;
+      else if (kind === 'phase') {
+        t.phased++;
+        if (data.close) t.close++;
+      } else if (kind === 'lensRoute') t.routes++;
+      else if (kind === 'wallRun') t.wallRuns++;
+      else if (kind === 'glide') t.glides++;
+      else if (kind === 'slit') t.slits++;
+      else if (kind === 'takedown') t.takedowns++;
+    }
+    return chainMove(this, r, kind, data);
+  }
+
+  // The lens moves that happen on the road rather than at something on it, each counted once as it starts: onto a
+  // road that's only there in your lens, up a wall-run (or high round a pipe) as the Blade, a long glide as the
+  // Skimmer. Then the chain's window, and the lens-time tally.
+  moves(r, dt) {
+    const g = r.gnd;
+    const P = g.path;
+    const on = r.grounded && g.onRoad;
+    // a lens road: there in your lens, not in BOTH (a little hysteresis, for the seam where a fork meets the road)
+    const lens = on && !solidIn(g.mask, BOTH);
+    if (lens) {
+      r.offLensT = 0;
+      if (!r.onLens) {
+        r.onLens = true;
+        // off a road there in every lens straight onto one that isn't (a lens bridge's lip, a fork's mouth): the
+        // shift's timing counts. (Landing on one from a launcher's flight doesn't.)
+        const tm = this.t - (r.bothRoadT ?? -9) < 0.25 ? shiftTiming(this, r) : null;
+        if (tm === 'perfect') {
+          r.giveBoost(0.9, 1.3);
+          r.energy = Math.min(1, r.energy + 0.1);
+          perfectFx(this, r);
+          this.onMove(r, 'perfect', { on: 'road' });
+        }
+        this.onMove(r, 'lensRoute', { mask: g.mask, path: P.id, perfect: tm === 'perfect' });
+      }
+    } else if (on) {
+      r.offLensT = (r.offLensT || 0) + dt;
+      if (r.offLensT > 0.4) r.onLens = false;
+      r.bothRoadT = this.t;
+    }
+    // a wall-run, or a pipe wall past the steep part, in RED
+    const wall = on && r.mode === RED && P && (P.cling?.[g.i] || (P.warpKind?.[g.i] === PIPE && Math.abs((g.lat * P.warpK[g.i]) / P.warpR[g.i]) > 0.9));
+    if (wall) {
+      r.offWallT = 0;
+      if (!r.onWall) {
+        r.onWall = true;
+        this.onMove(r, 'wallRun', { pipe: !P.cling?.[g.i] });
+      }
+    } else if ((r.offWallT = (r.offWallT || 0) + dt) > 0.4) r.onWall = false;
+    // a glide that's really a glide (racer.js sets r.gliding)
+    if (r.gliding) {
+      r.glideT = (r.glideT || 0) + dt;
+      if (r.glideT > 0.35 && !r.glided) {
+        r.glided = true;
+        this.onMove(r, 'glide', { gap: !!P?.glide?.[g.i] });
+      }
+    } else if (r.grounded) {
+      r.glideT = 0;
+      r.glided = false;
+    }
+    chainTick(this, r, dt);
+    if (this.state === 'race' && !r.finished) r.tally.lens[r.mode] += dt;
+  }
+
   onDriftLevel(r, lvl) {
     if (r.isPlayer) this.emitP(r, 'drift', { lvl });
   }
   onMiniTurbo(r, lvl) {
     // a long drift charges SHIFT as well as the turbo
     if (lvl >= 2) r.energy = Math.min(1, r.energy + (lvl === 3 ? 0.12 : 0.06));
+    this.onMove(r, 'drift', { lvl });
     if (r.isPlayer) {
       this.app.audio.play('turbo', lvl);
       this.emitP(r, 'popup', { text: ['', 'TURBO', 'SUPER TURBO', 'ULTRA TURBO'][lvl], color: '#ff4fd8' });
@@ -420,6 +517,7 @@ export class Race {
   }
   onFell(r) {
     if (r.respawnT > 0) return;
+    chainEnd(this, r);
     r.falls = (r.falls || 0) + 1;
     r.respawnT = 1.1;
     r.root.visible = false;
@@ -463,7 +561,8 @@ export class Race {
     dmg *= Math.sqrt(1 / (r.mass || 1)) * (r.isPlayer ? 0.85 : 1);
     if (!steady && r.hurtCd > 0) dmg *= 0.35; // two touches in the same crash count as one
     const before = r.hp;
-    if (before > HULL_FLOOR && dmg >= before) dmg = before - 6 - Math.random() * 4;
+    // (a worn hull, a SHIFT TOUR takedown quota's rivals, gets no such grace)
+    if (before > HULL_FLOOR && dmg >= before && !r.worn) dmg = before - 6 - Math.random() * 4;
     r.hp = before - dmg;
     r.lastHurtT = this.t;
     if (!steady) r.hurtCd = 0.35;
@@ -494,7 +593,7 @@ export class Race {
   // A hull left alone patches itself up, faster in BOTH; a hurt hull trails smoke and sparks so you can see it.
   hull(r, dt) {
     if (r.hurtCd > 0) r.hurtCd -= dt;
-    if (r.hp < HULL && this.t - (r.lastHurtT ?? -99) > HULL_REPAIR.wait) r.hp = Math.min(HULL, r.hp + (r.mode === BOTH ? HULL_REPAIR.both : HULL_REPAIR.rate) * dt);
+    if (r.hp < HULL && !r.worn && this.t - (r.lastHurtT ?? -99) > HULL_REPAIR.wait) r.hp = Math.min(HULL, r.hp + (r.mode === BOTH ? HULL_REPAIR.both : HULL_REPAIR.rate) * dt);
     if (r.hp < 65 && this.near(r)) {
       const bad = 1 - r.hp / 65;
       r.smokeT = (r.smokeT || 0) - dt;
@@ -514,6 +613,8 @@ export class Race {
       this.debris.sparks(r.pos, _v.set(0, 0, 0), 40, 0xffd27a, 26, r.gnd.y);
     }
     r.wrecks = (r.wrecks || 0) + 1;
+    chainEnd(this, r);
+    if (by && by !== r) this.onMove(by, 'takedown', { victim: r.index });
     r.respawnT = 1.8;
     r.root.visible = false;
     r.drift.active = false;
@@ -530,6 +631,13 @@ export class Race {
       by.takedowns = (by.takedowns || 0) + 1;
       this.emitP(by, 'popup', { text: 'TAKEDOWN', color: '#ffd04a' });
       this.app.input.rumble(by.pIndex || 0, 0.8, 0.8, 300);
+      // the announcer calls your first takedown, then now and then (a chain call just made gets the floor), and the
+      // driver you took out has something to say about it once they're back
+      if (this.t - (by.takedownCallT ?? -99) > 14 && (!by.takedownCalled || Math.random() < 0.5) && this.app.audio.announce('takedown', 0.15, 0.9, true) > 0) {
+        by.takedownCallT = this.t;
+        by.takedownCalled = true;
+      }
+      this.radioSoon(r, 'downed', 1.4);
     }
     const seen = r.isPlayer || by?.isPlayer || this.players.some((p) => p.pos.distanceToSquared(r.pos) < 60 * 60);
     if (seen) {
@@ -580,10 +688,17 @@ export class Race {
     r.hints[this.world.main.id] = sp.i;
     r.hints._cur = this.world.main.id;
     if (r.mono) r.energy = Math.max(r.energy, SHIFT.monoCost);
-    else r.mode = BOTH;
+    else {
+      r.mode = BOTH;
+      // a lens wall or a lens-only gap soon after the respawn point: never send you at it with an empty meter, or a
+      // fall there just loops
+      if (sp.lensAhead) r.energy = Math.max(r.energy, 0.4);
+    }
     r.grounded = true;
     r.wrongWay = 0;
     r.invuln = 1.5;
+    // traffic and the police convoy pass through you while you blink back in
+    r.respawnGrace = 1.5;
     r.vel.set(Math.sin(sp.yaw), 0, Math.cos(sp.yaw)).multiplyScalar(12);
     if (r.ai) Object.assign(r.ai, { path: this.world.main, _branch: null, turn: 0, pinned: 0, planT: 0 });
     // the car draws itself back in, line by line, with a flash where it lands
@@ -636,6 +751,11 @@ export class Race {
   // ------------------------------------------------------------ per frame
   update(dt) {
     this.t += dt;
+    if (this.radioLater && this.t >= this.radioLater.t) {
+      const q = this.radioLater;
+      this.radioLater = null;
+      if (this.state === 'race') this.comms(q.r, q.kind);
+    }
     const input = this.app.input;
     const p = this.player;
     // player controls (two sets in split-screen)
@@ -669,7 +789,11 @@ export class Race {
       if (this.introT < 0.35 && this.introT + dt >= 0.35 && this.introSpeaker) this.comms(this.introSpeaker, 'pre');
       this.introT += dt;
       for (const r of this.racers) r.controlLocked = true;
-      if (this.online ? this.netGo : this.introT > (this.introSpeaker ? 3 : 2.2) || input.menu('confirm')) {
+      // the press that started this race (RETRY, NEXT COURSE) must not skip its fly-by too: a skip needs the
+      // confirm key let go since the intro began, then pressed again, and not in the first moments
+      if (!input.menuHeld('confirm')) this.skipArmed = true;
+      const skip = this.skipArmed && this.introT > 0.4 && input.menu('confirm');
+      if (this.online ? this.netGo : this.introT > (this.introSpeaker ? 3 : 2.2) || skip) {
         this.state = 'countdown';
         this.lastBeep = 4;
       }
@@ -703,6 +827,7 @@ export class Race {
     }
 
     if (this.recorder && this.state === 'race' && !p.finished) this.recorder.sample(this.raceTime, p);
+    this.event?.update(sim); // the event runner (events.js), when this race is an event
     // rivals talk when they get past you (not too often)
     if (this.state === 'race' && !this.solo && !this.split && !p.finished) {
       const place = this.placeOf(p);
@@ -760,6 +885,7 @@ export class Race {
       cam.update(dt, pl, this.world, C[k].look);
     });
     this.dtLast = dt;
+    this.feel.update(dt);
     if (!this.split) this.env.update(dt, this.t, this.cam.camera);
     if (!this.split) {
       const k = (p.respawnT > 0 || !p.grounded ? 0 : Math.abs(p.speed) / p.phys.topSpeed) + (p.boostTime > 0 ? 0.3 : 0);
@@ -933,6 +1059,7 @@ export class Race {
         if (r.respawnT <= 0) this.respawn(r);
         continue;
       }
+      if (r.respawnGrace > 0) r.respawnGrace -= dt;
       if (r.ai) {
         if (r.finished) {
           r.ai.update(dt);
@@ -961,6 +1088,7 @@ export class Race {
         }
       } else r.stuckT = 0;
       this.features(r, dt);
+      this.moves(r, dt);
       this.progress(r, dt);
     }
     this.bump();
@@ -984,6 +1112,13 @@ export class Race {
         if (r.inside === o) r.inside = null;
         continue;
       }
+      // through a slit's gap: only the Blade fits (formroutes.js); its two pieces count as one
+      if (o.slit && r.mode === RED && Math.abs(along) < o.len + r.halfL && Math.abs(tr.lat) < o.slit) {
+        const key = `${P.id}:${o.i}`;
+        if (r.slitKey !== key || this.t - r.slitT > 3) this.onMove(r, 'slit', {});
+        r.slitKey = key;
+        r.slitT = this.t;
+      }
       const dlat = tr.lat - o.lat;
       if (Math.abs(dlat) > o.w + r.halfW) continue;
       if (r.pos.y - P.py[o.i] > o.h + 1) continue;
@@ -992,9 +1127,15 @@ export class Race {
         if (r.inside !== o) {
           r.inside = o;
           r.energy = Math.min(1, r.energy + 0.04);
-          // shifted at the last moment: a CLOSE PHASE throws you through it with a boost and some SHIFT back
-          const close = this.t - (r.lastShiftT ?? -9) < 0.45 && o.type === 'wall';
-          if (close) {
+          // shifted at the last moment: a PERFECT SHIFT, or a CLOSE PHASE, throws you through it with a boost and
+          // some SHIFT back (a lens wall: blocks are just phased)
+          const tm = o.type === 'wall' ? shiftTiming(this, r) : null;
+          if (tm === 'perfect') {
+            r.giveBoost(1.2, 1.38);
+            r.energy = Math.min(1, r.energy + 0.16);
+            perfectFx(this, r);
+            this.onMove(r, 'perfect', { on: 'wall' });
+          } else if (tm === 'close') {
             r.giveBoost(0.9, 1.3);
             r.energy = Math.min(1, r.energy + 0.12);
             if (r.isPlayer) {
@@ -1006,9 +1147,10 @@ export class Race {
           }
           if (r.isPlayer) {
             this.app.audio.play('phase');
-            this.emitP(r, 'popup', { text: 'PHASED', color: r.mode === RED ? '#ff4a6a' : r.mode === BLUE ? '#4ab0ff' : '#d8c8ff', small: true });
+            if (!tm) this.emitP(r, 'popup', { text: 'PHASED', color: r.mode === RED ? '#ff4a6a' : r.mode === BLUE ? '#4ab0ff' : '#d8c8ff', small: true });
             this.stats.phased++;
           }
+          this.onMove(r, 'phase', { close: tm === 'close', perfect: tm === 'perfect', type: o.type });
         }
         continue;
       }
@@ -1052,7 +1194,10 @@ export class Race {
         if (smashes) this.smash(o, r);
         this.scrape(r, into, _v.set(-tx * s, 0, -tz * s));
         const hard = into > 12;
-        if (hard) r.spinOut(o.type === 'wall' ? 0.9 : 0.6, Math.random() < 0.5 ? -1 : 1);
+        if (hard) {
+          r.spinOut(o.type === 'wall' ? 0.9 : 0.6, Math.random() < 0.5 ? -1 : 1);
+          chainEnd(this, r);
+        }
         if (r.isPlayer) {
           this.app.audio.play(o.type === 'wall' ? 'wall' : 'hit');
           this.camOf(r).addShake(o.type === 'wall' ? 0.9 : 0.5);
@@ -1073,11 +1218,21 @@ export class Race {
       if (Math.abs(tr.lat - pad.lat) > pad.w + 0.5) continue;
       if (r.padCool > this.t) continue;
       r.padCool = this.t + 0.6;
-      r.giveBoost(1.2, 1.32);
+      // a pad there only in one lens, on a road that's there in all of them: shift onto it at the last moment for a
+      // PERFECT. (A pad on a road only one lens can see is the road's colour and you're on it anyway: a boost that
+      // keeps a running chain going, not a link of its own, or a long blue road would build a x5 by itself.)
+      const lens = !solidIn(pad.mask, BOTH) && solidIn(P.mask[pad.i], BOTH);
+      const tm = lens ? shiftTiming(this, r) : null;
+      if (tm === 'perfect') {
+        r.giveBoost(1.6, 1.4);
+        perfectFx(this, r);
+        this.onMove(r, 'perfect', { on: 'pad' });
+      } else r.giveBoost(1.2, 1.32);
       if (r.isPlayer) {
         this.app.audio.play('boost');
         this.camOf(r).fovPunch(8);
       }
+      this.onMove(r, 'pad', { lens, perfect: tm === 'perfect' });
     }
     // a launcher in your lens: up and over (at least fast enough, and high enough, to clear what it was built for)
     for (const L of w.launchers) {
@@ -1096,7 +1251,14 @@ export class Race {
       r.grounded = false;
       r.airTime = 0.01;
       r.launch = { path: P, i: tr.i, t: air + 0.6, fwd };
-      r.giveBoost(0.6, 1.2);
+      // a launcher is only there in one lens: shift onto it at the last moment for a PERFECT
+      const tm = !solidIn(L.mask, BOTH) ? shiftTiming(this, r) : null;
+      if (tm === 'perfect') {
+        r.giveBoost(1.0, 1.3);
+        perfectFx(this, r);
+        this.onMove(r, 'perfect', { on: 'launch' });
+      } else r.giveBoost(0.6, 1.2);
+      this.onMove(r, 'launch', { perfect: tm === 'perfect' });
       if (this.near(r)) this.debris.sparks(r.pos, _a.set(0, -1, 0), 30, r.mode === RED ? 0xff4a6a : 0x4ab0ff, 14, r.gnd.y);
       if (r.isPlayer) {
         this.emitP(r, 'popup', { text: 'LAUNCH', color: r.mode === RED ? '#ff4a6a' : '#4ab0ff' });
@@ -1115,6 +1277,7 @@ export class Race {
         this.app.audio.play('shard');
         this.emitP(r, 'popup', { text: '+SHIFT', color: '#ffffff', small: true });
       }
+      this.onMove(r, 'shard', { lens: !solidIn(sh.mask, BOTH) });
     }
   }
 
@@ -1206,6 +1369,17 @@ export class Race {
     }
     r.prog += du;
     r.lastU = u;
+    // sectors: a third of the lap driven whole, start to end, counts toward its best
+    const sec = Math.max(0, Math.floor(r.prog * 3));
+    if (sec !== r.sec && !r.finished) {
+      if (sec === r.sec + 1 && r.secFull) {
+        const k = ((r.sec % 3) + 3) % 3;
+        r.sectors[k] = Math.min(r.sectors[k], this.raceTime - r.secStart);
+      }
+      r.secFull = sec === r.sec + 1 && this.state === 'race';
+      r.sec = sec;
+      r.secStart = this.raceTime;
+    }
     const lap = Math.floor(r.prog);
     if (lap > r.lap && !r.finished) {
       const lt = this.raceTime - r.lapStart;
@@ -1220,6 +1394,14 @@ export class Race {
           this.emitP(r, 'popup', { text: 'FINAL LAP', color: '#ff4fd8' });
           this.app.audio.play('finalLap');
           this.app.audio.announce('final', 0.25);
+          // and the rival just ahead (or just behind) gets on the radio about it, once a race
+          if (!this.finalRadio && !this.solo) {
+            this.finalRadio = true;
+            const st = this.standings();
+            const i = st.indexOf(r);
+            const near = [st[i - 1], st[i + 1]].find((o) => o && !o.human && !o.isPlayer && !o.finished);
+            if (near) this.radioSoon(near, 'final', 1.7);
+          }
         } else if (r.lap === 1) this.app.audio.announce('lap2', 0.25);
       }
     }

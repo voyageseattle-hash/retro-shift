@@ -3,6 +3,7 @@
 // drives on depends on the world they're looking through. The spline sampling, auto-banking and ground frame come
 // from Absurd Combat Racing's TrackWorld; the multi-path, per-lens ground query is new.
 
+import { buildShapeCues } from './shapes.js';
 import * as THREE from '../../vendor/three.js';
 import { clamp, lerp, wrapAngle, mulberry32, smoothstep } from '../core/util.js';
 import { M, BOTH, RED, BLUE, solidIn, colorForMask, COLORS } from './shift.js';
@@ -11,8 +12,9 @@ import { buildDecor } from './decor.js';
 import { buildSigns } from './signs.js';
 import { buildCovers } from './covers.js';
 import { layStorms } from './storms-def.js';
-import { layFormRoutes, addSlit } from './formroutes.js';
+import { layFormRoutes, addSlit, routeMask, layRouteBoosts } from './formroutes.js';
 import { layWarps, buildWarps, PIPE } from './warp.js';
+import { FORMS } from '../vehicles/forms.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -271,13 +273,17 @@ export class Path {
     return (this.mainFrom + d * (i / (this.N - 1))) % 1;
   }
 
-  nearest(x, z, hint) {
+  // (y, when given, keeps the search on the right level where roads stack: a spiral's turns, a branch crossing high
+  // over the road. A hint carried onto a level far above or below is dropped, and the full search weighs height, so a
+  // car on a branch over the road doesn't latch onto the road 50 m beneath it and then find no road at a junction.)
+  nearest(x, z, hint, y) {
     const N = this.N;
     const d2 = (i) => {
       const dx = this.px[i] - x;
       const dz = this.pz[i] - z;
       return dx * dx + dz * dz;
     };
+    const level = y === undefined ? d2 : (i) => d2(i) + 9 * (this.py[i] - y) ** 2;
     if (hint >= 0 && hint < N) {
       let i = hint;
       let best = d2(i);
@@ -294,12 +300,12 @@ export class Path {
           i = b;
         } else break;
       }
-      if (best < (this.halfW * 3) ** 2) return i;
+      if (best < (this.halfW * 3) ** 2 && (y === undefined || Math.abs(this.py[i] - y) < 20)) return i;
     }
     let bi = 0;
     let bd = Infinity;
     for (let i = 0; i < N; i += 2) {
-      const d = d2(i);
+      const d = level(i);
       if (d < bd) {
         bd = d;
         bi = i;
@@ -307,7 +313,7 @@ export class Path {
     }
     for (let k = -2; k <= 2; k++) {
       const i = this.wrap(bi + k);
-      const d = d2(i);
+      const d = level(i);
       if (d < bd) {
         bd = d;
         bi = i;
@@ -317,8 +323,8 @@ export class Path {
   }
 
   // Road frame under (x, z) near hint: fills out and returns true if (x, z) is over this strip.
-  frame(x, z, hint, out) {
-    const i = this.nearest(x, z, hint);
+  frame(x, z, hint, out, y) {
+    const i = this.nearest(x, z, hint, y);
     const dx = x - this.px[i];
     const dz = z - this.pz[i];
     const along = dx * this.thx[i] + dz * this.thz[i];
@@ -360,6 +366,48 @@ export class Path {
   }
 }
 
+// From P heading along t (flat, unit), the points of a curve round toward T: an arc of the widest radius (up to 16 m,
+// as tight as the peel off the road itself) that still leaves T ahead of you, run until you're heading at T. None when
+// T is near enough dead ahead for the spline to round. Heights ramp from P's toward T's.
+function bendToward(P, t, T) {
+  const res = [];
+  const dx = T.x - P.x;
+  const dz = T.z - P.z;
+  const L = Math.hypot(dx, dz);
+  if (L < 1) return res;
+  if ((t.x * dx + t.z * dz) / L > Math.cos(0.4)) return res;
+  const sg = Math.sign(t.x * dz - t.z * dx) || 1;
+  // the normal toward the turn
+  const nx = -t.z * sg;
+  const nz = t.x * sg;
+  let R = 16;
+  while (R > 8 && Math.hypot(T.x - (P.x + nx * R), T.z - (P.z + nz * R)) < R * 1.15) R *= 0.8;
+  const cx = P.x + nx * R;
+  const cz = P.z + nz * R;
+  const at = (f) => [cx + (-nx * Math.cos(f) + t.x * Math.sin(f)) * R, cz + (-nz * Math.cos(f) + t.z * Math.sin(f)) * R];
+  // turn until the heading points at T (the cross product of heading and the way to T changes sign)
+  let f = 0;
+  const step = 0.02;
+  for (; f < Math.PI; f += step) {
+    const [x, z] = at(f);
+    const hx = t.x * Math.cos(f) + nx * Math.sin(f);
+    const hz = t.z * Math.cos(f) + nz * Math.sin(f);
+    if ((hx * (T.z - z) - hz * (T.x - x)) * sg <= 0) break;
+  }
+  const arc = f * R;
+  const [ex, ez] = at(f);
+  const total = arc + Math.hypot(T.x - ex, T.z - ez);
+  const n = Math.max(1, Math.round(arc / 6));
+  for (let k = 1; k <= n; k++) {
+    const [x, z] = at((f * k) / n);
+    res.push(new THREE.Vector3(x, lerp(P.y, T.y, ((arc * k) / n) / total), z));
+  }
+  return res;
+}
+
+// a craft's fall (racer.js G_AIR), for where it comes down off a ledge at a fork
+const G_DROP = 27;
+
 // ------------------------------------------------------------------ the whole course
 export class TrackWorld {
   constructor(def, opts = {}) {
@@ -394,6 +442,7 @@ export class TrackWorld {
     this.storms = layStorms(this);
     buildSigns(this);
     buildCovers(this);
+    buildShapeCues(this); // accessibility: a shape per world (shapes.js), shown from settings
     this.group.add(this.layers.build());
     this._f = {};
     this._g = { y: -1e4, nx: 0, ny: 1, nz: 0, lat: 0, path: null, i: 0, f: 0, rx: 1, rz: 0, mask: 0, onRoad: false };
@@ -429,21 +478,24 @@ export class TrackWorld {
       const iB = main.index(b.to);
       const A = main.point(iA, off * side, 0, new THREE.Vector3());
       const B = main.point(iB, off * side, 0, new THREE.Vector3());
-      const tA = new THREE.Vector3(main.thx[iA], main.ty[iA], main.thz[iA]).normalize();
-      const tB = new THREE.Vector3(main.thx[iB], main.ty[iB], main.thz[iB]).normalize();
       const lead = b.lead ?? 30;
-      const RA = new THREE.Vector3(main.rightX(iA), 0, main.rightZ(iA)).multiplyScalar(side);
-      const RB = new THREE.Vector3(main.rightX(iB), 0, main.rightZ(iB)).multiplyScalar(side);
       // Peel off level with the road until clear of it, then do whatever the branch does, then merge back level.
       const out = this.halfWidth + hw + 3;
+      const tA = new THREE.Vector3(main.thx[iA], main.ty[iA], main.thz[iA]).normalize();
+      const tB = new THREE.Vector3(main.thx[iB], main.ty[iB], main.thz[iB]).normalize();
+      const RA = new THREE.Vector3(main.rightX(iA), 0, main.rightZ(iA)).multiplyScalar(side);
+      const RB = new THREE.Vector3(main.rightX(iB), 0, main.rightZ(iB)).multiplyScalar(side);
       const S = A.clone().addScaledVector(tA, lead).addScaledVector(RA, out - off);
       const E = B.clone().addScaledVector(tB, -lead).addScaledVector(RB, out - off);
+      const midA = A.clone().addScaledVector(tA, lead * 0.5).addScaledVector(RA, (out - off) * 0.35);
+      const midB = B.clone().addScaledVector(tB, -lead * 0.5).addScaledVector(RB, (out - off) * 0.35);
       S.y = A.y;
       E.y = B.y;
-      const pts = [A.clone().addScaledVector(tA, -4), A, A.clone().addScaledVector(tA, lead * 0.5).addScaledVector(RA, (out - off) * 0.35), S];
+      const pts = [A.clone().addScaledVector(tA, -4), A, midA, S];
       const lift = b.lift ?? 0;
+      const inner = [];
       if (b.via) {
-        for (const [x, z, y] of b.via) pts.push(new THREE.Vector3(x, y ?? lerp(A.y, B.y, 0.5) + lift, z));
+        for (const [x, z, y] of b.via) inner.push(new THREE.Vector3(x, y ?? lerp(A.y, B.y, 0.5) + lift, z));
       } else {
         const n = b.segments ?? 4;
         const dir = E.clone().sub(S).setY(0).normalize();
@@ -455,10 +507,19 @@ export class TrackWorld {
             q.x += -dir.z * b.bulge * Math.sin(Math.PI * u) * side;
             q.z += dir.x * b.bulge * Math.sin(Math.PI * u) * side;
           }
-          pts.push(q);
+          inner.push(q);
         }
       }
-      pts.push(E, B.clone().addScaledVector(tB, -lead * 0.5).addScaledVector(RB, (out - off) * 0.35), B, B.clone().addScaledVector(tB, 4));
+      // Out of the peel and into the branch on a curve you can drive, and the same back in: where the branch heads off
+      // at a sharp angle to the road, or turns back across it to go over it, the spline alone turned it in a hairpin a
+      // few metres across that threw cars into its rails or off it, and kept rivals off Grid City's RED SKYBRIDGE
+      // (the way the peel is heading as it reaches S, and the way back out of E)
+      const tS = S.clone().sub(midA).setY(0).normalize();
+      const tE = E.clone().sub(midB).setY(0).normalize();
+      const first = inner[0] || E;
+      const last = inner[inner.length - 1] || S;
+      pts.push(...bendToward(S, tS, first), ...inner, ...bendToward(E, tE, last).reverse());
+      pts.push(E, midB, B, B.clone().addScaledVector(tB, 4));
       const path = new Path(`b${k}`, pts, false, hw, { bankFactor: 3, mainFrom: b.from, mainTo: b.to, profile: b.profile });
       path.mask.fill(b.mask ?? M.ALL);
       path.def = b;
@@ -741,7 +802,13 @@ export class TrackWorld {
       if (o.type === 'slit') addSlit(this, o);
       else this.addObstacle(o);
     }
-    for (const b of def.boosts || []) this.addPad(b);
+    // a pad on a lens road or a form route takes the route's colour (formroutes.js), and a chain is laid along it
+    for (const b of def.boosts || []) {
+      const rp = b.path && b.mask == null && this.paths.find((p) => p.id === b.path);
+      const rm = rp && routeMask(rp);
+      this.addPad(rm != null && def.routeBoosts !== false ? { ...b, mask: rm } : b);
+    }
+    layRouteBoosts(this, (b) => this.addPad(b));
     // LAUNCHERS: a hole in your world is a ramp in the other one. Before each stretch of main road that's missing in
     // a lens, that lens gets a launcher, there only for it, that throws you up and over the hole. (More can be laid by
     // hand with def.launchers.)
@@ -978,7 +1045,8 @@ export class TrackWorld {
 
   // ------------------------------------------------------------------ queries
   // Ground under (x, y, z) for a racer looking through `mode`. hints is a per-racer object { pathId: index }.
-  ground(x, y, z, hints, mode = BOTH) {
+  // (exclude: a strip to leave out, so a probe can ask what other road is there)
+  ground(x, y, z, hints, mode = BOTH, exclude = null) {
     const g = this._g;
     g.y = -1e4;
     g.onRoad = false;
@@ -990,11 +1058,12 @@ export class TrackWorld {
     // road would grab you.
     const cur = hints._cur;
     for (const path of this.paths) {
+      if (path === exclude) continue;
       // cheap bounds reject
       if (y < path.minY - 8 || y > path.maxY + 60) {
         if (!(path.id in hints)) continue;
       }
-      if (!path.frame(x, z, hints[path.id] ?? -1, f)) continue;
+      if (!path.frame(x, z, hints[path.id] ?? -1, f, y)) continue;
       hints[path.id] = f.i;
       // a little grace past the edge of the strip you're on: at speed a hard corner can carry you past its rail for
       // a step before the rail pushes you back, and that step shouldn't drop you through the world
@@ -1058,18 +1127,55 @@ export class TrackWorld {
     const gz = g.rz;
     if (!rail) {
       const open = (side < 0 ? path.jL : path.jR)?.[g.i];
-      if (!open) return 0;
-      if (solidIn(open, r.mode)) {
-        // a fork opens the rail, but only where the fork's road is really there beside you: past its end (or where
-        // it has climbed away) the rail holds, so a junction is never a hole to fall through
-        const px = r.pos.x + gx * side * 2.2;
-        const pz = r.pos.z + gz * side * 2.2;
+      // an open side of the loop with no fork there is a planned drop: nothing holds you
+      if (!open && path.closed) return 0;
+      // a fork opens the rail, but only where the fork's road is really there beside you: past its end (or where
+      // it has climbed away) the rail holds, so a junction is never a hole to fall through. A branch drops its rail
+      // where its edge lies over the road it leaves and rejoins, and the same goes for it: Echo Ruins' RED ECHO
+      // crosses the main road at an angle, with its edge at the road's edge, where cars ran off it into nothing.
+      if (!open || solidIn(open, r.mode)) {
+        // (any other strip counts: asking for the best strip let the one you're on win the probe at its own edge,
+        // and a fork that peels off gently was a wall you slid along. But every step across has to be road, this
+        // one or the other: where a fork has peeled away there's a gap between them, and that's a rail. Each step
+        // is also asked a moment ahead, since at the far end of a fork's mouth the fork pulls away from the road
+        // faster than you cross to it: that let rivals off Shift Lattice's main road at the RED-ONLY WIRE.)
         const h = (r._probe ||= {});
-        Object.assign(h, r.hints);
         const saved = (this._gSave ||= {});
         Object.assign(saved, g);
-        const g2 = this.ground(px, r.pos.y, pz, h, r.mode);
-        const ok = g2.onRoad && g2.path !== path;
+        let ok = true;
+        const ax = r.vel.x / 30;
+        const az = r.vel.z / 30;
+        // (the first step is just past where the strip you're on stops holding you, ground()'s grace for it: the
+        // fork has to be there before you leave this one)
+        const edge = Math.max(0.3, wide + 1.5 + (r.hints._w || 0) - Math.abs(lat));
+        // (and a fork that lies below this road carried on out to there is a ledge, as a fork off the raised edge of
+        // a banked bend is. The Blade clings down it like any drop, but the others are in the air off it, and it has
+        // to be under them where they come down: at a slant at speed past a fork that's peeling away, you'd fly clean
+        // over it (a GLIDE GAP route on Echo Ruins).)
+        const F = FORMS[r.mode] || FORMS[BOTH];
+        const follows = r.grounded ? 0.45 + Math.max(0, r.speed - 45) * 0.008 + F.cling : 0;
+        const lands = (x, z) => {
+          Object.assign(h, r.hints);
+          const q = this.ground(x, r.pos.y, z, h, r.mode, path);
+          if (!q.onRoad) return false;
+          const top = Math.max(r.pos.y, saved.y) - (saved.nx * (x - r.pos.x) + saved.nz * (z - r.pos.z)) / saved.ny;
+          const fall = top - q.y;
+          if (fall < 0.7 || (F.cling > 0 && fall < follows - 0.2)) return true;
+          const vy = Math.max(0, r.vel.y);
+          const t = (vy + Math.sqrt(vy * vy + 2 * G_DROP * fall)) / G_DROP;
+          const qy = q.y;
+          Object.assign(h, r.hints);
+          return this.ground(x + r.vel.x * t, qy + 0.5, z + r.vel.z * t, h, r.mode, path).onRoad;
+        };
+        for (const d of [edge, 1.4, 2.6, 3.8]) {
+          if (Math.abs(lat + side * d) <= path.halfW + 0.2) continue;
+          const px = r.pos.x + gx * side * d;
+          const pz = r.pos.z + gz * side * d;
+          if (!lands(px, pz) || !lands(px + ax, pz + az)) {
+            ok = false;
+            break;
+          }
+        }
         Object.assign(g, saved);
         if (ok) return 0;
       }
@@ -1104,22 +1210,81 @@ export class TrackWorld {
     return Math.max(0, vn);
   }
 
-  // Safe place to put a racer back: on the main road, a little behind where they were, solid in BOTH.
+  // Where to put a racer back after a fall or a wreck: on the main road a little behind where they went, on a line
+  // with a fair run-up in front of it. Fair means RUNUP metres where the road is there in `mode` (no lens-only stretch,
+  // wall-run or pipe) and nothing solid in `mode` sits across that line. Inside an obstacle field that's the nearest
+  // open lane, not the field's start (dying near the end of Void Field's blocks used to cost 200 m and drop you 20 m
+  // from the first one); before a lens wall or a lens-only gap it's far enough back to see it coming and shift.
+  // `lensAhead` says a lens is needed soon after, so the race can make sure there's SHIFT for it.
   respawnPoint(mainU, mode = BOTH) {
     const m = this.main;
-    let i = m.index(mainU) - Math.round(18 / m.ds);
-    for (let k = 0; k < m.N; k++) {
-      const j = m.wrap(i - k);
-      let ok = true;
-      for (let q = -3; q <= 12; q++) if (!solidIn(m.mask[m.wrap(j + q)], mode) || m.cling?.[m.wrap(j + q)] || m.warpK?.[m.wrap(j + q)] > 0) ok = false;
-      for (const o of this.obstacles) if (o.path === m && Math.abs(o.i - j) < 10) ok = false;
-      if (ok) {
-        i = j;
-        break;
+    const N = m.N;
+    const hw = m.halfW;
+    const RUNUP = 55;
+    const run = Math.round(RUNUP / m.ds);
+    const i0 = m.index(mainU);
+    const roadOk = (j) => {
+      for (let q = -3; q <= run; q++) {
+        const k = m.wrap(j + q);
+        if (!solidIn(m.mask[k], mode) || m.cling?.[k] || m.warpK?.[k] > 0) return false;
+      }
+      return true;
+    };
+    // obstacles ahead of sample j, in this lens: [along metres, lateral reach, lateral centre]
+    const ahead = (j) => {
+      const out = [];
+      for (const o of this.obstacles) {
+        if (o.path !== m || !solidIn(o.mask, mode)) continue;
+        let d = o.i - j;
+        if (d < -N / 2) d += N;
+        else if (d > N / 2) d -= N;
+        const s = d * m.ds;
+        if (s < -6 || s > RUNUP + o.len) continue;
+        // a car is about 2.4 m wide; a sweeping block is anywhere along its sweep
+        out.push([s, o.w + 1.6 + Math.abs(o.sweep || 0) * hw, o.baseLat ?? o.lat]);
+      }
+      return out;
+    };
+    const LANES = [0, -0.35, 0.35, -0.6, 0.6];
+    let best = null;
+    for (let k = Math.round(8 / m.ds); k < Math.round(170 / m.ds) && !best; k++) {
+      const j = m.wrap(i0 - k);
+      if (!roadOk(j)) continue;
+      const obs = ahead(j);
+      for (const f of LANES) {
+        const lat = f * hw;
+        if (obs.every(([, reach, c]) => Math.abs(c - lat) >= reach)) {
+          best = { i: j, lat };
+          break;
+        }
       }
     }
-    const pos = m.point(i, 0, 0.3, new THREE.Vector3());
-    return { pos, yaw: Math.atan2(m.thx[i], m.thz[i]), i };
+    // nowhere near qualifies (a long lens-only stretch): back along the road until the whole width is clear
+    if (!best) {
+      for (let k = Math.round(18 / m.ds); k < N; k++) {
+        const j = m.wrap(i0 - k);
+        if (roadOk(j) && !ahead(j).length) {
+          best = { i: j, lat: 0 };
+          break;
+        }
+      }
+    }
+    best ||= { i: m.wrap(i0 - Math.round(18 / m.ds)), lat: 0 };
+    const i = best.i;
+    // a lens-only stretch or a wall that's solid in this lens, within a few seconds of the respawn
+    let lensAhead = false;
+    for (let q = run; q < run + Math.round(120 / m.ds) && !lensAhead; q++) {
+      const k = m.wrap(i + q);
+      if (!solidIn(m.mask[k], mode) && !m.glide?.[k]) lensAhead = true;
+    }
+    for (const o of this.obstacles) {
+      if (o.path !== m || o.type !== 'wall' || !solidIn(o.mask, mode)) continue;
+      let d = o.i - i;
+      if (d < 0) d += N;
+      if (d * m.ds < RUNUP + 120) lensAhead = true;
+    }
+    const pos = m.point(i, best.lat, 0.3, new THREE.Vector3());
+    return { pos, yaw: Math.atan2(m.thx[i], m.thz[i]), i, lat: best.lat, lensAhead };
   }
 
   gridSlot(k) {

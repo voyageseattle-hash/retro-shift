@@ -119,7 +119,8 @@ const GLYPHS = {
 };
 GLYPHS.generic = GLYPHS.xbox;
 // (the lens buttons are already labelled RED, BOTH and BLUE, so their chips and tips carry no extra glyph)
-GLYPHS.touch = { ...GLYPHS.keyboard, gas: 'GAS', brake: 'BRK', steer: '◀ ▶', drift: 'DRIFT', confirm: 'TAP', back: '✕', pause: '❚❚', reset: '↺', look: 'REAR', red: '', blue: '', both: '' };
+// (on a phone the charge and form slots in the HUD are the buttons: tap them)
+GLYPHS.touch = { ...GLYPHS.keyboard, gas: 'GAS', brake: 'BRK', steer: '◀ ▶', drift: 'DRIFT', confirm: 'TAP', back: '✕', pause: '❚❚', reset: '↺', look: 'REAR', fire: 'TAP', form: 'TAP', red: '', blue: '', both: '' };
 
 function normalizePad(p) {
   const buttons = p.buttons.map((b) => (typeof b === 'number' ? b : b.value || (b.pressed ? 1 : 0)));
@@ -418,7 +419,7 @@ export class Input {
       if (Math.abs(t.pitch || 0) > Math.abs(pitch)) pitch = t.pitch;
       drift = drift || t.drift;
       driftPressed = driftPressed || this.touchEdges.has('drift');
-      fire = fire || t.fire;
+      fire = fire || t.fire || this.touchEdges.has('fire');
       item = item || this.touchEdges.has('item');
       special = special || this.touchEdges.has('special');
       reset = reset || t.reset;
@@ -426,6 +427,7 @@ export class Input {
       jump = jump || this.touchEdges.has('jump');
       rear = rear || this.touchEdges.has('rear');
       horn = horn || this.touchEdges.has('horn');
+      form = form || this.touchEdges.has('form');
     }
     c.throttle = throttle;
     c.brake = brake;
@@ -481,6 +483,14 @@ export class Input {
     return false;
   }
 
+  // Is a menu action's key or button held down right now (not only pressed this frame)?
+  menuHeld(action) {
+    if (this.key(MENU[action] || [])) return true;
+    const btns = { confirm: [PAD.A, PAD.START], back: [PAD.B], pause: [PAD.START] }[action] || [];
+    for (let i = 0; i < 4; i++) for (const b of btns) if ((this.padNow[i][b] || 0) > 0.5) return true;
+    return false;
+  }
+
   // Second-player menu edges for split-screen truck select.
   menuP2(action) {
     const map = { left: ['ArrowLeft'], right: ['ArrowRight'], confirm: ['Enter', 'NumpadEnter'], back: ['Backspace'] };
@@ -505,4 +515,40 @@ export class Input {
     this.touchEdges.clear();
     this.anyPressed = false;
   }
+}
+
+// ------------------------------------------------------------------ remapped keys (Settings > Accessibility > Keys)
+// One key per action for the solo keyboard. The chosen key replaces that action's keys and is taken off any other
+// action that had it; the action's prompt glyph follows. (Split-screen keeps its fixed layout.)
+export const REMAP_ACTIONS = [
+  ['accel', 'GAS'], ['brake', 'BRAKE'], ['left', 'STEER LEFT'], ['right', 'STEER RIGHT'], ['drift', 'DRIFT'],
+  ['item', 'RED'], ['special', 'BLUE'], ['jump', 'BOTH'], ['fire', 'CHARGE'], ['form', 'FORM MOVE'],
+  ['horn', 'HORN'], ['look', 'LOOK BACK'], ['reset', 'RESET'],
+];
+const DEFAULT_SOLO = JSON.parse(JSON.stringify(BIND_SOLO));
+const DEFAULT_GLYPHS = { ...GLYPHS.keyboard };
+const NAMES = { Space: 'SPACE', ShiftLeft: 'L⇧', ShiftRight: 'R⇧', ControlLeft: 'L-CTRL', ControlRight: 'R-CTRL', AltLeft: 'L-ALT', AltRight: 'R-ALT', ArrowUp: '▲', ArrowDown: '▼', ArrowLeft: '◀', ArrowRight: '▶', Enter: 'ENTER', Tab: 'TAB', Backspace: '⌫', Comma: ',', Period: '.', Slash: '/', Semicolon: ';', Quote: "'", BracketLeft: '[', BracketRight: ']', Backslash: '\\', Minus: '-', Equal: '=' };
+export function keyLabel(code = '') {
+  return NAMES[code] || code.replace(/^Key|^Digit/, '').replace(/^Numpad/, 'NUM ').toUpperCase();
+}
+export const soloKeys = (action) => BIND_SOLO[action] || [];
+// map: { action: code }. An empty map puts the defaults back.
+export function applyKeymap(map = {}) {
+  for (const a of Object.keys(DEFAULT_SOLO)) BIND_SOLO[a] = [...DEFAULT_SOLO[a]];
+  for (const [action, code] of Object.entries(map)) {
+    if (!BIND_SOLO[action] || !code) continue;
+    for (const a of Object.keys(BIND_SOLO)) BIND_SOLO[a] = BIND_SOLO[a].filter((c) => c !== code);
+    BIND_SOLO[action] = [code];
+    GAME_KEYS.add(code);
+  }
+  const K = GLYPHS.keyboard;
+  Object.assign(K, DEFAULT_GLYPHS);
+  const L = (a) => keyLabel(BIND_SOLO[a][0]);
+  if (map.accel) K.gas = L('accel');
+  if (map.brake) K.brake = L('brake');
+  if (map.left || map.right) K.steer = `${L('left')} ${L('right')}`;
+  for (const [a, g] of [['drift', 'drift'], ['fire', 'fire'], ['form', 'form'], ['horn', 'horn'], ['look', 'look'], ['reset', 'reset']]) if (map[a]) K[g] = L(a);
+  if (map.item) K.red = K.item = L('item');
+  if (map.special) K.blue = K.special = L('special');
+  if (map.jump) K.both = K.jump = L('jump');
 }

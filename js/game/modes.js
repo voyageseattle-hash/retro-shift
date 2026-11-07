@@ -32,7 +32,7 @@ export function monoDef(def) {
 
 // ------------------------------------------------------------------ save file
 const KEY = 'rs.progress';
-const blank = () => ({ cups: {}, trial: {}, mono: {}, unlocked: [], seen: [] });
+const blank = () => ({ cups: {}, trial: {}, mono: {}, tour: {}, unlocked: [], seen: [] });
 export function getProgress() {
   return { ...blank(), ...storage.get(KEY, {}) };
 }
@@ -46,6 +46,14 @@ export function recordCup(cupId, place) {
   saveProgress(p);
   return p;
 }
+// SHIFT TOUR: the most stars each event has paid (0..3).
+export function recordTour(eventId, stars) {
+  const p = getProgress();
+  if (stars > (p.tour[eventId] || 0)) p.tour[eventId] = stars;
+  saveProgress(p);
+  return p;
+}
+export const tourStars = (p = getProgress()) => Object.values(p.tour || {}).reduce((a, b) => a + b, 0);
 export function recordMedal(kind, trackId, medal) {
   const p = getProgress();
   const t = kind === 'mono' ? p.mono : p.trial;
@@ -85,14 +93,17 @@ export const COLORWAYS = [
   { id: 'chrome', name: 'CHROME', c: 0xcfd6dd, unlock: 'paint:chrome' },
   { id: 'gold', name: 'GOLD', c: 0xffe08a, unlock: 'paint:gold' },
   { id: 'spectrum', name: 'SPECTRUM', c: 'spectrum', unlock: 'paint:spectrum' },
+  { id: 'aurora', name: 'AURORA', c: 0x2affb0, unlock: 'paint:aurora' },
+  { id: 'indigo', name: 'INDIGO', c: 0x5a5aff, unlock: 'paint:indigo' },
+  { id: 'rose', name: 'ROSE', c: 0xff3a7a, unlock: 'paint:rose' },
 ];
 const medalCount = (p) => Object.values(p.trial).filter(Boolean).length + Object.values(p.mono).filter(Boolean).length;
 const golds = (t) => Object.values(t).filter((m) => m >= 3).length;
 const cupTop = (p, id, place) => p.cups[id] && p.cups[id] <= place;
 
 export const UNLOCKS = [
-  { id: 'car:chroma', name: 'CHROMA', hint: 'Take a trophy in the SIGNAL CUP', test: (p) => cupTop(p, 'signal', 3) },
-  { id: 'car:raster', name: 'RASTER', hint: 'Take a trophy in the STATIC CUP', test: (p) => cupTop(p, 'static', 3) },
+  { id: 'car:chroma', name: 'CHROMA', hint: 'Take a trophy in the SIGNAL CUP, or earn 15 stars on SHIFT TOUR', test: (p) => cupTop(p, 'signal', 3) || tourStars(p) >= 15 },
+  { id: 'car:raster', name: 'RASTER', hint: 'Take a trophy in the STATIC CUP, or earn 35 stars on SHIFT TOUR', test: (p) => cupTop(p, 'static', 3) || tourStars(p) >= 35 },
   { id: 'car:glitch', name: 'GLITCH', hint: 'Earn 5 medals in Time Trial or Mono Run', test: (p) => medalCount(p) >= 5 },
   { id: 'car:dash', name: 'DASH (from LAST LINE)', hint: 'Earn 3 gold medals in Mono Run', test: (p) => golds(p.mono) >= 3 },
   { id: 'car:greatwedge', name: 'GREAT WEDGE (from ABSURD COMBAT RACING)', hint: 'Win gold trophies in both cups', test: (p) => cupTop(p, 'signal', 1) && cupTop(p, 'static', 1) },
@@ -101,6 +112,9 @@ export const UNLOCKS = [
   { id: 'paint:chrome', name: 'CHROME paint', hint: 'Earn 10 medals', test: (p) => medalCount(p) >= 10 },
   { id: 'paint:gold', name: 'GOLD paint', hint: 'Win a gold cup trophy', test: (p) => cupTop(p, 'signal', 1) || cupTop(p, 'static', 1) },
   { id: 'paint:spectrum', name: 'SPECTRUM paint', hint: 'Gold medals on all ten Time Trials', test: (p) => golds(p.trial) >= 10 },
+  { id: 'paint:aurora', name: 'AURORA paint', hint: 'Earn 8 stars on SHIFT TOUR', test: (p) => tourStars(p) >= 8 },
+  { id: 'paint:indigo', name: 'INDIGO paint', hint: 'Earn 25 stars on SHIFT TOUR', test: (p) => tourStars(p) >= 25 },
+  { id: 'paint:rose', name: 'ROSE paint', hint: 'Finish THE LAST SHIFT on the podium', test: (p) => (p.tour?.['tour.6.1'] || 0) > 0 },
 ];
 const STARTERS = ['vector', 'scanline', 'polygon'];
 const unlockAll = () => typeof location !== 'undefined' && new URLSearchParams(location.search).has('unlockall');

@@ -19,6 +19,8 @@ export const DRIVERS = {
     win: 'Experience is just ghosts you already beat.',
     lose: 'Fine. Nobody wins every split.',
     pass: 'Patience, rookie.',
+    downed: ['Lucky hit. Don’t get used to it.', 'Okay. I felt that one.'],
+    final: ['Last lap. This is where rookies fold.', 'One lap left. Don’t blink.'],
   },
   scanline: {
     taunted: ['Was that a horn or a squeak?', 'Oh, it’s ON. Red-line ON.'],
@@ -29,6 +31,8 @@ export const DRIVERS = {
     win: 'Told you. Red is faster.',
     lose: 'That was a blue-world fluke.',
     pass: 'See you never!',
+    downed: ['Hey! I was in the red! That doesn’t count!', 'Ugh, my paint! My SPEED!'],
+    final: ['Final lap! Red line all the way home!', 'Last lap. Try and keep up!'],
   },
   polygon: {
     taunted: ['Noted. Adjusting your threat level up 2 percent.', 'Honking costs you 0.4 seconds. I timed it.'],
@@ -39,6 +43,8 @@ export const DRIVERS = {
     win: 'As calculated.',
     lose: 'Recalculating...',
     pass: 'Optimal line, sorry.',
+    downed: ['That was not in the model.', 'Collision logged. Revenge scheduled.'],
+    final: ['Final lap. Your odds have not improved.', 'Last lap. I have run the numbers.'],
   },
   chroma: {
     taunted: ['Rude. Gorgeous, but rude.', 'Darling, don’t honk at the main character.'],
@@ -49,6 +55,8 @@ export const DRIVERS = {
     win: 'And the crowd goes violet!',
     lose: 'At least my lighting was perfect.',
     pass: 'Mwah!',
+    downed: ['My finish! You absolute vandal!', 'Darling, that was NOT my angle.'],
+    final: ['Last lap, darling. Save me a spot in the photo.', 'Final lap! Lights, camera, me!'],
   },
   raster: {
     taunted: ['BEEP BEEP to you too, noob.', 'Achievement unlocked: made RAZ mad.'],
@@ -59,6 +67,8 @@ export const DRIVERS = {
     win: 'NEW HIGH SCORE!',
     lose: 'Continue? 9... 8... 7...',
     pass: 'Pixel perfect!',
+    downed: ['LOST A LIFE! You owe me a quarter!', 'Respawning... with a grudge.'],
+    final: ['FINAL STAGE! Cue the boss music!', 'Last lap! No continues!'],
   },
   glitch: {
     taunted: ['h-h-honk? honk. HONK.', 'I heard that before you pressed it.'],
@@ -69,6 +79,8 @@ export const DRIVERS = {
     win: 'w1nn3r w1nn3r w1nn3r',
     lose: 'that didn’t h4ppen. that didn’t h4ppen.',
     pass: 'excuse m3 (from the other side)',
+    downed: ['i f-f-fell through. again.', 'that hurt in b0th worlds.'],
+    final: ['last l4p. or the first. hard to say.', 'the s̶e̶a̶m is closing. hurry.'],
   },
 };
 export const driverOf = (carId) => DRIVERS[carId] || null;

@@ -20,7 +20,7 @@ const RADIO_VOICES = {
   dash: { f0: 1.02, form: 1.04, rate: 0.9 }, // DASH: plucky
   greatwedge: { f0: 0.6, form: 0.86, rate: 1.15, growl: 0.45 }, // Captain Finn Razorback
 };
-const ANNOUNCER = ['title', 'three', 'two', 'one', 'go', 'lap2', 'final', 'winner', 'second', 'third', 'over', 'record', 'gold', 'champion', 'p1wins', 'p2wins', 'ready', 'grandprix', 'timetrial', 'monorun', 'twoplayer', 'online', 'shift', 'unlocked'];
+const ANNOUNCER = ['title', 'three', 'two', 'one', 'go', 'lap2', 'final', 'winner', 'second', 'third', 'over', 'record', 'gold', 'champion', 'p1wins', 'p2wins', 'ready', 'grandprix', 'timetrial', 'monorun', 'twoplayer', 'online', 'shift', 'unlocked', 'chain3', 'chain5', 'chain8', 'perfect', 'takedown'];
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
 export class Audio extends Engine {
@@ -49,11 +49,15 @@ export class Audio extends Engine {
         .catch(() => {});
     }
   }
-  // Play an announcer line; returns its length in seconds (0 if it isn't loaded yet).
-  announce(id, delay = 0, vol = 1) {
+  // Play an announcer line; returns its length in seconds (0 if it isn't loaded yet). A soft line (the in-race calls:
+  // chains, PERFECT SHIFT, takedowns) keeps quiet rather than talk over a line that's still being said.
+  announce(id, delay = 0, vol = 1, soft = false) {
     const buf = this.voice?.get(id);
     if (!buf || !this.ctx || this.announcerOff) return 0;
     const t = this.ctx.currentTime + delay;
+    if (soft && t < (this.talkingUntil || 0)) return 0;
+    // (each clip is the words, then about a second of the hall dying away)
+    this.talkingUntil = Math.max(this.talkingUntil || 0, t + buf.duration - 1);
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     const g = this.ctx.createGain();
@@ -503,7 +507,7 @@ export class Audio extends Engine {
     const W = this.sfxWet;
     // The sounds a player can set off many times a second (shifting, grinding a rail, mashing a shift with no
     // energy) are rate-limited, so they read as one event and not a buzz.
-    const lim = { shift: 0.07, scrape: 0.22, wall: 0.25, denied: 0.35, smash: 0.08, phase: 0.12, shard: 0.04 }[name];
+    const lim = { shift: 0.07, scrape: 0.22, wall: 0.25, denied: 0.35, smash: 0.08, phase: 0.12, shard: 0.04, chain: 0.08, perfect: 0.15 }[name];
     if (lim) {
       const last = this.throttle.get(`rs-${name}`) ?? -1;
       if (t - last < lim) return;
@@ -534,12 +538,56 @@ export class Audio extends Engine {
       case 'shard':
         this.arp(t, [88, 92, 95, 100], 0.045, 0.1, 'bell');
         break;
+      case 'chain': {
+        // a SHIFT CHAIN link: a soft bell pair climbing an E minor pentatonic ladder with the multiplier
+        const m = clamp(arg || 1, 1, 8);
+        const n = [76, 79, 81, 83, 86, 88, 91, 93][m - 1];
+        this.arp(t, [n, n + 7], 0.04, 0.05 + m * 0.004, 'vibes');
+        break;
+      }
+      case 'perfect': {
+        // PERFECT SHIFT: a bright zing up into the lens, a quick sparkle, and the big turbo under it
+        const up = arg === BLUE ? 1.12 : arg === RED ? 0.9 : 1;
+        this.tone('sine', 700 * up, t, 0.16, 0.06, W, { slideTo: 2600 * up, slideTime: 0.12, fm: [2, 0.4] });
+        this.arp(t + 0.06, [88, 95, 100], 0.03, 0.06, 'bell');
+        this.thump(t, 140, 50, 0.12, 0.2);
+        super.play('miniturbo3');
+        break;
+      }
+      case 'chainEnd':
+        // the chain lets go: two soft notes back down
+        this.arp(t, [83, 76], 0.07, 0.04, 'vibes');
+        break;
+      case 'chainBreak':
+        // broken by a crash: a short dull drop
+        this.tone('triangle', 330, t, 0.2, 0.05, this.sfxDry, { slideTo: 120, filter: 1200 });
+        break;
       case 'fall':
         this.tone('triangle', 800, t, 0.9, 0.14, W, { slideTo: 60 });
         break;
       case 'turbo':
         super.play(`miniturbo${clamp(arg || 1, 1, 3)}`);
         break;
+      case 'driftStage':
+        // a drift charging up a stage (feel.js): BLUE, RED, PRISM, each a step higher
+        super.play(`drift${clamp(arg || 1, 1, 3)}`, 0.8);
+        break;
+      case 'whoosh': {
+        // a rival going past close: a short band of air sweeping down, panned to the side it passes on
+        const o = arg || {};
+        const v = o.v ?? 0.6;
+        let dest = this.sfxDry || this.sfx;
+        if (this.ctx.createStereoPanner) {
+          const p = this.ctx.createStereoPanner();
+          p.pan.value = clamp(o.pan || 0, -1, 1);
+          p.connect(dest);
+          dest = p;
+          setTimeout(() => p.disconnect(), 900);
+        }
+        this.swell(t, 0.42, 0.22 * v, dest, 'bandpass', 2600, 520, 1.1);
+        this.noiseHit(t + 0.12, 0.2, 0.08 * v, dest, 'lowpass', 900, 0.8, 300);
+        break;
+      }
       case 'wall':
         super.play('crunch');
         super.play('hit');

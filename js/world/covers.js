@@ -38,7 +38,7 @@ export function buildCovers(world) {
     let j0 = -1;
     let j1 = -1;
     for (let j = 0; j < b.N; j++) {
-      const clearOf = !main.frame(b.px[j], b.pz[j], -1, fr) || Math.abs(fr.lat) > main.halfW + b.halfW + 1.5 || Math.abs(fr.y - b.py[j]) > 6;
+      const clearOf = !main.frame(b.px[j], b.pz[j], -1, fr, b.py[j]) || Math.abs(fr.lat) > main.halfW + b.halfW + 1.5 || Math.abs(fr.y - b.py[j]) > 6;
       if (clearOf && j0 < 0) j0 = j;
       if (clearOf) j1 = j;
     }

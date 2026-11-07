@@ -63,9 +63,11 @@ Touch controls appear on phones and tablets.
 ## Modes
 
 - **Grand Prix**: the SIGNAL CUP and the STATIC CUP, five courses each, six racers, points for every place (10, 7, 5, 3, 2, 1). Trophies unlock cars and colours.
+- **SHIFT TOUR**: thirty events across the ten courses in five legs, and a finale, each with a twist: a lens switched off, a form route you have to take, a storm, the police, a rival to beat head to head, a speed you can't drop under, a quota of takedowns, drift turbos, chains, phases or PERFECT SHIFTs. Each pays up to three stars, and stars open the next leg, new paint and a second way to two of the cars.
 - **Single Race**: any course against five rivals.
 - **Time Trial**: alone against your best ghost and the staff ghost, for bronze, silver and gold medals.
 - **Mono Run**: never both worlds. You start in RED, the BOTH button swaps lenses, every swap costs SHIFT, and only shards and phasing refill it. Road that exists only in the overlap is opened to both lenses.
+- **SHIFT SCHOOL**: seven short drills, one for each thing a course asks of you (the three forms, lens walls, a lens route, the slit, the glide gap, charges and the hull), each with bronze, silver and gold.
 
 ## 2 Player
 
