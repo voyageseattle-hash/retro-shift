@@ -26,8 +26,8 @@ const legOpen = (leg, stars = tourStars()) => stars >= LEGS[leg].stars;
 const starsOf = (d, p = getProgress()) => p.tour?.[d.id] || 0;
 const legStars = (leg, p = getProgress()) => legEvents(leg).reduce((a, d) => a + starsOf(d, p), 0);
 const legName = (leg) => (LEGS[leg].name === 'FINALE' ? 'FINALE' : `LEG ${leg + 1} · ${LEGS[leg].name}`);
-// (the brief's lens cards come from SHIFT SCHOOL, where a missing lens is "not in this drill")
-const cards = (ui, allowed) => lensCards(ui, allowed).replaceAll('Not in this drill.', 'Switched off for this event.');
+// (the brief's lens cards are SHIFT SCHOOL's, with the tour's word for a lens that's off)
+const cards = (ui, allowed) => lensCards(ui, allowed, 'Switched off for this event.');
 
 // ------------------------------------------------------------------ the tour: five legs and the finale
 export function tourMenu(ui, focus = null) {
