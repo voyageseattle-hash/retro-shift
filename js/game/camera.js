@@ -144,8 +144,11 @@ export class ChaseCamera {
       this.pos.y = clamp(this.pos.y, v.pos.y + height * 0.35, v.pos.y + height * 2.6);
     }
     if (world) {
-      const gy = world.heightAt(this.pos.x, this.pos.z, this.pos.y);
-      if (this.pos.y < gy + 1.2) this.pos.y = gy + 1.2;
+      // (the car's own road always holds the camera up, over a crest or a drop; another road only when it's below
+      // the camera's height above the car: a branch climbing away beside a fork used to pop the camera up onto it)
+      const g = world.ground(this.pos.x, this.pos.y, this.pos.z, (world._camHints ||= {}), 7);
+      const gy = g.onRoad ? g.y : world.floorY;
+      if ((g.path === v.gnd?.path || gy < v.pos.y + height) && this.pos.y < gy + 1.2) this.pos.y = gy + 1.2;
     }
     const lookTarget = _l.copy(A).addScaledVector(f, 6 * dir * v.scale);
     lookTarget.y += 1.4 * v.scale + Math.sin(pitch) * 6 * dir;
