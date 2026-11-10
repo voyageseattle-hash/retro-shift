@@ -6,6 +6,7 @@
 
 import { M } from './shift.js';
 import { DYSON } from './dyson.js';
+import { TWISTCUBE } from './twistcube.js';
 
 function fractions(points) {
   const d = [0];
@@ -430,6 +431,7 @@ export const TRACKS = [
   }),
   // ------------------------------------------------------------------ 15 (its own file: dyson.js)
   DYSON,
+  TWISTCUBE,
 ];
 
 export const trackById = (id) => TRACKS.find((t) => t.id === id) || TRACKS[0];

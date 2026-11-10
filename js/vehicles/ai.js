@@ -155,7 +155,7 @@ export class RaceAI {
     const score = (m) => {
       if (r.mono) {
         if (m === BOTH || !ok[m]) return 1e6;
-        return blocked[m] * 10 + (m === r.mode ? 0 : afford ? 4 : 1e5);
+        return blocked[m] * 10 + (m === r.mode ? 0 : afford ? 4 : 1e5) + (r.session?.live?.lensScore?.(r, m) || 0);
       }
       if (!ok[m]) return 1e6;
       let s = blocked[m] * 10;
@@ -170,6 +170,8 @@ export class RaceAI {
       if (r.session?.quake?.threat(r, m)) s += 6;
       // the police chase is only in BOTH: worth a lens to get through it
       if (r.session?.police?.threat(r, m)) s += 5;
+      // a course's own machinery has a say (QUARTER TURN: which lens the glass ahead is there in)
+      s += r.session?.live?.lensScore?.(r, m) || 0;
       return s;
     };
     this.think -= dt;

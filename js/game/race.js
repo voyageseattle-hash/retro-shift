@@ -96,6 +96,8 @@ export class Race {
     this.works = new Construction(this);
     this.quake = new Quake(this);
     this.scene.add(this.works.group, this.quake.group);
+    // a course's own moving machinery (QUARTER TURN's cube): def.live(race) -> { update(dt, p) }
+    this.live = this.world.def.live?.(this) || null;
     this.slowT = 0;
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
     // browser simulates only its own racers (the host also runs the AI); everyone else is a puppet fed by the network.
@@ -852,6 +854,7 @@ export class Race {
     this.storms.update(sim, p);
     this.works.update(sim);
     this.quake.update(sim, p);
+    this.live?.update(sim, p);
     this.traffic.update(sim, p);
     this.police.update(sim, p);
     this.items.update(sim);

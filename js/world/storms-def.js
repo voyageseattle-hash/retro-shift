@@ -11,7 +11,7 @@ export const STORMS = {
 
 export function layStorms(world) {
   const w = world;
-  if (w.def.id === 'core') return [];
+  if (w.def.id === 'core' || w.def.noStorms) return [];
   const routes = w.paths.filter((p) => p !== w.main && p.def && !p.def.hatch && (p.def.mask === M.RO || p.def.mask === M.BO));
   return routes.slice(0, routes.length >= 4 ? 2 : 1).map((b) => {
     const kind = b.def.mask === M.RO ? 'meteor' : 'lightning';
