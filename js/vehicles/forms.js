@@ -799,28 +799,26 @@ export function updateForms(model, mode, dt, speed, bob, body, flip = null) {
   B.rotation.y = 0;
   B.rotation.z = body.rotation.z * 2.4 * (1 - kb);
   if (flip) {
-    // a Möbius half twist round the wheel: the nose swings round to where the tail was (the model starts at the old
-    // facing, half a turn back from the new one) while the whole bike rolls once over, like a band twisting, and
-    // hops clear of the road at the middle of it so the roll never sinks into it
+    // the cab and the wheel counter-spin flat round the hub: the cab swings half a turn one way to its new facing
+    // (the model starts at the old facing, half a turn back from the new one) while the wheel whips round the
+    // other way, a full turn against the cab, so the two cross like the halves of a twisting band
     const e = flip.k < 0.5 ? 2 * flip.k * flip.k : 1 - 2 * (1 - flip.k) * (1 - flip.k);
     B.rotation.y = -Math.PI * (1 - e) * flip.dir;
-    B.rotation.z += TAU * e * flip.dir;
-    B.position.y += Math.sin(Math.PI * flip.k) * 0.5;
-    // turning round the wheel's hub, not the group's origin on the road
     const hub = P.blade.wheel.position;
     _e1.copy(hub).applyEuler(B.rotation);
     B.position.x += hub.x - _e1.x;
-    B.position.y += hub.y - _e1.y;
     B.position.z += hub.z - _e1.z;
   }
-  // the wheel: it rolls with the road. Through a FLIP it stays upright in its lane while the cab twists round it,
-  // and its spin slams from the old way (backward, seen from the new nose) into the new
+  // the wheel: it rolls with the road, and through a FLIP its roll slams from the old way into the new
   let rate = speed / P.blade.r;
   if (flip) rate *= flip.k < 0.3 ? -1 + flip.k : flip.k > 0.55 ? 1 : -0.7 + (1.7 * (flip.k - 0.3)) / 0.25;
   P.blade.spin = ((P.blade.spin || 0) + rate * dt) % TAU;
   const W = P.blade.wheel;
-  if (flip) W.quaternion.setFromEuler(B.rotation).invert().multiply(_q.setFromAxisAngle(_e2.set(1, 0, 0), P.blade.spin));
-  else W.quaternion.setFromAxisAngle(_e2.set(1, 0, 0), P.blade.spin);
+  W.quaternion.setFromAxisAngle(_e2.set(1, 0, 0), P.blade.spin);
+  if (flip) {
+    const e = flip.k < 0.5 ? 2 * flip.k * flip.k : 1 - 2 * (1 - flip.k) * (1 - flip.k);
+    W.quaternion.premultiply(_q.setFromAxisAngle(_e1.set(0, 1, 0), -TAU * e * flip.dir));
+  }
   P.blade.H.setOpacity(kr);
   P.blade.tyreMat.opacity = 0.9 * kr * P.blade.H.alpha;
   for (const f of P.deck.fans) f.rotation.z += (6 + Math.abs(speed) * 0.4) * dt;
