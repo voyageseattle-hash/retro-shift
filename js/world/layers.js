@@ -207,6 +207,8 @@ export class Layers {
     this.neutral = [];
     for (const [mask, B] of this.builders) {
       const m = this.materials(mask);
+      // a course that's drawn bent (mobius.js) bends every vertex here, once
+      if (this.bend) for (const a of [B.lp, B.rp, B.fp, B.gp]) this.bend(a);
       if (B.lp.length) {
         const g = new THREE.BufferGeometry();
         g.setAttribute('position', new THREE.Float32BufferAttribute(B.lp, 3));

@@ -61,7 +61,9 @@ export function buildCovers(world) {
     L.box(cover, c.x, c.y + 1.2 + H / 2, c.z, W, H, 0.6, yaw, null, true);
     const ux = Math.cos(yaw);
     const uz = -Math.sin(yaw);
-    for (const s of [-1, 1]) {
+    // (a strip with another world under it, mobius.js, has no floor to stand posts and buildings on)
+    const floats = !!world.mob;
+    for (const s of floats ? [] : [-1, 1]) {
       const px = c.x + ux * s * (W / 2 - 0.4);
       const pz = c.z + uz * s * (W / 2 - 0.4);
       L.tower(cover, px, world.floorY, pz, 0.8, c.y + 1.2 - world.floorY, 0.8, yaw);
@@ -69,7 +71,7 @@ export function buildCovers(world) {
 
     // buildings over the ground it runs across: their roofs carry the road in its own lens
     const step = 4;
-    for (let j = j0 + 6; j <= j1 - 2; j += step) {
+    for (let j = j0 + 6; j <= j1 - 2 && !floats; j += step) {
       const p = b.point(j, 0, 0, new THREE.Vector3());
       const h = p.y - world.floorY - 0.4;
       if (h < 4) continue;

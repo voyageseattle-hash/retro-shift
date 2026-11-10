@@ -3,12 +3,14 @@
 
 import * as THREE from '../../vendor/three.js';
 import { M, COLORS, RED, solidIn } from './shift.js';
+import { mobiusDecor } from './mobius.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const UP = V(0, 1, 0);
 
 export function buildDecor(world) {
   const kind = world.def.decor || 'core';
+  if (kind === 'mobius') return mobiusDecor(world);
   const fn = DECOR[kind] || DECOR.core;
   fn(world, world.layers, world.main, world.rng);
 }

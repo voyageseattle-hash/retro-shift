@@ -410,6 +410,7 @@ class App {
       this.race.update(dt);
       this.ui.updateHud(this.race, dt);
     }
+    this.race.beforeRender(this.renderer);
     this.renderer.render(this.race.scene, this.race.views(), 0.85);
   }
 
