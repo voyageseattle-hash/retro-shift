@@ -112,6 +112,10 @@ Hit a wall or a block flat out and your car comes apart into its own neon lines.
 
 Some roads only exist in one world. Grid City's BLUE ROOFTOPS rise out of the road when you look through the blue lens and are a row of buildings through the red. Deep in Shift Tunnels a blue iris hatch seals the SECRET BORE: shift to RED as you pass and it isn't there. Every coloured shortcut exists only through its lens, and the other world hides it: a billboard across its mouth and a row of buildings over the ground it runs across. Shift to the route's lens and the cover is gone. While you're on a road that only your lens can see, SHIFT doesn't drain, so finding a route is a reward, not a bar to ration.
 
+## Drop Tower
+
+Course 21, in the TOYBOX CUP: a toy marble run on the bookcase, two long laps, and every moving piece runs on the race clock, so it can be learned. You drop in at the top, swirl down the FUNNEL and the corkscrew, and cross the SEESAW (ride the plank while its near end is down, or take the road under it). Tinted tubes split off for RED and BLUE, and a SECRET CHUTE leaves the corkscrew behind a cardboard box that only RED sees through. The SPRING BRIDGE between the two towers is squeezed shut on lap 1; on the final lap it stretches on a beat, and its open coils are gaps the Skimmer floats over. The TILT TRAY is a wooden labyrinth board: its knob turns, then the board tips and slides you toward the low side, past plank gates the Blade fits between and holes the Skimmer floats across. A hole or a miss on the spring doesn't wreck you: you fall onto the catch chute, which rejoins before the LIFT, and the chain carries everyone back to the top. When the leader starts the final lap the hopper lets the marbles go: giant red and blue glass balls rolling the funnel and corkscrew with you, each solid only in its own world.
+
 ## The ten courses
 
 01 Core Circuit · 02 Layered Grid · 03 Shift Tunnels · 04 Orbital Loops · 05 Grid City · 06 Void Field · 07 Helix Ascent · 08 Fractal Route · 09 Shift Lattice · 10 Echo Ruins

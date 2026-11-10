@@ -22,6 +22,7 @@ import { Items, ITEMS } from './items.js';
 import { Reflection } from './reflect.js';
 import { Construction } from './construction.js';
 import { Quake } from './quake.js';
+import { DropTower } from './droptower.js';
 import { chainMove, chainTick, chainEnd, shiftTiming, perfectFx, newChain, newTally } from './chain.js';
 import { PIPE } from '../world/warp.js';
 import { disposeTree } from '../core/renderer.js';
@@ -95,6 +96,9 @@ export class Race {
     this.works = new Construction(this);
     this.quake = new Quake(this);
     this.scene.add(this.works.group, this.quake.group);
+    // DROP TOWER's moving pieces and marbles, on the race clock
+    this.tower = this.world.tower ? new DropTower(this) : null;
+    if (this.tower) this.scene.add(this.tower.group);
     this.slowT = 0;
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
     // browser simulates only its own racers (the host also runs the AI); everyone else is a puppet fed by the network.
@@ -847,6 +851,7 @@ export class Race {
     this.storms.update(sim, p);
     this.works.update(sim);
     this.quake.update(sim, p);
+    this.tower?.update(sim, p);
     this.traffic.update(sim, p);
     this.police.update(sim, p);
     this.items.update(sim);
@@ -1087,6 +1092,8 @@ export class Race {
           continue;
         }
       } else r.stuckT = 0;
+      this.tower?.step(r, dt);
+      if (r.respawnT > 0) continue;
       this.features(r, dt);
       this.moves(r, dt);
       this.progress(r, dt);
