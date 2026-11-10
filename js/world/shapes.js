@@ -67,6 +67,11 @@ export function buildShapeCues(world) {
       const rx = path.rightX(i);
       const rz = path.rightZ(i);
       for (const side of [-1, 1]) {
+        if (path.frames) {
+          // (a curved course: upright on the road's own up)
+          for (const [x, y] of segs) list.push(...path.wpoint(i, side * (path.halfW - 0.4) + x, 1.1 + y, new THREE.Vector3()).toArray());
+          continue;
+        }
         const p = path.point(i, side * (path.halfW - 0.4), 1.1, new THREE.Vector3());
         for (const [x, y] of segs) list.push(p.x + rx * x, p.y + y, p.z + rz * x);
       }

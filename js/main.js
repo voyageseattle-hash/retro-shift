@@ -1,6 +1,7 @@
 // RETRO SHIFT: a dual-world neon racer for GitHub Game Off 2026.
 // Racing engine from Absurd Combat Racing, the red/blue lens from LAST LINE's 3-D matinee.
 
+import { refAt } from './world/curved.js';
 import { showSplash } from './ui/splash.js';
 import * as THREE from '../vendor/three.js';
 import { Renderer, disposeTree } from './core/renderer.js';
@@ -149,6 +150,7 @@ class App {
     const q = m.point(j, 0, 0);
     A.camera.position.set(p.x + m.rightX(i) * 30, p.y + 22, p.z + m.rightZ(i) * 30);
     A.camera.lookAt(q.x, q.y + 2, q.z);
+    if (A.world.curved) refAt(A.world, m, i);
     A.world.update(dt, A.t, A.mode);
     A.env.update(dt, A.t, A.camera);
     this.renderer.setGrade('neon', 0, 0);

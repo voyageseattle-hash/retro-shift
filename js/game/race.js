@@ -13,6 +13,7 @@ import { GhostRecorder, GhostCar, loadGhost, saveGhost } from './ghost.js';
 import { monoDef, medalFor, recordMedal } from './modes.js';
 import { driverOf, pick } from './story.js';
 import { Debris } from './wreck.js';
+import { setRef, curveObject } from '../world/curved.js';
 import { SpeedLines } from './speedlines.js';
 import { Feel } from './feel.js';
 import { Storms } from './storms.js';
@@ -162,7 +163,8 @@ export class Race {
         // headless staff runs: the AI drives the player's car flat out
         if (opts.autopilot) r.ai = new RaceAI(r, this.world, 1);
       }
-      this.scene.add(r.root, r.trail.mesh);
+      // (on a curved course racers and trails are drawn in the drawn world, which is moved under the viewer: curved.js)
+      (this.world.curved ? this.world.group : this.scene).add(r.root, r.trail.mesh);
       this.racers.push(r);
     }
     this.cams = [this.cam];
@@ -199,7 +201,7 @@ export class Race {
     const g = new GhostCar(data, color, label);
     if (!g.ok) return;
     g.update(0, this.player.mode);
-    this.scene.add(g.root);
+    (this.world.curved ? this.world.group : this.scene).add(g.root);
     this.ghosts.push(g);
   }
 
@@ -842,7 +844,10 @@ export class Race {
       }
       this.lastPlace = place;
     }
-    for (const g of this.ghosts) g.update(this.raceTime, p.mode);
+    for (const g of this.ghosts) {
+      g.update(this.raceTime, p.mode);
+      if (this.world.curved) curveObject(this.world, g.root, g);
+    }
     this.debris.update(sim);
     this.storms.update(sim, p);
     this.works.update(sim);
@@ -855,6 +860,7 @@ export class Race {
     this.app.net?.applyPuppets(this);
     for (const r of this.racers) if (r.puppet ? r.root.visible : r.respawnT <= 0) r.syncVisual(dt);
     for (const r of this.racers) if (r.drawIn !== undefined && r.respawnT <= 0) this.drawIn(r, dt);
+    if (this.world.curved) setRef(this.world, p);
     if (this.split) {
       // the obstacles move once; each view then fades the worlds for its own player's lens (see views())
       for (const fn of this.world.animated) fn(this.t, dt);
@@ -1037,6 +1043,7 @@ export class Race {
       w: 1,
       h: 0.5,
       before: () => {
+        if (this.world.curved) setRef(this.world, pl);
         this.world.layers.useView(k);
         this.world.layers.update(0, pl.mode, this.t);
         this.env.useView(k);
