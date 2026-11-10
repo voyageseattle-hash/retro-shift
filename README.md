@@ -116,6 +116,17 @@ Some roads only exist in one world. Grid City's BLUE ROOFTOPS rise out of the ro
 
 01 Core Circuit · 02 Layered Grid · 03 Shift Tunnels · 04 Orbital Loops · 05 Grid City · 06 Void Field · 07 Helix Ascent · 08 Fractal Route · 09 Shift Lattice · 10 Echo Ruins
 
+## 17 Flipper Alley (TOYBOX CUP)
+
+A lap of a giant pinball table standing on the desk. The countdown draws the plunger back and GO fires the grid up the shooter lane. Everything on the table moves on the race clock, so a lap can be learned.
+
+- **The flippers** swing on a steady beat (three lamps count each swing in). Be on the left bat when it swings and it throws you up the clear centre ramp, the short way home. Miss it and you run off its tip into the drain, down to the ball trough for a slow ride back up under the table, unless you are in BLUE: the Skimmer floats the drain to the right bat.
+- **The bumper pit** is the fast, rough way round the top. Each pop bumper kicks you, three kicks in a row is a RICOCHET (a long boost and some SHIFT), and the BOTH car is heavy enough to hold its line through them. The outer lane is slower and calm.
+- **The printing is in two colours.** The rollover lanes over the arch boost only in their own lens, the drop targets across the centre lane are lens walls, and under the red plastic upper deck there is a secret lane that only shows in BLUE.
+- **The wire ramp** high over the arch is a single steel wireform that only the RED Blade can balance on.
+- **Lap 2** lights the kickback in the left outlane and brings the right flipper to life. **Lap 3** is multiball: three steel balls roll down the centre lane on a fixed timetable.
+- The backbox shows the race as a score table.
+
 ## How it's built
 
 - `js/world/shift.js`: the three lenses and world masks. The rule comes from LAST LINE's red/blue 3-D matinee: a thing drawn for one eye only is there only while that eye is looking.

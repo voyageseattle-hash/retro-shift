@@ -14,6 +14,7 @@ import { buildCovers } from './covers.js';
 import { layStorms } from './storms-def.js';
 import { layFormRoutes, addSlit, routeMask, layRouteBoosts } from './formroutes.js';
 import { layWarps, buildWarps, PIPE } from './warp.js';
+import { layPinball, buildPinball } from './pinball.js';
 import { FORMS } from '../vehicles/forms.js';
 
 const _a = new THREE.Vector3();
@@ -426,6 +427,7 @@ export class TrackWorld {
     this.shards = [];
     this.buildMain();
     this.buildBranches();
+    layPinball(this); // FLIPPER ALLEY's own roads (pinball.js)
     this.applyGaps();
     layFormRoutes(this);
     layWarps(this);
@@ -443,6 +445,7 @@ export class TrackWorld {
     buildSigns(this);
     buildCovers(this);
     buildShapeCues(this); // accessibility: a shape per world (shapes.js), shown from settings
+    buildPinball(this); // FLIPPER ALLEY's table (pinball.js)
     this.group.add(this.layers.build());
     this._f = {};
     this._g = { y: -1e4, nx: 0, ny: 1, nz: 0, lat: 0, path: null, i: 0, f: 0, rx: 1, rz: 0, mask: 0, onRoad: false };

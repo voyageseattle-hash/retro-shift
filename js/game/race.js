@@ -22,6 +22,7 @@ import { Items, ITEMS } from './items.js';
 import { Reflection } from './reflect.js';
 import { Construction } from './construction.js';
 import { Quake } from './quake.js';
+import { Pinball } from './pinball.js';
 import { chainMove, chainTick, chainEnd, shiftTiming, perfectFx, newChain, newTally } from './chain.js';
 import { PIPE } from '../world/warp.js';
 import { disposeTree } from '../core/renderer.js';
@@ -95,6 +96,8 @@ export class Race {
     this.works = new Construction(this);
     this.quake = new Quake(this);
     this.scene.add(this.works.group, this.quake.group);
+    // FLIPPER ALLEY's flippers, bumpers and steel balls (game/pinball.js)
+    this.pinball = this.world.pinball ? new Pinball(this) : null;
     this.slowT = 0;
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
     // browser simulates only its own racers (the host also runs the AI); everyone else is a puppet fed by the network.
@@ -849,6 +852,7 @@ export class Race {
     this.quake.update(sim, p);
     this.traffic.update(sim, p);
     this.police.update(sim, p);
+    this.pinball?.update(sim);
     this.items.update(sim);
 
     // visuals
