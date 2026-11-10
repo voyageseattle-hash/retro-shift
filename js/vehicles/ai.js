@@ -6,6 +6,7 @@
 import { clamp, wrapAngle, rand } from '../core/util.js';
 import { BOTH, RED, BLUE, MODES, solidIn, SHIFT } from '../world/shift.js';
 import { FORMS } from './forms.js';
+import { offPage } from '../game/popup.js';
 
 export class RaceAI {
   constructor(racer, world, skill = 0.8) {
@@ -106,7 +107,8 @@ export class RaceAI {
     }
     const obs = [];
     for (const o of w.obstacles) {
-      if (o.path !== P) continue;
+      // (a pop-up on another page of the book isn't there for this racer: game/popup.js)
+      if (o.path !== P || (o.page !== undefined && offPage(o, r))) continue;
       let d = o.i - pi;
       if (P.closed && d < -P.N / 2) d += P.N;
       if (d < -2 || d > n) continue;

@@ -22,6 +22,7 @@ import { Items, ITEMS } from './items.js';
 import { Reflection } from './reflect.js';
 import { Construction } from './construction.js';
 import { Quake } from './quake.js';
+import { PopupBook, offPage } from './popup.js';
 import { chainMove, chainTick, chainEnd, shiftTiming, perfectFx, newChain, newTally } from './chain.js';
 import { PIPE } from '../world/warp.js';
 import { disposeTree } from '../core/renderer.js';
@@ -95,6 +96,9 @@ export class Race {
     this.works = new Construction(this);
     this.quake = new Quake(this);
     this.scene.add(this.works.group, this.quake.group);
+    // the pop-up book (PAGE TURNER): a spread per lap
+    this.book = new PopupBook(this);
+    this.scene.add(this.book.group);
     this.slowT = 0;
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
     // browser simulates only its own racers (the host also runs the AI); everyone else is a puppet fed by the network.
@@ -325,7 +329,7 @@ export class Race {
     };
     if (r.mode === BLUE && r.grounded && r.speed > 30) {
       for (const o of this.world.obstacles) {
-        if (o.path !== P || o.broken || !solidIn(o.mask, BLUE) || o.type === 'wall' || o.door) continue;
+        if (o.path !== P || o.broken || !solidIn(o.mask, BLUE) || o.type === 'wall' || o.door || offPage(o, r)) continue;
         let di = o.i - tr.i;
         if (P.closed) di = ((di % P.N) + P.N + P.N / 2) % P.N - P.N / 2;
         const d = di * P.ds;
@@ -847,6 +851,7 @@ export class Race {
     this.storms.update(sim, p);
     this.works.update(sim);
     this.quake.update(sim, p);
+    this.book.update(sim);
     this.traffic.update(sim, p);
     this.police.update(sim, p);
     this.items.update(sim);
@@ -1043,6 +1048,7 @@ export class Race {
         this.env.update(this.dtLast || 0, this.t, this.cams[k].camera);
         this.traffic.render(pl.mode, pl);
         this.police.render(pl.mode, pl);
+        this.book.render(k, pl);
       },
     }));
   }
@@ -1101,7 +1107,7 @@ export class Race {
     if (!tr) return;
     const P = tr.path;
     for (const o of w.obstacles) {
-      if (o.path !== P || o.broken || r.beamT > 0) continue;
+      if (o.path !== P || o.broken || r.beamT > 0 || offPage(o, r)) continue;
       let di = tr.i - o.i;
       if (P.closed) {
         if (di > P.N / 2) di -= P.N;

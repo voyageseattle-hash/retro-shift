@@ -3,6 +3,7 @@
 
 import * as THREE from '../../vendor/three.js';
 import { M, COLORS, RED, solidIn } from './shift.js';
+import { buildBook } from './popupbook.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const UP = V(0, 1, 0);
@@ -297,6 +298,9 @@ const DECOR = {
     L.hoop(M.R, c, V(1, 0, 0), UP, 60, 6, 48, null, Math.PI * 1.2, 0.3);
   },
 };
+
+// 19 PAGE TURNER: the open book (popupbook.js); what stands on it is game/popup.js
+DECOR.popup = (world) => buildBook(world);
 
 export const DECOR_KINDS = Object.keys(DECOR);
 void COLORS;
