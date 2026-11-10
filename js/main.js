@@ -363,10 +363,12 @@ class App {
   frame(now) {
     // (the first frame's timestamp can be older than the constructor's clock reading: a step back in time left a
     // race's slow-motion timer running with no length, and the NaN step after it broke the traffic for good)
-    const dt = Math.min(0.05, Math.max(0, (now - this.last) / 1000));
+    const raw = Math.max(0, (now - this.last) / 1000);
+    const dt = Math.min(0.05, raw);
     this.last = now;
     this.input.update();
-    this.renderer.trackFrame(dt);
+    // (auto quality reads the real frame time: the clamped step never went over its 20 fps line, so it never acted)
+    this.renderer.trackFrame(raw, !!this.race && !this.paused);
     if (this.race) {
       if (!this.paused && this.input.menu('pause') && this.race.state !== 'finished') this.pause();
       else if (this.paused) this.ui.update();

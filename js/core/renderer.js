@@ -137,6 +137,7 @@ export class Renderer {
     this.autoQuality = true;
     this.frameTimes = [];
     this.lowFpsTime = 0;
+    this.settleT = 1;
     this.width = 1;
     this.height = 1;
     this.onResize = [];
@@ -290,15 +291,26 @@ export class Renderer {
     r.setViewport(0, 0, W, H);
   }
 
-  // Drops quality if the frame rate stays low, so slower machines stay playable.
-  trackFrame(dt) {
-    if (!this.autoQuality) return;
-    if (dt > 0.05) this.lowFpsTime += dt;
-    else this.lowFpsTime = Math.max(0, this.lowFpsTime - dt * 0.5);
-    if (this.lowFpsTime > 3) {
+  // Drops quality if the frame rate stays low, so slower machines stay playable. `frameTime` is the real time since
+  // the last frame (not the game's clamped step). Only racing counts: menus are light, and a race's first frames
+  // (track build, shader compiles) and one-off hitches (a tab switch, a GC pause) are left out.
+  trackFrame(frameTime, racing = true) {
+    if (!this.autoQuality || this.quality === 'low') return;
+    if (!racing || frameTime > 0.5) {
+      this.settleT = 1;
+      return;
+    }
+    if (this.settleT > 0) {
+      this.settleT -= frameTime;
+      return;
+    }
+    // slower than ~40 fps builds up, faster pays it back at half rate: about 4 s of sluggish play steps down once
+    if (frameTime > 1 / 40) this.lowFpsTime += frameTime;
+    else this.lowFpsTime = Math.max(0, this.lowFpsTime - frameTime * 0.5);
+    if (this.lowFpsTime > 4) {
       this.lowFpsTime = 0;
-      if (this.quality === 'high') this.setQuality('medium');
-      else if (this.quality === 'medium') this.setQuality('low');
+      this.settleT = 1.5;
+      this.setQuality(this.quality === 'high' ? 'medium' : 'low');
     }
   }
 }
