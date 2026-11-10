@@ -12,6 +12,7 @@
 // Courses with their own map (paths[0].globe, paths[0].fold on their branches) keep it in every style.
 
 import { colorForMask, solidIn, M, BOTH, RED, BLUE } from '../world/shift.js';
+import { drawPaths } from './minimap.js';
 
 const hex = (c) => `#${c.toString(16).padStart(6, '0')}`;
 const AZ = (35 * Math.PI) / 180;
@@ -240,4 +241,38 @@ export function snapCourse(race, renderer, THREE, w, h, dpr = 1) {
   return out;
 }
 
-export { RED, BLUE, BOTH };
+export const MAP_LABEL = { flat: 'FLAT', tilt: '3/4 NEON', snap: '3/4 LIVE' };
+// the map style: ?map=flat|tilt|snap on the address wins, then the setting
+export function mapStyle(settings) {
+  const q = new URLSearchParams(location.search).get('map');
+  if (MAP_STYLES.includes(q)) return q;
+  return MAP_STYLES.includes(settings?.map) ? settings.map : 'snap';
+}
+
+// The map on a course card: flat, the 3/4 neon drawing, or (snap, the default) the course's portrait shot.
+const portraits = new Map();
+export function drawCard(cv, paths, style, def) {
+  const ctx = cv.getContext('2d');
+  const drawn = () => {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (style === 'flat' || customMap(paths)) drawPaths(ctx, paths, cv.width, cv.height, 7, 10, null, 2.5);
+    else drawTiltCourse(ctx, paths, cv.width, cv.height, 7, { lineW: 2.2, pad: 6 });
+  };
+  if (style !== 'snap') return drawn();
+  // 'snap': the course's portrait (a crop of its staged outside shot); a course without one gets the drawn map
+  let img = portraits.get(def.id);
+  if (!img) {
+    img = new Image();
+    img.src = `assets/courses/${def.id}.webp`;
+    portraits.set(def.id, img);
+  }
+  const put = () => {
+    const r = Math.max(cv.width / img.naturalWidth, cv.height / img.naturalHeight);
+    const dw = img.naturalWidth * r, dh = img.naturalHeight * r;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(img, (cv.width - dw) / 2, (cv.height - dh) / 2, dw, dh);
+  };
+  if (img.complete) return img.naturalWidth ? put() : drawn();
+  img.addEventListener('load', put, { once: true });
+  img.addEventListener('error', drawn, { once: true });
+}
