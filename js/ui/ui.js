@@ -18,6 +18,7 @@ import { loadGhost } from '../game/ghost.js';
 import { playerName, setPlayerName, courseName, MAX_PLAYERS } from '../net/online.js';
 import { PREMISE, CUP_STORY, SECRET_SCENES, DRIVERS } from '../game/story.js';
 import { accessScreen } from './access.js';
+import { ARENA } from '../game/tag.js';
 
 export const el = (tag, cls, html) => {
   const e = document.createElement(tag);
@@ -394,18 +395,19 @@ export class UI {
     if (!net.active) return this.onlineMenu();
     const s = el('div', 'screen lobby');
     const host = net.isHost;
-    const rows = Array.from({ length: MAX_PLAYERS }, (_, k) => {
+    const tag = net.mode === 'tag';
+    const rows = Array.from({ length: Math.max(net.players.length, tag ? MAX_PLAYERS : 6) }, (_, k) => {
       const p = net.players[k];
       if (!p) return `<tr class="empty"><td>${k + 1}</td><td>AI RIVAL</td><td></td></tr>`;
       const car = CARS.find((c) => c.id === p.car) || CARS[0];
       return `<tr class="${p.slot === net.mySlot ? 'me' : ''}"><td>${k + 1}</td><td>${p.name}${p.slot === 0 ? ' <small>HOST</small>' : ''}</td><td style="color:${hex(car.color)}">${car.name}</td></tr>`;
     }).join('');
     s.innerHTML = `<h2>ROOM <span class="code">${net.code}</span></h2>
-      <div class="sub">${host ? 'Share the code. Friends pick ONLINE, then JOIN A ROOM.' : 'Waiting for the host to start the race.'}</div>
+      <div class="sub">${host ? 'Share the code. Friends pick ONLINE, then JOIN A ROOM.' : `Waiting for the host to start the ${tag ? 'round of LENS TAG' : 'race'}.`}</div>
       <div class="rgrid"><table class="standings lobby-table">${rows}</table>
-      <div class="lobby-course"><span>COURSE</span><b>${courseName(net.course)}</b><canvas width="220" height="130"></canvas></div></div>`;
+      <div class="lobby-course"><span>${tag ? 'LENS TAG · BATTLE' : 'COURSE'}</span><b>${tag ? ARENA.name : courseName(net.course)}</b><canvas width="220" height="130"></canvas></div></div>`;
     const cv = s.querySelector('canvas');
-    const def = TRACKS.find((t) => t.id === net.course);
+    const def = tag ? ARENA : TRACKS.find((t) => t.id === net.course);
     if (def) requestAnimationFrame(() => drawPaths(cv.getContext('2d'), this.preview(def).paths, cv.width, cv.height, 7, 10, null, 2.5));
     const list = el('div', 'list row');
     const cycleCourse = (d) => {
@@ -413,7 +415,13 @@ export class UI {
       net.setCourse(TRACKS[(i + d + TRACKS.length) % TRACKS.length].id);
     };
     const items = [
-      ...(host ? [{ label: 'START RACE', action: () => net.start() }, { label: '◀ COURSE ▶', action: () => cycleCourse(1), cycle: cycleCourse }] : []),
+      ...(host
+        ? [
+            { label: tag ? 'START LENS TAG' : 'START RACE', action: () => net.start() },
+            { label: tag ? '◀ MODE: LENS TAG ▶' : '◀ MODE: RACE ▶', action: () => net.setMode(tag ? 'race' : 'tag'), cycle: () => net.setMode(tag ? 'race' : 'tag') },
+            ...(tag ? [] : [{ label: '◀ COURSE ▶', action: () => cycleCourse(1), cycle: cycleCourse }]),
+          ]
+        : []),
       { label: 'CHANGE CRAFT', action: () => this.carSelect() },
       { label: 'LEAVE ROOM', action: () => (net.close(), this.onlineMenu()) },
     ];

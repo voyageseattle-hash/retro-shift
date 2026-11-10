@@ -108,10 +108,15 @@ export function tagResults(ui, race) {
   const list = el('div', 'list row');
   s.appendChild(list);
   ui.root.appendChild(s);
-  ui.menu = new Menu(ui.app, list, [
-    { label: 'RETRY', action: () => ui.app.startTag() },
-    { label: 'LENS TAG', action: () => (ui.app.quit(), ui.app.openTag()) },
-    { label: 'MENU', action: () => ui.app.quit() },
-  ], { onBack: () => ui.app.quit() });
+  const net = ui.app.net;
+  const items = race.online
+    ? [...(net.isHost ? [{ label: 'BACK TO LOBBY', action: () => net.backToLobby() }] : []), { label: 'LEAVE ROOM', action: () => (net.close(), ui.app.netLeft()) }]
+    : [
+        { label: 'RETRY', action: () => ui.app.startTag() },
+        { label: 'LENS TAG', action: () => (ui.app.quit(), ui.app.openTag()) },
+        { label: 'MENU', action: () => ui.app.quit() },
+      ];
+  if (race.online && !net.isHost) s.insertBefore(el('div', 'sub', 'The host will bring everyone back to the lobby.'), list);
+  ui.menu = new Menu(ui.app, list, items, { onBack: race.online ? undefined : () => ui.app.quit() });
   ui.menu.nodes.forEach((n) => list.appendChild(n));
 }

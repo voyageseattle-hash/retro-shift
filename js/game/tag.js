@@ -103,7 +103,17 @@ export class LensTag {
     race.nextComms = Infinity;
     race.app.audio.playCourse('void');
     for (const r of race.racers) r.baseSpeedMul = r.speedMul;
+    // a big room runs the same craft twice: the second one gets a number, and the paint it was given
+    const seen = new Map();
+    for (const r of race.racers) {
+      const n = (seen.get(r.name) || 0) + 1;
+      seen.set(r.name, n);
+      if (n > 1) r.name = `${r.name} ${n}`;
+      if (typeof r.livery?.paint === 'number') r.color = r.livery.paint;
+    }
     this.buildBeacon();
+    if (race.def === ARENA || race.def.id === ARENA.id) this.buildArena();
+    this.waves = [];
     // listen in on the race (as the event runner does): the round after each frame's sim, and each view drawn with
     // IT hidden from a lens that can't see it. (Race.bump calls contact() itself.)
     const update = race.update.bind(race);
@@ -148,6 +158,156 @@ export class LensTag {
     this.race.scene.add(g);
   }
 
+  // The PRISM BOWL's own look: a giant glass prism turning over the infield, splitting a white beam into a red one
+  // and a blue one across the bowl; rings of light on the infield floor under it; and a rim of tall prism pylons round
+  // the outside of the road, red and blue in turn, so the bowl reads as an arena from anywhere on it. All neutral:
+  // nothing here says which lens IT is in.
+  buildArena() {
+    const race = this.race;
+    const m = race.world.main;
+    const g = (this.arena = new THREE.Group());
+    const add = { transparent: true, blending: THREE.AdditiveBlending, depthWrite: false };
+    // the infield's middle
+    let cx = 0;
+    let cz = 0;
+    let cy = Infinity;
+    for (let i = 0; i < m.N; i++) {
+      cx += m.px[i];
+      cz += m.pz[i];
+      cy = Math.min(cy, m.py[i]);
+    }
+    cx /= m.N;
+    cz /= m.N;
+    const C = new THREE.Vector3(cx, cy, cz);
+    // the prism: a tall triangular glass column, its edges lit, slowly turning
+    const prism = new THREE.Group();
+    const geo = new THREE.CylinderGeometry(28, 28, 90, 3, 1);
+    prism.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x8a4ad8, opacity: 0.22, side: THREE.DoubleSide, ...add })));
+    this.prismEdge = new THREE.LineBasicMaterial({ color: 0xf4ecff, opacity: 0.95, ...add });
+    prism.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), this.prismEdge));
+    // an inner prism the other way up, red and blue
+    const inner = new THREE.CylinderGeometry(16, 16, 66, 3, 1);
+    const ir = new THREE.LineSegments(new THREE.EdgesGeometry(inner), new THREE.LineBasicMaterial({ color: COLORS.red, opacity: 0.8, ...add }));
+    const ib = new THREE.LineSegments(new THREE.EdgesGeometry(inner), new THREE.LineBasicMaterial({ color: COLORS.blue, opacity: 0.8, ...add }));
+    ir.rotation.y = Math.PI / 3;
+    ib.scale.setScalar(1.12);
+    prism.add(ir, ib);
+    this.prismInner = [ir, ib];
+    prism.position.set(cx, cy + 82, cz);
+    prism.rotation.z = 0.12;
+    this.prism = prism;
+    g.add(prism);
+    // the white beam coming down into it, and the split beams going out the other side, sweeping round the bowl
+    const beam = (color, len, w, op) => {
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.4, w, len, 8, 1, true), new THREE.MeshBasicMaterial({ color, opacity: op, side: THREE.DoubleSide, fog: false, ...add }));
+      b.geometry.translate(0, len / 2, 0);
+      return b;
+    };
+    const white = beam(0xffffff, 400, 2.2, 0.22);
+    white.position.set(cx, cy + 110, cz);
+    g.add(white);
+    this.beams = [];
+    for (const [col, k] of [[COLORS.red, 0], [COLORS.blue, 1]]) {
+      const b = beam(col, 300, 4, 0.24);
+      const pivot = new THREE.Group();
+      pivot.position.set(cx, cy + 64, cz);
+      b.rotation.z = Math.PI / 2 + 0.24; // out sideways and a little down, over the road
+      pivot.add(b);
+      pivot.userData.k = k;
+      g.add(pivot);
+      this.beams.push(pivot);
+    }
+    // rings of light on the infield floor
+    this.rings = [];
+    for (let k = 0; k < 4; k++) {
+      const r = 20 + k * 16;
+      const ring = new THREE.Mesh(new THREE.RingGeometry(r, r + 0.8, 72), new THREE.MeshBasicMaterial({ color: k % 2 ? COLORS.blue : COLORS.red, opacity: 0.5, side: THREE.DoubleSide, ...add }));
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(cx, cy + 0.2, cz);
+      g.add(ring);
+      this.rings.push(ring);
+    }
+    // the rim: a prism pylon every so often, outside the rail
+    const pyl = new THREE.CylinderGeometry(1.6, 2.4, 1, 3, 1);
+    pyl.translate(0, 0.5, 0);
+    const pylE = new THREE.EdgesGeometry(pyl);
+    const mats = [COLORS.red, COLORS.blue].map((c) => ({
+      line: new THREE.LineBasicMaterial({ color: c, opacity: 0.9, ...add }),
+      fill: new THREE.MeshBasicMaterial({ color: c, opacity: 0.12, side: THREE.DoubleSide, ...add }),
+      cap: new THREE.MeshBasicMaterial({ color: c, opacity: 0.85, ...add }),
+    }));
+    const capG = new THREE.OctahedronGeometry(1.6, 0);
+    const step = Math.max(1, Math.round(44 / m.ds));
+    const P = new THREE.Vector3();
+    this.caps = [];
+    for (let i = 0, n = 0; i < m.N; i += step, n++) {
+      // outward: whichever side of the road is further from the infield's middle
+      const a = m.point(i, m.halfW + 7, 0, new THREE.Vector3());
+      const b = m.point(i, -m.halfW - 7, 0, new THREE.Vector3());
+      P.copy(a.distanceToSquared(C) > b.distanceToSquared(C) ? a : b);
+      const h = 18 + (n % 3) * 7;
+      const M = mats[n % 2];
+      const fill = new THREE.Mesh(pyl, M.fill);
+      const line = new THREE.LineSegments(pylE, M.line);
+      for (const o of [fill, line]) {
+        o.position.set(P.x, P.y - 6, P.z);
+        o.scale.set(1, h + 6, 1);
+        o.rotation.y = n * 0.7;
+        g.add(o);
+      }
+      const cap = new THREE.Mesh(capG, M.cap);
+      cap.position.set(P.x, P.y + h + 2, P.z);
+      cap.userData.y = cap.position.y;
+      cap.userData.n = n;
+      g.add(cap);
+      this.caps.push(cap);
+    }
+    race.scene.add(g);
+  }
+  // The arena turning, and the tag shockwaves spreading (each frame, from update)
+  animate(dt) {
+    const t = this.race.t;
+    if (this.prism) {
+      this.prism.rotation.y = t * 0.18;
+      this.prismInner[0].rotation.y = -t * 0.5;
+      this.prismInner[1].rotation.y = t * 0.35;
+      for (const p of this.beams) p.rotation.y = t * 0.22 + p.userData.k * Math.PI;
+      this.rings.forEach((r, k) => (r.material.opacity = 0.3 + 0.25 * Math.sin(t * 2 - k * 0.9)));
+      for (const c of this.caps) {
+        c.rotation.y = t * 1.5 + c.userData.n;
+        c.position.y = c.userData.y + Math.sin(t * 2 + c.userData.n) * 0.6;
+      }
+      // the prism flares as the tag changes hands
+      this.flare = Math.max(0, (this.flare || 0) - dt * 1.5);
+      this.prismEdge.opacity = 0.7 + 0.3 * Math.sin(t * 3) * 0.5 + this.flare;
+      this.prism.scale.setScalar(1 + this.flare * 0.08);
+    }
+    for (let k = this.waves.length - 1; k >= 0; k--) {
+      const w = this.waves[k];
+      w.t += dt;
+      const f = w.t / 0.9;
+      if (f >= 1) {
+        this.race.scene.remove(w.mesh);
+        w.mesh.geometry.dispose();
+        w.mesh.material.dispose();
+        this.waves.splice(k, 1);
+        continue;
+      }
+      w.mesh.scale.setScalar(1 + f * (w.big ? 16 : 10));
+      w.mesh.material.opacity = (1 - f) ** 1.5 * 0.9;
+    }
+  }
+  // A tag's shockwave: two rings, one in each colour, out across the road from where it happened
+  wave(at, y) {
+    for (const [col, big] of [[COLORS.red, false], [COLORS.blue, true]]) {
+      const mesh = new THREE.Mesh(new THREE.RingGeometry(1.4, 2, 48), new THREE.MeshBasicMaterial({ color: col, opacity: 0.9, side: THREE.DoubleSide, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(at.x, y + 0.3, at.z);
+      this.race.scene.add(mesh);
+      this.waves.push({ mesh, t: 0, big });
+    }
+  }
+
   // Seconds left in the round.
   get left() {
     return Math.max(0, TAG.round - this.t);
@@ -160,9 +320,46 @@ export class LensTag {
     return d * L;
   }
 
+  // Online the host owns the round (who's IT, the scores, the end) and tells everyone; each browser still draws the
+  // tag for itself, and only moves its own craft (the spin, the surge).
+  get authority() {
+    return !this.race.online || this.race.online.isHost;
+  }
+  send(m, reliable = true) {
+    if (this.race.online?.isHost) this.race.app.net.t?.broadcast(m, reliable);
+  }
+  onNet(m) {
+    const race = this.race;
+    const bySlot = (s) => race.racers.find((r) => r.slot === s);
+    const scores = (list) => {
+      for (const [slot, sc, tg] of list || []) {
+        const r = bySlot(slot);
+        if (r) {
+          this.score.set(r, sc);
+          this.tags.set(r, tg);
+        }
+      }
+    };
+    if (m.t === 'tag') {
+      const r = bySlot(m.it);
+      if (r && r !== this.it) this.give(r, m.how || null);
+    } else if (m.t === 'tagsc') {
+      scores(m.s);
+      this.t = m.tt;
+    } else if (m.t === 'tagend') {
+      scores(m.s);
+      if (m.tt != null) this.t = m.tt;
+      if (!this.over) this.end();
+    }
+  }
+  packScores() {
+    return this.race.racers.map((r) => [r.slot, Math.round(this.score.get(r) * 100) / 100, this.tags.get(r)]);
+  }
+
   give(r, how = null) {
     const race = this.race;
     const old = this.it;
+    this.send({ t: 'tag', it: r.slot, how });
     this.it = r;
     r.tagSafeT = how ? TAG.safe : TAG.start;
     if (old) {
@@ -171,17 +368,19 @@ export class LensTag {
     }
     if (!how) return;
     this.tags.set(r, this.tags.get(r) + 1);
+    this.flare = 1;
     // the tag is ripped off the old IT: it spins out, sheds lines in both colours, and the new IT surges away
     if (old) {
-      old.spinOut(0.8, Math.random() < 0.5 ? -1 : 1);
+      if (!old.puppet) old.spinOut(0.8, Math.random() < 0.5 ? -1 : 1);
       if (race.near(old)) {
         race.debris.burst(old.root, _a.copy(old.vel).multiplyScalar(0.5), 8, old.gnd.y, 0.2, 1.8);
         _v.copy(old.pos).lerp(r.pos, 0.5).setY(old.pos.y + 0.6);
         race.debris.sparks(_v, _a.set(0, 1, 0), 30, COL[old.mode], 22, old.gnd.y);
         race.debris.sparks(_v, _a.set(0, 1, 0), 30, COL[r.mode], 22, old.gnd.y);
+        this.wave(_v, old.gnd.y);
       }
     }
-    r.giveBoost(1, 1.3);
+    if (!r.puppet) r.giveBoost(1, 1.3);
     const seen = race.players.some((p) => p === r || p === old || p.pos.distanceToSquared(r.pos) < 80 * 80);
     if (seen) race.app.audio.play('wreck');
     for (const p of race.players) {
@@ -197,7 +396,7 @@ export class LensTag {
     }
     race.aberr = Math.max(race.aberr || 0, 0.8);
     // a beat of slow motion when you're in it (one screen only)
-    if ((r.isPlayer || old?.isPlayer) && !race.split) {
+    if ((r.isPlayer || old?.isPlayer) && !race.split && !race.online) {
       race.slowLen = 0.6;
       race.slowT = 0.6;
     }
@@ -210,6 +409,7 @@ export class LensTag {
     const H = A === it ? B : A;
     // a hunter in BOTH only sees IT's shimmer: IT is out of phase with them
     if (H.mode === BOTH && it.mode !== BOTH) return true;
+    if (!this.authority) return false;
     if (this.over || this.race.state !== 'race' || it.tagSafeT > 0 || H.respawnT > 0) return false;
     if (H === this.lastIt && this.t < this.noBackT) return false;
     if (canTag(H.mode, it.mode)) this.give(H, 'touch');
@@ -218,13 +418,16 @@ export class LensTag {
   // A swipe that just misses still lands, and a LANCE reaches further.
   reachCheck() {
     const it = this.it;
-    if (this.over || this.race.state !== 'race' || it.tagSafeT > 0 || it.respawnT > 0) return;
+    // (online the host judges reach on what it sees, so it's a little more generous: everyone else is drawn ~0.1 s
+    // in the past)
+    const slack = this.race.online ? 0.8 : 0;
+    if (!this.authority || this.over || this.race.state !== 'race' || it.tagSafeT > 0 || it.respawnT > 0) return;
     for (const H of this.race.racers) {
       if (H === it || H.respawnT > 0 || !canTag(H.mode, it.mode)) continue;
       if (H === this.lastIt && this.t < this.noBackT) continue;
       _v.subVectors(it.pos, H.pos);
       if (Math.abs(_v.y) > 2.5) continue;
-      const reach = H.radius + it.radius + (H.lanceT > 0 ? TAG.lanceReach : TAG.reach);
+      const reach = H.radius + it.radius + slack + (H.lanceT > 0 || (H.puppet && H.mode === RED && H.speed > it.speed + 8) ? TAG.lanceReach : TAG.reach);
       if (_v.x * _v.x + _v.z * _v.z < reach * reach) return this.give(H, H.lanceT > 0 ? 'lance' : 'touch');
     }
   }
@@ -238,12 +441,16 @@ export class LensTag {
 
   update(dt) {
     const race = this.race;
+    this.animate(dt);
     for (const r of race.racers) r.wrongWay = 0; // a battle: drive whichever way you like
-    if (race.state === 'race' && !this.it) {
+    if (race.state === 'race' && !this.it && this.authority) {
       // the first IT: the CPU furthest up the grid, with a head start
-      const cpus = race.racers.filter((r) => !r.isPlayer);
+      const cpus = race.racers.filter((r) => !r.isPlayer && !r.human);
       this.give(cpus.sort((a, b) => b.prog - a.prog)[0] || race.racers[0]);
-      this.it.giveBoost(2, 1.35);
+      if (!this.it.puppet) this.it.giveBoost(2, 1.35);
+    }
+    if (this.it && !this.announced) {
+      this.announced = true;
       for (const p of race.players) race.emitP(p, 'popup', { text: p === this.it ? "YOU'RE IT · HIDE" : `${this.it.name} IS IT · HUNT`, color: '#ffd04a' });
     }
     if (!this.it || this.over) return;
@@ -259,7 +466,12 @@ export class LensTag {
         for (const p of race.players) race.emitP(p, 'popup', { text: 'DOUBLE TIME', color: '#ff4fd8' });
       }
       this.reachCheck();
-      if (this.left <= 0) this.end();
+      this.scT = (this.scT || 0) - dt;
+      if (this.scT <= 0 && this.race.online?.isHost) {
+        this.scT = 0.5;
+        this.send({ t: 'tagsc', tt: this.t, s: this.packScores() }, false);
+      }
+      if (this.left <= 0 && this.authority) this.end();
     }
     // IT runs a touch slower, and a hunter far behind it gets a surge to close back in (so the hunt never strings out
     // round the loop)
@@ -276,6 +488,7 @@ export class LensTag {
   end() {
     const race = this.race;
     this.over = true;
+    this.send({ t: 'tagend', tt: this.t, s: this.packScores() });
     race.state = 'finished';
     for (const r of race.racers) {
       r.finished = true;

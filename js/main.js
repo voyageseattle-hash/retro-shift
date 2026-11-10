@@ -340,7 +340,8 @@ class App {
   // ------------------------------------------------------------------ online
   startOnline(cfg, mySlot, isHost) {
     this.audio.init();
-    const def = trackById(cfg.course);
+    const tag = cfg.mode === 'tag';
+    const def = tag ? ARENA : trackById(cfg.course);
     const me = cfg.slots.find((s) => s.slot === mySlot);
     if (this.race) this.race.dispose();
     this.audio.stopEngines();
@@ -349,9 +350,10 @@ class App {
     this.hideCar();
     this.recentUnlocks = [];
     this.ui.clear();
-    this.ui.choice.track = def.id;
+    if (!tag) this.ui.choice.track = def.id;
     this.input.twoPlayer = false;
-    this.race = new Race(this, def, { kind: 'online', car: me?.car, livery: me?.livery, online: { slots: cfg.slots, mySlot, isHost } });
+    this.race = new Race(this, def, { kind: 'online', car: me?.car, livery: me?.livery, online: { slots: cfg.slots, mySlot, isHost }, laps: tag ? 99 : undefined });
+    if (tag) new LensTag(this.race);
     this.race.setAspect(this.renderer.width / this.renderer.height);
     applyAccess(this.race);
     this.ui.buildHud(this.race);
