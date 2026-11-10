@@ -725,7 +725,8 @@ export class TrackWorld {
           L.line(mask, path.wpoint(i, hw, -0.6, _a), path.wpoint(j, hw, -0.6, _b), rc);
         }
         const p = path.wpoint(i, 0, 0, _c);
-        if (i % 18 === 0 && p.y - this.floorY > 6 && !this.def.noPylons && !bent) {
+        // (a stair flying across the Escher room has nothing under it to stand on)
+        if (i % 18 === 0 && p.y - this.floorY > 6 && !this.def.noPylons && !bent && (!this.room || this.room.cellAt(p.x, p.z).def.up)) {
           const pc = (i / 18) % 2 ? 0x6a1020 : 0x0c3a6a;
           L.lineXYZ(M.ALL, p.x, p.y - 0.6, p.z, p.x, this.floorY, p.z, pc);
           L.lineXYZ(M.ALL, p.x - 1.5, this.floorY, p.z, p.x + 1.5, this.floorY, p.z, pc);

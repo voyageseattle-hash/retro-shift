@@ -118,11 +118,11 @@ Some roads only exist in one world. Grid City's BLUE ROOFTOPS rise out of the ro
 
 ## Relativity Room
 
-Course 14 is a nod to the impossible-staircase pictures: one huge cube room with a stair on every face, the floor, four walls and the ceiling, each with its own "down". Hexagonal PORTALS join them. Through a portal you see the next stair carrying on, and as you pass through, the whole room turns round you: the wall ahead becomes your floor, and the stair you just left hangs off a wall. Rivals race sideways and upside down on the stairs around you. It runs two long laps: learn the portals on the first, take the lens-only ones on the second.
+Course 14 is a nod to the impossible-staircase pictures: a tight stairwell where stairs run on the floor, the ceiling and the walls, each with its own "down", and more fly across the well at angles of their own. Hexagonal PORTALS join them, twelve in all. Through a portal you see the next stair carrying on, and as you pass through, the whole well turns round you. The ceiling stair hangs just over the floor stair and runs the other way, so rivals come at you upside down, just out of reach; others race up the walls beside you. It runs two long laps: learn the portals on the first, take the lens-only ones on the second.
 
-- Two SPIRAL STAIRS climb (and fall) two full turns over themselves, a CORKSCREW and a FULL PIPE let the Blade ride upside down, a WALL RUN on the floor throws everyone else off, and WATER and MISSING STEPS (a red bridge, then a blue one) ask for the right lens.
-- The RED INNER STAIR cuts inside the first spiral and through its own red portal, shut in the other lenses.
-- The BLUE MIDDLE STAIR leaves through a blue portal into a stair floating in the middle of the room, tipped over at an angle, and comes back out two walls on.
+- Two SPIRAL STAIRS climb (and fall) two full turns over themselves, a CORKSCREW and a FULL PIPE let the Blade ride upside down, a WALL RUN on the floor throws everyone else off, and WATER and MISSING STEPS (a red bridge, then a blue one, on a flying stair) ask for the right lens.
+- The RED INNER STAIR cuts inside the first spiral and out through its own red portal, shut in the other lenses.
+- The BLUE MIDDLE STAIR leaves a flying stair through a blue portal and sweeps through two more stairs floating over the well, each tipped its own way.
 - An impossible triangle hangs in the sky, and flights of stairs nobody drives float in every direction.
 
 For the physics it's an ordinary loop of road round a ring of cells (`js/world/paradox.js`); `js/world/rooms.js` draws each cell turned onto its wall of the room, clipped to the cell, and each portal as a view through to the next cell.

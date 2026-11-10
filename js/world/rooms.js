@@ -79,7 +79,8 @@ export class Room {
       planes.push(plane(nx, 0, nz, ax, 0, az));
     }
     const floorY = this.world.floorY ?? 0;
-    const O = new THREE.Vector3(cx, c.centreY ?? floorY, cz);
+    // (origin: [x, z, y], the point that goes to `at`, where it isn't the cell's centre on the floor)
+    const O = c.origin ? new THREE.Vector3(c.origin[0], c.origin[2], c.origin[1]) : new THREE.Vector3(cx, c.centreY ?? floorY, cz);
     // physics basis at the cell: up, and the radial direction (horizontal)
     const rad = new THREE.Vector3(c.radial?.[0] ?? cx, 0, c.radial?.[1] ?? cz).normalize();
     const pUp = new THREE.Vector3(0, 1, 0);
