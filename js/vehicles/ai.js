@@ -344,6 +344,9 @@ export class RaceAI {
 
   wantsBranch(b) {
     if (!this.canTakeBranch(b)) return false;
+    // (TOPPLE RUN: whether a lane is a maze, a wave or flat road right now)
+    const keen = this.world.dominoes?.branchChance(b, this.r);
+    if (keen != null) return Math.random() < keen;
     return Math.random() < 0.35 + this.skill * 0.5;
   }
 }

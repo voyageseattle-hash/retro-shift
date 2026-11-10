@@ -432,6 +432,7 @@ export class TrackWorld {
     this.minY = Math.min(...this.paths.map((p) => p.minY));
     this.maxY = Math.max(...this.paths.map((p) => p.maxY));
     this.floorY = this.minY - (def.floorDrop ?? 26);
+    def.lay?.(this); // a course's own groundwork (TOPPLE RUN: dominoes.js)
     if (opts.preview) return;
     this.buildRoads();
     buildWarps(this);
@@ -444,6 +445,7 @@ export class TrackWorld {
     buildCovers(this);
     buildShapeCues(this); // accessibility: a shape per world (shapes.js), shown from settings
     this.group.add(this.layers.build());
+    this.dominoes = def.live?.(this); // TOPPLE RUN's dominoes (dominoes.js); race.js and ai.js ask after them
     this._f = {};
     this._g = { y: -1e4, nx: 0, ny: 1, nz: 0, lat: 0, path: null, i: 0, f: 0, rx: 1, rz: 0, mask: 0, onRoad: false };
   }

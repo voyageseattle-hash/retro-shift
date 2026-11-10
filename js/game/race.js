@@ -847,6 +847,7 @@ export class Race {
     this.storms.update(sim, p);
     this.works.update(sim);
     this.quake.update(sim, p);
+    this.world.dominoes?.update(this, sim);
     this.traffic.update(sim, p);
     this.police.update(sim, p);
     this.items.update(sim);
@@ -1088,6 +1089,8 @@ export class Race {
         }
       } else r.stuckT = 0;
       this.features(r, dt);
+      this.world.dominoes?.racer(this, r, dt);
+      if (r.respawnT > 0) continue;
       this.moves(r, dt);
       this.progress(r, dt);
     }

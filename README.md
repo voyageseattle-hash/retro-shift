@@ -116,6 +116,18 @@ Some roads only exist in one world. Grid City's BLUE ROOFTOPS rise out of the ro
 
 01 Core Circuit · 02 Layered Grid · 03 Shift Tunnels · 04 Orbital Loops · 05 Grid City · 06 Void Field · 07 Helix Ascent · 08 Fractal Route · 09 Shift Lattice · 10 Echo Ruins
 
+## TOPPLE RUN (TOYBOX CUP, course 18)
+
+A toy road round the edge of the bedroom rug, and one chain of giant dominoes snaking across the rug inside it. GO tips the first one and the wave runs the whole way round at about race pace, the same in every race.
+
+- **RUG RUN and CRANE LANE** cut a corner each and are full of dominoes: red pips down one side, blue down the other. A lens only meets its own colour, BOTH meets both and knocks flat what it hits. Get in behind the wave and a tailwind draws you up to its crest, which carries you at the wave's speed and slingshots you off the end. Once the dominoes are down the lane is flat, fast road.
+- **TOP EDGE** runs along the top of a row packed tight. Only the RED Blade balances up there.
+- **BOOK BRIDGE** has a gap until the chain reaches the big book and knocks it flat across it. If the wave is ahead of you, the bridge is open.
+- **BLUE SPUR** is behind a stack of domino boxes that the blue lens takes away.
+- **SHORT ROW** is a low row of slabs across a cut: the BOTH Pair goes straight through, the BLUE Skimmer LIFTs over.
+- Late in the race a toy crane stands CRANE LANE back up, then tips it from the far end, toward you. A slab that lands on you in a lens it's solid in bowls you over.
+- Come off the road and you land on the rug, which puts you straight back on, slower. No wreck.
+
 ## How it's built
 
 - `js/world/shift.js`: the three lenses and world masks. The rule comes from LAST LINE's red/blue 3-D matinee: a thing drawn for one eye only is there only while that eye is looking.
