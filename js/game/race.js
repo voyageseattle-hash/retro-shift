@@ -849,6 +849,7 @@ export class Race {
     this.quake.update(sim, p);
     this.traffic.update(sim, p);
     this.police.update(sim, p);
+    this.world.mirrors?.update(this);
     this.items.update(sim);
 
     // visuals

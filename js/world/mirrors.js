@@ -353,10 +353,29 @@ export class MirrorSet {
     for (const p of planes) p.uTex.value = this.blank;
   }
 
-  // The pane a car at (x, y, z) is against, if any: the glass along the edge of the road it's on.
-  paneAt(path, i, side) {
-    for (const p of this.planes) for (const q of p.panes) if (q.side && q.side.path === path && q.side.side === side && q.side.strip.some((s) => s.i === i && s.flush)) return q;
-    return null;
+  // The glass along the edge of the main road at sample i on that side (+1 the driver's right), if any.
+  paneAt(i, side) {
+    if (!this.flush) {
+      this.flush = new Map();
+      for (const p of this.planes) for (const q of p.panes) for (const s of q.side?.strip || []) if (s.flush) this.flush.set(`${s.i}:${q.side.side < 0 ? 0 : 1}`, q);
+    }
+    return this.flush.get(`${i}:${side < 0 ? 0 : 1}`) || null;
+  }
+
+  // Once a step: a car run up against a mirror cracks it where it touches (and the player hears it).
+  update(race) {
+    const main = this.world.main;
+    for (const r of race.racers) {
+      const t = r.track;
+      if (!t || t.path !== main || r.respawnT > 0 || Math.abs(r.speed) < 14) continue;
+      const side = Math.sign(t.lat);
+      if (Math.abs(t.lat) < main.halfW - r.halfW - 0.12) continue;
+      const q = this.paneAt(t.i, side);
+      if (!q || q.level < 0.5 || race.t < (r.glassT || 0)) continue;
+      r.glassT = race.t + 0.9;
+      this.crack(q, r.pos, Math.abs(r.speed) / 60);
+      if (r.isPlayer) race.app.audio.play('smash');
+    }
   }
 
   // A car has hit the glass at this place: it cracks there, and the cracks close up again.
