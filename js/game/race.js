@@ -1052,6 +1052,8 @@ export class Race {
 
   step(dt) {
     const w = this.world;
+    // moving platforms slide on the race clock and carry whoever's on them (world/platforms.js)
+    w.rig?.step(dt, this);
     for (const r of this.racers) {
       if (r.puppet) continue;
       if (r.respawnT > 0) {
@@ -1074,12 +1076,14 @@ export class Race {
       }
       r.update(dt, w, this);
       if (r.respawnT > 0) continue;
+      w.rig?.hold(r, this);
       this.hull(r, dt);
       if (r.launch) this.flyLaunch(r, dt);
       this.formTick(r, dt);
       if (r.ai) this.formAI(r);
       // wedged against something: put rivals back on the road (the player has RESET)
-      if (this.state === 'race' && !r.finished && Math.abs(r.speed) < 3) {
+      // (not a craft waiting on a platform for its road to line up)
+      if (this.state === 'race' && !r.finished && Math.abs(r.speed) < 3 && !w.rig?.parked(r)) {
         r.stuckT = (r.stuckT || 0) + dt;
         if (r.stuckT > (r.isPlayer ? 6 : 2.5)) {
           r.stuckT = 0;
@@ -1352,18 +1356,31 @@ export class Race {
     const P = tr.path;
     const along = r.vel.x * P.thx[tr.i] + r.vel.z * P.thz[tr.i];
     const facing = Math.sin(r.yaw) * P.thx[tr.i] + Math.cos(r.yaw) * P.thz[tr.i];
-    if (along < -2 || (along <= 2 && facing < -0.3)) r.wrongWay = Math.min(2, (r.wrongWay || 0) + dt);
+    // (a platform's road is driven either way)
+    if (P.twoWay) r.wrongWay = Math.max(0, (r.wrongWay || 0) - dt * 3);
+    else if (along < -2 || (along <= 2 && facing < -0.3)) r.wrongWay = Math.min(2, (r.wrongWay || 0) + dt);
     else if (along > 2) r.wrongWay = Math.max(0, (r.wrongWay || 0) - dt * 3);
     if (tr.path !== r.lastPath) {
       if (!tr.path.closed) r.branchUses = (r.branchUses || 0) + 1;
       r.lastPath = tr.path;
     }
+    // A rig's roads (world/platforms.js) move, and lead anywhere: progress waits where you left the loop, and is
+    // settled where you rejoin it. Coming out up to 0.62 of a lap further round is a shortcut that far forward
+    // (whichever way round the middle of the course you went); anything else put you out behind where you went in.
+    if (P.extra) {
+      r.offLoop = true;
+      return;
+    }
     const u = tr.path.mainU(tr.i);
     let du = u - r.lastU;
     if (du > 0.5) du -= 1;
     if (du < -0.5) du += 1;
-    // a branch maps linearly onto the main loop; reject teleport-sized jumps (falls onto a lower strip)
-    if (Math.abs(du) > 0.15) {
+    if (r.offLoop) {
+      r.offLoop = false;
+      const fwd = (((u - r.lastU) % 1) + 1) % 1;
+      du = fwd <= 0.62 ? fwd : fwd - 1;
+    } else if (Math.abs(du) > 0.15) {
+      // a branch maps linearly onto the main loop; reject teleport-sized jumps (falls onto a lower strip)
       r.lastU = u;
       return;
     }
