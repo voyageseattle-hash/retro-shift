@@ -9,7 +9,8 @@ const UP = V(0, 1, 0);
 
 export function buildDecor(world) {
   const kind = world.def.decor || 'core';
-  const fn = DECOR[kind] || DECOR.core;
+  // (a course can bring its own scenery: decor as a function)
+  const fn = typeof kind === 'function' ? kind : DECOR[kind] || DECOR.core;
   fn(world, world.layers, world.main, world.rng);
 }
 

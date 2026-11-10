@@ -25,6 +25,8 @@ function offRoads(world, skip, x, z, y, r) {
 }
 
 export function buildCovers(world) {
+  // (a curved course hides its own lens routes: these covers stand on a flat floor)
+  if (world.curved) return;
   const main = world.main;
   const L = world.layers;
   let n = 0;

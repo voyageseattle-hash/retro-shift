@@ -9,6 +9,7 @@ import { BOTH, RED, BLUE, SHIFT, LENS, solidIn, COLORS } from '../world/shift.js
 import { buildBody, Trail } from './bodies.js';
 import { FORMS, addForms, updateForms } from './forms.js';
 import { bendRacer, lensHeld, PIPE, SCREW } from '../world/warp.js';
+import { curveRacer, curvePoint, curveDir } from '../world/curved.js';
 import { DRIFT_COLORS } from '../game/feel.js';
 import { ACCESS } from '../core/access.js';
 
@@ -484,6 +485,9 @@ export class Racer {
     const left = _left.crossVectors(this.up, fwd).normalize();
     _m.makeBasis(left, this.up, fwd);
     root.quaternion.setFromRotationMatrix(_m);
+    // a curved course (curved.js): the same pose, carried from the flat world into the drawn one
+    const curved = this.session?.world?.curved ? this.session.world : null;
+    if (curved) curveRacer(this, curved);
     const body = this.model.body;
     const rollT = this.grounded ? clamp(-this.yawRate * this.speed * 0.006, -0.14, 0.14) : 0;
     this.bodyRoll = damp(this.bodyRoll, rollT, 8, dt || 0.016);
@@ -532,7 +536,11 @@ export class Racer {
       const yaw = this.yaw;
       if (V.on) _v.copy(V.pos).addScaledVector(V.fwd, -2.1).addScaledVector(V.up, 0.45);
       else _v.set(this.pos.x - Math.sin(yaw) * 2.1, this.pos.y + 0.45, this.pos.z - Math.cos(yaw) * 2.1);
-      this.trail.update(dt, _v, -Math.cos(yaw), Math.sin(yaw), clamp(Math.abs(this.speed) / this.phys.topSpeed, 0, 1) + (this.boostTime > 0 ? 0.4 : 0), this.grounded || this.airTime < 0.5);
+      if (curved) {
+        curvePoint(this, _v);
+        curveDir(this, _left.set(-Math.cos(yaw), 0, Math.sin(yaw)));
+        this.trail.update(dt, _v, _left.x, _left.z, clamp(Math.abs(this.speed) / this.phys.topSpeed, 0, 1) + (this.boostTime > 0 ? 0.4 : 0), this.grounded || this.airTime < 0.5, _left.y);
+      } else this.trail.update(dt, _v, -Math.cos(yaw), Math.sin(yaw), clamp(Math.abs(this.speed) / this.phys.topSpeed, 0, 1) + (this.boostTime > 0 ? 0.4 : 0), this.grounded || this.airTime < 0.5);
     }
     m.glowMat.opacity = 0.34 + (this.drift.active ? 0.12 + 0.08 * this.drift.level : 0);
     // spinning out after a hit

@@ -5,6 +5,7 @@
 // Features are placed with P(k, t): the fraction of the lap at control point k (plus t of the way to k + 1).
 
 import { M } from './shift.js';
+import { DYSON } from './dyson.js';
 
 function fractions(points) {
   const d = [0];
@@ -427,6 +428,8 @@ export const TRACKS = [
       shards: [{ at: P(1, 0.6), n: 3 }, { at: P(5, 0.7), n: 3 }, { at: P(10, 0.1), n: 3 }],
     }),
   }),
+  // ------------------------------------------------------------------ 15 (its own file: dyson.js)
+  DYSON,
 ];
 
 export const trackById = (id) => TRACKS.find((t) => t.id === id) || TRACKS[0];

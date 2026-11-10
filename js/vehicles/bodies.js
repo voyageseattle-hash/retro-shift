@@ -522,14 +522,15 @@ export class Trail {
     this.color.set(c);
   }
   // p: world position at the tail, rx/rz: the car's right vector, power 0..1 (speed), on: draw at all
-  update(dt, p, rx, rz, power, on) {
+  // (ry: the right vector's rise, on a road that isn't level: a curved course)
+  update(dt, p, rx, rz, power, on, ry = 0) {
     this.acc += dt;
     if (this.acc > 1 / 40 || !this.pts.length) {
       this.acc = 0;
-      this.pts.unshift({ x: p.x, y: p.y, z: p.z, rx, rz, w: 0.05 + power * 0.07, on });
+      this.pts.unshift({ x: p.x, y: p.y, z: p.z, rx, rz, ry, w: 0.05 + power * 0.07, on });
       if (this.pts.length > this.n) this.pts.pop();
     } else {
-      Object.assign(this.pts[0], { x: p.x, y: p.y, z: p.z, rx, rz });
+      Object.assign(this.pts[0], { x: p.x, y: p.y, z: p.z, rx, rz, ry });
     }
     const P = this.pos, C = this.col, c = this.color;
     for (let st = 0; st < 2; st++) {
@@ -544,7 +545,7 @@ export class Trail {
           const o = ((st * this.n + k) * 2 + s) * 3;
           const side = off + (s ? w : -w);
           P[o] = q.x + q.rx * side;
-          P[o + 1] = q.y;
+          P[o + 1] = q.y + q.ry * side;
           P[o + 2] = q.z + q.rz * side;
           C[o] = (c.r + (1 - c.r) * hot * 0.7) * f;
           C[o + 1] = (c.g + (1 - c.g) * hot * 0.7) * f;
