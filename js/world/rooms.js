@@ -20,7 +20,7 @@
 //   puts it (the middle of the room), turned by `tilt` ([x, y, z] Euler angles).
 
 import * as THREE from '../../vendor/three.js';
-import { M, COLORS, solidIn, colorForMask } from './shift.js';
+import { M, solidIn, colorForMask } from './shift.js';
 
 const PLANES = 12; // every pass uses this many clipping planes (unused ones never clip), so shaders compile once
 const _m = new THREE.Matrix4();
@@ -30,6 +30,7 @@ const _q = new THREE.Quaternion();
 const _sphere = new THREE.Sphere();
 const _frustum = new THREE.Frustum();
 const _pm = new THREE.Matrix4();
+const _col = new THREE.Color();
 
 const plane = (nx, ny, nz, px, py, pz) => {
   const n = new THREE.Vector3(nx, ny, nz).normalize();
@@ -44,6 +45,7 @@ export class Room {
     this.size = def.size ?? 640;
     this.cells = def.cells.map((c, k) => this.makeCell(c, k));
     this.findPortals();
+    this.findBounds();
     // every batched piece goes in with the cell it's in (or, near a cell's edge, with all of them)
     world.layers.auto = (p) => {
       const c = this.cellAt(p.x, p.z);
@@ -99,7 +101,7 @@ export class Room {
     const T = new THREE.Matrix4().makeTranslation(at.x, at.y, at.z).multiply(R).multiply(new THREE.Matrix4().makeTranslation(-O.x, -O.y, -O.z));
     const Ti = T.clone().invert();
     const rot = new THREE.Quaternion().setFromRotationMatrix(R);
-    return { k, poly, planes, centre: new THREE.Vector2(cx, cz), T, Ti, rot, name: c.name || `CELL ${k}`, def: c };
+    return { k, poly, planes, centre: new THREE.Vector2(cx, cz), T, Ti, rot, name: c.name || `CELL ${k}`, def: c, bound: null };
   }
 
   // How far inside cell `c` (x, z) is: negative outside.
@@ -129,6 +131,18 @@ export class Room {
     const b = this.cellAt(path.px[j], path.pz[j]);
     if (a !== b || this.inside(a, path.px[i], path.pz[i]) < path.halfW + 6 || this.inside(a, path.px[j], path.pz[j]) < path.halfW + 6) return -1;
     return a.k;
+  }
+
+  // A sphere round everything in each cell (its roads, and room for what stands beside them), so a stair that's out
+  // of view isn't drawn at all.
+  findBounds() {
+    const box = this.cells.map(() => new THREE.Box3());
+    for (const path of this.world.paths) for (let i = 0; i < path.N; i++) box[this.cellAt(path.px[i], path.pz[i]).k].expandByPoint(_v.set(path.px[i], path.py[i], path.pz[i]));
+    this.cells.forEach((c, k) => {
+      if (box[k].isEmpty()) return;
+      c.bound = box[k].getBoundingSphere(new THREE.Sphere());
+      c.bound.radius += 60;
+    });
   }
 
   // ------------------------------------------------------------------ portals
@@ -178,7 +192,9 @@ export class Room {
     const prev = L.region;
     L.region = -1;
     for (const p of this.portals) {
-      const col = p.mask === M.ALL ? COLORS.pink : colorForMask(p.mask);
+      // (a door between two stairs everyone can take is gold, the room's own colour: paradox.js)
+      // (kept dim: seen edge-on, which most doors in the well are, a frame's lines all land on each other)
+      const col = _col.set(p.mask === M.ALL ? 0xffc24a : colorForMask(p.mask)).multiplyScalar(0.5).getHex();
       const ring = (r, k) => p.verts.map((v) => p.C.clone().add(v.clone().sub(p.C).multiplyScalar(r / p.r)).addScaledVector(p.n, k));
       // a thick hexagonal frame, two deep, with struts between, and a ribbon across its face
       for (const k of [-0.8, 0.8]) {
@@ -188,7 +204,7 @@ export class Room {
           const q1 = (q + 1) % 6;
           L.line(p.mask, A[q], A[q1], col);
           L.line(p.mask, B[q], B[q1], col);
-          L.quad(p.mask, A[q], A[q1], B[q1], B[q], col, 0.55);
+          L.quad(p.mask, A[q], A[q1], B[q1], B[q], col, 0.45);
           L.line(p.mask, A[q], B[q], col);
         }
       }
@@ -197,7 +213,16 @@ export class Room {
       for (let q = 0; q < 6; q++) L.line(p.mask, F[q], K[q], col);
       // an inner shimmer ring
       const I = ring(p.r - 0.6, 0);
-      for (let q = 0; q < 6; q++) L.line(p.mask, I[q], I[(q + 1) % 6], 0xffffff);
+      for (let q = 0; q < 6; q++) L.line(p.mask, I[q], I[(q + 1) % 6], 0x8a8a8a);
+      // and an architrave round the outside: one more hexagon, set back a step
+      for (const [rr, kk] of [[p.r + 3.6, -2.2]]) {
+        const S = ring(rr, kk);
+        const T = ring(rr - 1.8, kk + 1.2);
+        for (let q = 0; q < 6; q++) {
+          L.line(p.mask, S[q], S[(q + 1) % 6], col);
+          L.line(p.mask, S[q], T[q], col);
+        }
+      }
       // the depth pane
       const g = new THREE.BufferGeometry();
       const pos = [];
@@ -333,6 +358,11 @@ export class Room {
       }
       // every cell, turned into its place
       for (const c of this.cells) {
+        // (where the cell lands in the camera's own space: T_c^-1 T_j)
+        if (c !== cc && c.bound) {
+          _sphere.copy(c.bound).applyMatrix4(_m.multiplyMatrices(cc.Ti, c.T));
+          if (!_frustum.intersectsSphere(_sphere)) continue;
+        }
         this.show(c.k, 'world');
         renderer.clippingPlanes = this.planes(c.planes);
         if (c === cc) raw(S, camera);

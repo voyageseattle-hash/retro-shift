@@ -17,7 +17,7 @@
 //   the middle     two cells tipped different ways: the BLUE MIDDLE STAIR sweeps through both
 
 import * as THREE from '../../vendor/three.js';
-import { M, COLORS } from './shift.js';
+import { M, COLORS, RED, BLUE } from './shift.js';
 
 const D = Math.PI / 180;
 const R = 300; // the road's radius round the ring
@@ -194,31 +194,134 @@ export function paradoxDef() {
 }
 
 // ------------------------------------------------------------------ scenery
-// Under every stretch of road, a stair stringer: treads and risers stepping down its sides, so a climbing road reads
-// as a staircase. Round each spiral, a column it winds about. Along the ring, Escher arches over the road.
+// The room's own look: lamp-lit architecture. Red and blue are still the two worlds; everything that belongs to both
+// (door frames, lanterns, columns) is GOLD, which no other course uses, and through a lens it goes that lens's colour
+// like every neutral piece.
+const GOLD = 0xffc24a;
+
+// THE ROAD'S FINISH: mother-of-pearl laid in tumbling blocks, the three-rhombus tiling that reads as cubes lit from
+// whichever side you decide is up. Each rhombus takes a different step of the sheen, and the sheen slides with the
+// angle you see it at, so a stair overhead (seen flat on) and the one under you (seen along it) are never the same
+// colour. With both worlds open it runs red through violet to blue. Through a lens (and on a road that belongs to one
+// world) it only runs from dark to bright in that one colour, so nothing of the other world is left in it.
+const IRI_T = { value: 0 };
+const LINE_K = 0.7;
+const TINT_R = new THREE.Color(1, 0.2, 0.28);
+const TINT_B = new THREE.Color(0.18, 0.52, 1);
+function patchIridescent(mat, u) {
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, r) => {
+    prev?.(sh, r);
+    Object.assign(sh.uniforms, u);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uIriTint;\nuniform float uIriMono;\nuniform float uIriT;')
+      .replace(
+        '#include <opaque_fragment>',
+        `#include <opaque_fragment>
+        {
+          vec3 iN = normalize(cross(dFdx(vWetP), dFdy(vWetP)));
+          float ndv = abs(dot(iN, normalize(cameraPosition - vWetP)));
+          // tumbling blocks: the nearest hexagon's centre, then which third of it
+          vec2 ip = vWetP.xz / 5.0;
+          const vec2 ir = vec2(1.0, 1.7320508);
+          vec2 ia = mod(ip, ir) - ir * 0.5;
+          vec2 ib = mod(ip - ir * 0.5, ir) - ir * 0.5;
+          vec2 ig = dot(ia, ia) < dot(ib, ib) ? ia : ib;
+          float ang = mod(atan(ig.y, ig.x) - 1.5707963 + 6.2831853, 6.2831853);
+          float sec = floor(ang / 2.0943951);
+          float sa = mod(ang, 2.0943951);
+          float seam = min(sa, 2.0943951 - sa) * length(ig);
+          float hexd = 0.5 - max(abs(ig.x), abs(ig.x) * 0.5 + abs(ig.y) * 0.8660254);
+          float grout = 1.0 - smoothstep(0.0, 0.03, min(seam, hexd));
+          float face = sec < 0.5 ? 1.0 : (sec < 1.5 ? 0.6 : 0.3);
+          float glance = pow(1.0 - ndv, 1.5);
+          float ph = sec * 0.19 + glance * 1.25 + vWetP.y * 0.013 + dot(iN.xz, vec2(0.45, 0.3)) + uIriT * 0.02;
+          float t = abs(fract(ph) * 2.0 - 1.0);
+          vec3 c0 = vec3(1.0, 0.13, 0.26), c1 = vec3(1.0, 0.25, 0.8), c2 = vec3(0.55, 0.28, 1.0), c3 = vec3(0.1, 0.5, 1.0), c4 = vec3(0.25, 0.8, 1.0);
+          vec3 both = t < 0.25 ? mix(c0, c1, t * 4.0) : t < 0.5 ? mix(c1, c2, t * 4.0 - 1.0) : t < 0.75 ? mix(c2, c3, t * 4.0 - 2.0) : mix(c3, c4, t * 4.0 - 3.0);
+          vec3 mono = uIriTint * (0.3 + 1.1 * t);
+          vec3 ic = mix(both, mono, uIriMono);
+          gl_FragColor.rgb += ic * ((0.1 + 0.3 * glance) * face + grout * 0.09);
+        }`,
+      );
+  };
+  const key = mat.customProgramCacheKey.call(mat);
+  mat.customProgramCacheKey = () => `${key}|iri`;
+}
+function iridescentRoads(world) {
+  const L = world.layers;
+  let neutral = null;
+  for (const mask of [M.ALL, M.R, M.B, M.RO, M.BO, M.X]) {
+    const u = { uIriTint: { value: new THREE.Color(mask === M.ALL ? 0xffffff : mask === M.X ? 0xb04cff : mask & RED ? TINT_R : TINT_B) }, uIriMono: { value: mask === M.ALL ? 0 : 1 }, uIriT: IRI_T };
+    patchIridescent(L.materials(mask).road, u);
+    if (mask === M.ALL) neutral = u;
+  }
+  // the neutral road follows the lens each view is drawn for
+  const update = L.update.bind(L);
+  L.update = (dt, mode, time = 0, instant = false) => {
+    update(dt, mode, time, instant);
+    const lens = mode === RED || mode === BLUE;
+    if (lens) neutral.uIriTint.value.copy(mode === RED ? TINT_R : TINT_B);
+    const k = instant || !dt || L.views ? 1 : 1 - Math.exp(-10 * dt);
+    neutral.uIriMono.value += ((lens ? 1 : 0) - neutral.uIriMono.value) * k;
+    IRI_T.value = time;
+    // (the well shows five or six stairs at once, all of them lines: a little under full brightness keeps the far
+    // ones from adding up to white)
+    for (const [mask, m] of L.mats) {
+      if (mask === M.ALL) m.line.color.multiplyScalar(LINE_K);
+      else m.line.color.setScalar(LINE_K);
+    }
+  };
+}
+
+// Under every road, down each side: flights of steps, six down and six back up, so from the side or from underneath
+// (which is how you see every stair but your own) the road is a staircase. Along the ring, round arches on columns
+// with a lantern hung in each. Round each spiral, the column it winds about.
 export function decorParadox(world, L) {
   const room = world.room;
+  iridescentRoads(world);
+  const FLIGHT = 6;
+  const RISE = 0.85;
+  const WIDE = 1.9;
   for (const path of world.paths) {
     const hw = path.halfW;
     const last = path.closed ? path.N : path.N - 1;
-    const step = 2;
-    for (let i = 0; i + step < last; i += step) {
-      const j = path.wrap(i + step);
-      if (room) L.region = room.regionOf(path, i);
-      if (!path.mask[i] || path.warpK?.[i] > 0 || path.warpK?.[j] > 0) continue;
-      const col = path.mask[i] === M.ALL ? null : undefined;
+    const tread = Math.max(1, Math.round(3 / path.ds));
+    const depth = (n) => {
+      const s = ((n % (2 * FLIGHT)) + 2 * FLIGHT) % (2 * FLIGHT);
+      return 0.7 + RISE * (s < FLIGHT ? s + 1 : 2 * FLIGHT - s);
+    };
+    for (let i = 0, n = 0; i + tread <= last; i += tread, n++) {
+      const j = path.wrap(i + tread);
+      const mask = path.mask[i];
+      let bad = !mask;
+      for (let q = 0; q <= tread; q++) if (path.mask[path.wrap(i + q)] !== mask || path.warpK?.[path.wrap(i + q)] > 0) bad = true;
+      if (bad) continue;
+      if (room) {
+        const ra = room.regionOf(path, i);
+        L.region = ra === room.regionOf(path, path.wrap(j - 1)) ? ra : -1;
+      }
+      const d0 = depth(n);
+      const d1 = depth(n + 1);
       for (const s of [-1, 1]) {
-        const c = col === null ? (s < 0 ? COLORS.red : COLORS.blue) : undefined;
-        const a = path.point(i, s * (hw + 0.25), -0.7);
-        const b = path.point(j, s * (hw + 0.25), -0.7);
-        // tread level with the lower end, riser up to the higher
-        const lo = a.y < b.y ? a : b;
-        const hi = a.y < b.y ? b : a;
-        const mid = (lo === a ? b : a).clone().setY(lo.y);
-        L.line(path.mask[i], lo, mid, c);
-        L.line(path.mask[i], mid, hi, c);
-        // and the stringer's underside, a little below
-        if (i % 6 === 0) L.line(path.mask[i], a, a.clone().setY(a.y - 2.2), c);
+        const c = mask === M.ALL ? (s < 0 ? COLORS.red : COLORS.blue) : undefined;
+        const lo = s * (hw + 0.25);
+        const li = s * (hw - WIDE);
+        const aT = path.point(i, lo, -0.6);
+        const bT = path.point(j, lo, -0.6);
+        const aO = path.point(i, lo, -d0);
+        const bO = path.point(j, lo, -d0);
+        const aI = path.point(i, li, -d0);
+        const bI = path.point(j, li, -d0);
+        const cO = path.point(j, lo, -d1);
+        const cI = path.point(j, li, -d1);
+        L.fillQuad(mask, aT, bT, bO, aO); // the flight's side
+        L.fillQuad(mask, aO, bO, bI, aI); // the tread, from underneath
+        L.fillQuad(mask, bO, cO, cI, bI); // the riser
+        L.line(mask, aO, bO, c);
+        L.line(mask, bO, cO, c);
+        L.line(mask, bO, bI, c);
+        L.line(mask, cO, cI, c);
       }
     }
   }
@@ -231,46 +334,86 @@ export function decorParadox(world, L) {
     const cz = Math.sin(aT * D) * R + o[1] * LOOP_R;
     if (room) L.region = room.cellAt(cx, cz).k;
     const top = m.maxY + 22;
-    L.cylinder(M.ALL, cx, world.floorY, cz, 14, top - world.floorY, 12, 10, 0xb06aff);
+    L.cylinder(M.ALL, cx, world.floorY, cz, 14, top - world.floorY, 12, 10, GOLD);
+    // capitals, top and bottom
+    for (const y of [world.floorY, top - 5]) L.cylinder(M.ALL, cx, y, cz, 18, 5, 12, 1, GOLD);
     L.cylinder(M.R, cx, world.floorY, cz, 20, top - world.floorY, 8, 3);
     L.cylinder(M.B, cx, world.floorY, cz, 24, top - world.floorY, 8, 3);
   }
-  // arches over the road: half-hexagon doorways, red and blue in turn
+  // arches over the road: a round arch on two columns, red and blue in turn, a gold lantern hung from its crown
+  const up = new THREE.Vector3(0, 1, 0);
   for (let i = 30; i < m.N; i += 55) {
     if (room && room.regionOf(m, i) < 0) continue;
     if (m.warpK?.[i] > 0) continue;
     if (room) L.region = room.regionOf(m, i);
     const c = m.point(i, 0, 0);
     const u = new THREE.Vector3(m.rightX(i), 0, m.rightZ(i));
+    const w = new THREE.Vector3(m.thx[i], 0, m.thz[i]);
     const k = Math.floor(i / 55);
     const mask = k % 2 ? M.R : M.B;
-    const r = m.halfW + 5;
-    let prev = null;
-    for (let q = 0; q <= 4; q++) {
-      const ang = (q / 4) * Math.PI;
-      const p = c.clone().addScaledVector(u, Math.cos(ang) * r).add(new THREE.Vector3(0, Math.sin(ang) * r * 1.1, 0));
-      if (prev) {
-        L.line(mask, prev, p);
-        L.quad(mask, prev, p, p.clone().add(new THREE.Vector3(0, 1.2, 0)), prev.clone().add(new THREE.Vector3(0, 1.2, 0)), null, 0.45);
-      }
-      prev = p;
+    const r = m.halfW + 4;
+    const COL = 6; // the columns' height, to where the arch springs
+    const at = (x, y, z) => c.clone().addScaledVector(u, x).addScaledVector(up, y).addScaledVector(w, z);
+    const ring = (z, rr) => {
+      const pts = [at(-rr, -3, z), at(-rr, COL, z)];
+      for (let q = 1; q < 10; q++) pts.push(at(-Math.cos((q / 10) * Math.PI) * rr, COL + Math.sin((q / 10) * Math.PI) * rr * 0.62, z));
+      pts.push(at(rr, COL, z), at(rr, -3, z));
+      return pts;
+    };
+    const F = ring(-0.9, r);
+    const B = ring(0.9, r);
+    const O = ring(0, r + 1.8);
+    for (let q = 0; q < F.length - 1; q++) {
+      L.line(mask, F[q], F[q + 1]);
+      L.line(mask, B[q], B[q + 1]);
+      L.line(mask, O[q], O[q + 1]);
+      L.quad(mask, F[q], F[q + 1], B[q + 1], B[q], null, 0.3);
+      if (q % 2 === 0) L.line(mask, F[q], O[q]);
+    }
+    // capitals and feet
+    for (const sx of [-1, 1]) for (const y of [-3, COL]) L.box(mask, c.x + u.x * sx * (r + 0.6), c.y + y, c.z + u.z * sx * (r + 0.6), 3.2, 0.9, 3.2, Math.atan2(u.x, u.z));
+    // the lantern
+    const top = at(0, COL + r * 0.62, 0);
+    const lc = at(0, COL + r * 0.62 - 3.4, 0);
+    L.line(M.ALL, top, lc.clone().addScaledVector(up, 1.3), GOLD);
+    const P = [lc.clone().addScaledVector(up, 1.3), lc.clone().addScaledVector(up, -1.3), lc.clone().addScaledVector(u, 0.9), lc.clone().addScaledVector(u, -0.9), lc.clone().addScaledVector(w, 0.9), lc.clone().addScaledVector(w, -0.9)];
+    const eq = [2, 4, 3, 5];
+    for (let q = 0; q < 4; q++) {
+      const e0 = P[eq[q]];
+      const e1 = P[eq[(q + 1) % 4]];
+      L.line(M.ALL, e0, e1, GOLD);
+      L.line(M.ALL, P[0], e0, GOLD);
+      L.line(M.ALL, P[1], e0, GOLD);
+      L.quad(M.ALL, P[0], e0, e1, e1, GOLD, 0.5);
+      L.quad(M.ALL, P[1], e0, e1, e1, GOLD, 0.5);
     }
   }
   L.region = -1;
 }
 
-// The room itself: a cube of neon edges, each face a grid in one world's colour (the face goes ghostly through the
-// other lens), and floating flights of stairs, in every orientation, that nobody drives.
+// The room itself: a box of neon edges whose six walls are arcades, each wall in one world's colour (it's gone through
+// the other lens) with its arches standing whichever way that wall thinks is up; and floating flights of stairs, in
+// every orientation, that nobody drives but the red people and the blue people walking them.
 export function buildRoomFrame(world) {
   const group = new THREE.Group();
-  const H = ROOM_SIZE / 2;
   const bufs = new Map();
-  const put = (mask, a, b, col) => {
+  const buf = (mask) => {
     let B = bufs.get(mask);
-    if (!B) bufs.set(mask, (B = { p: [], c: [] }));
+    if (!B) bufs.set(mask, (B = { p: [], c: [], rp: [], rc: [] }));
+    return B;
+  };
+  const _col = new THREE.Color();
+  const put = (mask, a, b, col) => {
+    const B = buf(mask);
     B.p.push(...a, ...b);
-    const c = new THREE.Color(col);
-    B.c.push(c.r, c.g, c.b, c.r, c.g, c.b);
+    _col.set(col);
+    B.c.push(_col.r, _col.g, _col.b, _col.r, _col.g, _col.b);
+  };
+  const ribbon = (mask, a, b, c, d, col, k) => {
+    const B = buf(mask);
+    B.rp.push(...a, ...b, ...c, ...a, ...c, ...d);
+    _col.set(col).multiplyScalar(k);
+    for (let q = 0; q < 6; q++) B.rc.push(_col.r, _col.g, _col.b);
   };
   const Hd = FRAME.d.map((v) => v / 2);
   const C = FRAME.c;
@@ -280,32 +423,58 @@ export function buildRoomFrame(world) {
   for (let a = 0; a < 8; a++) {
     for (let b = a + 1; b < 8; b++) {
       const d = corners[a].reduce((n, v, k) => n + (v !== corners[b][k] ? 1 : 0), 0);
-      if (d === 1) put(M.ALL, corners[a], corners[b], 0xd8b0ff);
+      if (d === 1) put(M.ALL, corners[a], corners[b], GOLD);
     }
   }
-  // the faces' grids
-  const step = 40;
+  // the walls: rows of arched bays
   let fk = 0;
   for (const ax of [0, 1, 2]) {
     for (const sg of [-1, 1]) {
-      const mask = fk++ % 2 ? M.R : M.B;
-      const u = (ax + 1) % 3;
-      const v = (ax + 2) % 3;
+      const mask = fk % 2 ? M.R : M.B;
+      // across the bays (p) and up them (q): each wall picks its own up
+      const others = [0, 1, 2].filter((v) => v !== ax);
+      const p = others[fk % 3 === 1 ? 1 : 0];
+      const q = 3 - ax - p;
+      const flip = fk % 4 < 2 ? 1 : -1;
+      fk++;
       const col = mask === M.R ? 0xc0204a : 0x1f56b8;
-      for (const [p, q] of [[u, v], [v, u]]) {
-        for (let t = -Hd[p]; t <= Hd[p] + 1e-6; t += step) {
-          const a = [0, 0, 0];
-          const b = [0, 0, 0];
-          a[ax] = b[ax] = C[ax] + sg * Hd[ax];
-          a[p] = b[p] = C[p] + t;
-          a[q] = C[q] - Hd[q];
-          b[q] = C[q] + Hd[q];
-          put(mask, a, b, col);
+      const dim = mask === M.R ? 0x70142c : 0x12346e;
+      const np = Math.round((2 * Hd[p]) / 46);
+      const nq = Math.round((2 * Hd[q]) / 72);
+      const bw = (2 * Hd[p]) / np;
+      const bh = (2 * Hd[q]) / nq;
+      const P = (x, y) => {
+        const v = [0, 0, 0];
+        v[ax] = C[ax] + sg * Hd[ax];
+        v[p] = C[p] - Hd[p] + x;
+        v[q] = C[q] + flip * (-Hd[q] + y);
+        return v;
+      };
+      for (let b = 0; b <= np; b++) put(mask, P(b * bw, 0), P(b * bw, 2 * Hd[q]), dim);
+      for (let row = 0; row <= nq; row++) put(mask, P(0, row * bh), P(2 * Hd[p], row * bh), col);
+      for (let row = 0; row < nq; row++) {
+        for (let b = 0; b < np; b++) {
+          const x0 = b * bw + 7;
+          const x1 = (b + 1) * bw - 7;
+          const y0 = row * bh;
+          const ys = y0 + bh * 0.52;
+          const rr = (x1 - x0) / 2;
+          put(mask, P(x0, y0), P(x0, ys), col);
+          put(mask, P(x1, y0), P(x1, ys), col);
+          let prev = P(x0, ys);
+          for (let s = 1; s <= 6; s++) {
+            const a = (s / 6) * Math.PI;
+            const nx = P(x0 + rr - Math.cos(a) * rr, ys + Math.sin(a) * rr);
+            put(mask, prev, nx, col);
+            prev = nx;
+          }
+          // a sill across the foot of every other bay
+          if ((b + row) % 2) put(mask, P(x0, y0 + 6), P(x1, y0 + 6), dim);
         }
       }
     }
   }
-  // floating flights: ten steps each, axis-aligned in a random one of the six "downs"
+  // floating flights: steps, a landing with a doorway, and someone walking them, in a random one of the six "downs"
   let s = 4242;
   const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
   const axes = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
@@ -329,9 +498,14 @@ export function buildRoomFrame(world) {
         put(mask, at(f0, h0 + 2, w), at(f0 + 3, h0 + 2, w), col);
       }
       put(mask, at(f0, h0 + 2, -W), at(f0, h0 + 2, W), col);
+      // the tread, faintly lit, so a flight has a body
+      ribbon(mask, at(f0, h0 + 2, -W), at(f0 + 3, h0 + 2, -W), at(f0 + 3, h0 + 2, W), at(f0, h0 + 2, W), col, st % 2 ? 0.1 : 0.05);
     }
     put(mask, at(0, -3, -W), at(steps * 3, steps * 2 - 3, -W), col);
     put(mask, at(0, -3, W), at(steps * 3, steps * 2 - 3, W), col);
+    // a handrail up one side
+    put(mask, at(0, 5.5, W), at(steps * 3, steps * 2 + 5.5, W), col);
+    for (let st = 0; st <= steps; st += 3) put(mask, at(st * 3, st * 2, W), at(st * 3, st * 2 + 5.5, W), col);
     // a landing at the top, with a doorway arch on it
     const f1 = steps * 3;
     const h1 = steps * 2;
@@ -340,16 +514,57 @@ export function buildRoomFrame(world) {
     put(mask, at(f1 + 9, h1, -W), at(f1 + 9, h1, W), col);
     put(mask, at(f1 + 9, h1, -W), at(f1 + 9, h1 + 9, -W), col);
     put(mask, at(f1 + 9, h1, W), at(f1 + 9, h1 + 9, W), col);
-    put(mask, at(f1 + 9, h1 + 9, -W), at(f1 + 9, h1 + 12, 0), col);
-    put(mask, at(f1 + 9, h1 + 9, W), at(f1 + 9, h1 + 12, 0), col);
+    let prev = at(f1 + 9, h1 + 9, -W);
+    for (let q = 1; q <= 6; q++) {
+      const a = (q / 6) * Math.PI;
+      const nx = at(f1 + 9, h1 + 9 + Math.sin(a) * W * 0.8, -Math.cos(a) * W);
+      put(mask, prev, nx, col);
+      prev = nx;
+    }
+    // the walkers: faceless, mid-stride, each sure which way is down
+    const walkers = 1 + Math.floor(rnd() * 3);
+    for (let n = 0; n < walkers; n++) {
+      const st = Math.floor(rnd() * steps);
+      const lat = (rnd() - 0.5) * W * 1.2;
+      const S = 2.1;
+      const g = (f, h) => at(st * 3 + 1.5 + f * S, st * 2 + 2 + h * S, lat);
+      const hot = mask === M.R ? COLORS.redHot : COLORS.blueHot;
+      put(mask, g(0, 1.5), g(-0.5, 0), hot);
+      put(mask, g(0, 1.5), g(0.45, 0.75), hot);
+      put(mask, g(0.45, 0.75), g(0.5, 0), hot);
+      put(mask, g(0, 1.5), g(0.05, 2.6), hot);
+      put(mask, g(0.05, 2.45), g(0.5, 1.75), hot);
+      put(mask, g(0.05, 2.45), g(-0.4, 1.8), hot);
+      for (let q = 0; q < 6; q++) {
+        const a0 = (q / 6) * Math.PI * 2;
+        const a1 = ((q + 1) / 6) * Math.PI * 2;
+        put(mask, g(0.05 + Math.cos(a0) * 0.3, 2.95 + Math.sin(a0) * 0.3), g(0.05 + Math.cos(a1) * 0.3, 2.95 + Math.sin(a1) * 0.3), hot);
+      }
+    }
   }
+  const L = world.layers;
   for (const [mask, B] of bufs) {
+    const mats = L.materials(mask);
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(B.p, 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute(B.c, 3));
-    const o = new THREE.LineSegments(g, world.layers.materials(mask).line);
+    // (gold is neutral: through a lens it switches to grey, which the lens tint colours, like the layers' own)
+    if (mask === M.ALL && L.neutral) {
+      const grey = new Float32Array(B.c.length);
+      for (let i = 0; i < grey.length; i += 3) grey[i] = grey[i + 1] = grey[i + 2] = Math.max(B.c[i], B.c[i + 1], B.c[i + 2]);
+      L.neutral.push({ g, colour: g.getAttribute('color'), grey: new THREE.Float32BufferAttribute(grey, 3) });
+    }
+    const o = new THREE.LineSegments(g, mats.line);
     o.frustumCulled = false;
     group.add(o);
+    if (B.rp.length) {
+      const rg = new THREE.BufferGeometry();
+      rg.setAttribute('position', new THREE.Float32BufferAttribute(B.rp, 3));
+      rg.setAttribute('color', new THREE.Float32BufferAttribute(B.rc, 3));
+      const r = new THREE.Mesh(rg, mats.ribbon);
+      r.frustumCulled = false;
+      group.add(r);
+    }
   }
   return group;
 }
