@@ -10,98 +10,35 @@ export const MAP_LABEL = { flat: 'FLAT', tilt: '3/4 NEON', snap: '3/4 LIVE' };
 export function mapStyle(settings) {
   const q = new URLSearchParams(location.search).get('map');
   if (MAP_STYLES.includes(q)) return q;
-  return MAP_STYLES.includes(settings?.map) ? settings.map : 'flat';
+  return MAP_STYLES.includes(settings?.map) ? settings.map : 'snap';
 }
 
-// The map on a course card: flat, the 3/4 neon drawing, or (snap) the course's portrait shot when it has one.
+// The map on a course card: flat, the 3/4 neon drawing, or (snap, the default) the course's portrait shot.
 const portraits = new Map();
 export function drawCard(cv, paths, style, def) {
   const ctx = cv.getContext('2d');
-  if (style === 'flat' || customMap(paths)) return drawPaths(ctx, paths, cv.width, cv.height, 7, 10, null, 2.5);
-  if (style === 'snap') {
-    let img = portraits.get(def.id);
-    if (!img) {
-      img = new Image();
-      img.src = `assets/courses/${def.id}.webp`;
-      portraits.set(def.id, img);
-    }
-    const put = () => {
-      const r = Math.max(cv.width / img.naturalWidth, cv.height / img.naturalHeight);
-      const dw = img.naturalWidth * r, dh = img.naturalHeight * r;
-      ctx.clearRect(0, 0, cv.width, cv.height);
-      ctx.drawImage(img, (cv.width - dw) / 2, (cv.height - dh) / 2, dw, dh);
-    };
-    const tilt = () => drawTiltCourse(ctx, paths, cv.width, cv.height, 7, { lineW: 2.2, pad: 6 });
-    if (img.complete && img.naturalWidth) return put();
-    img.addEventListener('load', put, { once: true });
-    img.addEventListener('error', () => { ctx.clearRect(0, 0, cv.width, cv.height); tilt(); }, { once: true });
-    return;
+  const drawn = () => {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (style === 'flat' || customMap(paths)) drawPaths(ctx, paths, cv.width, cv.height, 7, 10, null, 2.5);
+    else drawTiltCourse(ctx, paths, cv.width, cv.height, 7, { lineW: 2.2, pad: 6 });
+  };
+  if (style !== 'snap') return drawn();
+  // 'snap': the course's portrait (a crop of its staged outside shot); a course without one gets the drawn map
+  let img = portraits.get(def.id);
+  if (!img) {
+    img = new Image();
+    img.src = `assets/courses/${def.id}.webp`;
+    portraits.set(def.id, img);
   }
-  drawTiltCourse(ctx, paths, cv.width, cv.height, 7, { lineW: 2.2, pad: 6 });
-}
-
-const hex = (c) => `#${c.toString(16).padStart(6, '0')}`;
-
-// Raw path polylines from a track definition, without building the 3D world (for previews).
-export function drawPaths(ctx, paths, w, h, mode = 7, pad = 10, racers = null, lineW = 3, me = racers?.find((r) => r.isPlayer)) {
-  let x0 = Infinity;
-  let x1 = -Infinity;
-  let z0 = Infinity;
-  let z1 = -Infinity;
-  for (const p of paths) {
-    for (let i = 0; i < p.N; i += 2) {
-      x0 = Math.min(x0, p.px[i]);
-      x1 = Math.max(x1, p.px[i]);
-      z0 = Math.min(z0, p.pz[i]);
-      z1 = Math.max(z1, p.pz[i]);
-    }
-  }
-  const s = Math.min((w - pad * 2) / (x1 - x0 || 1), (h - pad * 2) / (z1 - z0 || 1));
-  const ox = (w - (x1 - x0) * s) / 2;
-  const oz = (h - (z1 - z0) * s) / 2;
-  // mirror x so the map matches the driver's view from above (+x is to the left when facing +z)
-  const X = (x) => w - (ox + (x - x0) * s);
-  const Z = (z) => h - (oz + (z - z0) * s);
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  for (const p of paths) {
-    const last = p.closed ? p.N : p.N - 1;
-    for (let i = 0; i < last; i += 2) {
-      const j = p.closed ? (i + 2) % p.N : Math.min(p.N - 1, i + 2);
-      const mask = p.mask[i];
-      const on = solidIn(mask, mode);
-      // a route that isn't there in your lens isn't on the map either (the main loop keeps a faint trace)
-      if (!on && !p.closed) continue;
-      ctx.strokeStyle = hex(mask === M.ALL ? 0xd8c8ff : colorForMask(mask));
-      ctx.globalAlpha = on ? 1 : 0.18;
-      ctx.lineWidth = (p.closed ? lineW : lineW * 0.75) * (on ? 1 : 0.7);
-      ctx.beginPath();
-      ctx.moveTo(X(p.px[i]), Z(p.pz[i]));
-      ctx.lineTo(X(p.px[j]), Z(p.pz[j]));
-      ctx.stroke();
-    }
-  }
-  ctx.globalAlpha = 1;
-  if (racers) {
-    for (const r of racers) {
-      if (r === me) continue;
-      ctx.fillStyle = r.isPlayer ? '#ffffff' : hex(r.color);
-      ctx.beginPath();
-      ctx.arc(X(r.pos.x), Z(r.pos.z), 3, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    const p = me;
-    if (p) {
-      ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(X(p.pos.x), Z(p.pos.z), 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    }
-  }
-  return { X, Z };
+  const put = () => {
+    const r = Math.max(cv.width / img.naturalWidth, cv.height / img.naturalHeight);
+    const dw = img.naturalWidth * r, dh = img.naturalHeight * r;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(img, (cv.width - dw) / 2, (cv.height - dh) / 2, dw, dh);
+  };
+  if (img.complete) return img.naturalWidth ? put() : drawn();
+  img.addEventListener('load', put, { once: true });
+  img.addEventListener('error', drawn, { once: true });
 }
 
 export class MiniMap {

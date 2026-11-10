@@ -4,9 +4,10 @@
 //   'tilt'  a neon line drawing in that view: the road as a glowing ribbon (red, blue, white for both), its shadow and
 //           support pylons on a faint ground grid, so climbs, bridges and stacked roads read. The course is drawn once
 //           into a cached layer (per lens and size); each map tick only copies that layer and draws the racer dots.
-//   'snap'  the real game render of the course from the same angle, taken once per lens when the race loads (three
-//           small renders), with the racer dots drawn over it by the same projection, so they sit on the road.
-//   'flat'  the original top-down line map (minimap.js).
+//   'snap'  (the default) the real game render of the course from the same angle, taken once per lens when the race loads (three
+//           small renders), with the route and racer dots drawn over it by the same projection, so they sit on the
+//           road. Split screen uses 'tilt'. Course cards show the course's portrait (assets/courses/<id>.webp).
+//   'flat'  the original top-down line map (minimap.js), still in Settings > MAP.
 //
 // Courses with their own map (paths[0].globe, paths[0].fold on their branches) keep it in every style.
 
@@ -214,7 +215,8 @@ export function snapCourse(race, renderer, THREE, w, h, dpr = 1) {
   // only the course itself: hide sky, ground, fog, traffic and racers for the shot
   const hidden = [];
   for (const ob of race.scene.children) if (ob !== world.group && ob.visible) { hidden.push(ob); ob.visible = false; }
-  const fog = race.scene.fog, bg = race.scene.background;
+  const fog = race.scene.fog, bg = race.scene.background, mirror = renderer.mirror;
+  renderer.mirror = false; // the map is never drawn mirrored
   race.scene.fog = null;
   race.scene.background = new THREE.Color(0x07030f);
   const out = { view: V };
@@ -231,6 +233,7 @@ export function snapCourse(race, renderer, THREE, w, h, dpr = 1) {
   }
   race.scene.fog = fog;
   race.scene.background = bg;
+  renderer.mirror = mirror;
   for (const ob of hidden) ob.visible = true;
   const pm = race.players?.[0]?.mode ?? BOTH;
   world.layers.update(0, pm, race.t || 0, true);
