@@ -109,6 +109,20 @@ export class Renderer {
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFShadowMap;
     container.appendChild(r.domElement);
+    // A scene can draw itself in several passes (the Escher room, world/rooms.js): every path below ends in a
+    // renderer.render, so that's where it takes over.
+    const raw = r.render.bind(r);
+    let inMulti = false;
+    r.render = (scene, camera) => {
+      const multi = scene.userData?.multiRender;
+      if (!multi || inMulti) return raw(scene, camera);
+      inMulti = true;
+      try {
+        multi(raw, r, camera);
+      } finally {
+        inMulti = false;
+      }
+    };
 
     this.composer = new THREE.EffectComposer(r);
     this.renderPass = new THREE.RenderPass(new THREE.Scene(), new THREE.PerspectiveCamera());

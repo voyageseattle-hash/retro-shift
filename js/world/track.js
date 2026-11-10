@@ -9,7 +9,8 @@ import { clamp, lerp, wrapAngle, mulberry32, smoothstep } from '../core/util.js'
 import { M, BOTH, RED, BLUE, solidIn, colorForMask, COLORS } from './shift.js';
 import { Layers } from './layers.js';
 import { buildDecor } from './decor.js';
-import { buildSigns } from './signs.js';
+import { buildSigns, addSign } from './signs.js';
+import { Room } from './rooms.js';
 import { buildCovers } from './covers.js';
 import { layStorms } from './storms-def.js';
 import { layFormRoutes, addSlit, routeMask, layRouteBoosts } from './formroutes.js';
@@ -433,6 +434,8 @@ export class TrackWorld {
     this.maxY = Math.max(...this.paths.map((p) => p.maxY));
     this.floorY = this.minY - (def.floorDrop ?? 26);
     if (opts.preview) return;
+    // the Escher room (rooms.js): each stair drawn on its own wall, portals between them
+    if (def.room) this.room = new Room(this);
     this.buildRoads();
     buildWarps(this);
     this.buildFeatures();
@@ -441,6 +444,7 @@ export class TrackWorld {
     buildDecor(this);
     this.storms = layStorms(this);
     buildSigns(this);
+    this.room?.build(addSign);
     buildCovers(this);
     buildShapeCues(this); // accessibility: a shape per world (shapes.js), shown from settings
     this.group.add(this.layers.build());
@@ -658,6 +662,7 @@ export class TrackWorld {
       for (let i = 0; i < last; i++) {
         const j = path.wrap(i + 1);
         const mask = path.mask[i];
+        if (this.room) L.region = this.room.regionOf(path, i);
         if (!mask) continue; // a glide gap: nothing there in any world
         const neutral = mask === M.ALL;
         const lc = neutral ? COLORS.red : colorForMask(mask);
@@ -727,6 +732,7 @@ export class TrackWorld {
         }
       }
     }
+    L.region = -1;
   }
 
   // A tunnel mouth that is shut in one world: a hexagonal iris filling the whole bore. It collides like a wall

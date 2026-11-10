@@ -574,6 +574,7 @@ Object.assign(SONGS, {
   title: remix(SONGS.drive, { name: 'Retro Shift (Main Theme)' }),
   tunnelB: remix(SONGS.tunnel, { name: 'Tunnel Vision (Orbit Mix)', transpose: -2, bpm: 142, kit: { kick: 'punch', snare: 'crack' }, band: { bass: 'acid', bassCut: 900, bassVol: 0.65, arp: 'bell' } }),
   helixB: remix(SONGS.helix, { name: 'Helix (Fractal Mix)', transpose: -1, bpm: 146, kit: { kick: 'punch', snare: 'crack' }, band: { bass: 'acid', bassCut: 800, bassVol: 0.65 } }),
+  paradox: remix(SONGS.tunnel, { name: 'Relativity Room (Stairwell Mix)', transpose: 3, bpm: 136, kit: { kick: 'punch', snare: 'crack' }, band: { lead: 'surf', arp: 'bell', bass: 'acid', bassCut: 1100, bassVol: 0.6 } }),
   ruinsB: remix(SONGS.ruins, { name: 'Echo Ruins (Lattice Mix)', transpose: 2, bpm: 132, kit: { kick: 'punch', snare: 'crack' }, band: { lead: 'surf', arp: 'bell' } }),
 });
 
@@ -589,6 +590,7 @@ export const COURSE_SONG = {
   fractal: 'helixB',
   lattice: 'ruinsB',
   ruins: 'ruins',
+  relativity: 'paradox',
 };
 
 const STING_MIX = {

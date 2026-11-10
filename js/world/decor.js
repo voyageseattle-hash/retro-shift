@@ -3,6 +3,7 @@
 
 import * as THREE from '../../vendor/three.js';
 import { M, COLORS, RED, solidIn } from './shift.js';
+import { decorParadox } from './paradox.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const UP = V(0, 1, 0);
@@ -46,6 +47,9 @@ function arch(L, main, i, mask, r, width = 2.2, color = null, arc = Math.PI, a0 
 }
 
 const DECOR = {
+  // 14 RELATIVITY ROOM: stair stringers, spiral columns and arches (paradox.js)
+  paradox: (world, L) => decorParadox(world, L),
+
   // 01 CORE CIRCUIT: big red and blue arches, a skyline at the edges.
   core(world, L, main, rng) {
     for (let i = 20; i < main.N; i += 70) {

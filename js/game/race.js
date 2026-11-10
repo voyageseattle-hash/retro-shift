@@ -24,6 +24,7 @@ import { Construction } from './construction.js';
 import { Quake } from './quake.js';
 import { chainMove, chainTick, chainEnd, shiftTiming, perfectFx, newChain, newTally } from './chain.js';
 import { PIPE } from '../world/warp.js';
+import { buildRoomFrame } from '../world/paradox.js';
 import { disposeTree } from '../core/renderer.js';
 
 const _v = new THREE.Vector3();
@@ -63,6 +64,12 @@ export class Race {
     this.scene.add(this.env.group, this.world.group);
     this.scene.fog = this.env.fog;
     this.scene.background = this.env.bg;
+    // the Escher room (world/rooms.js): its walls, and the passes that draw each stair on its own wall
+    if (this.world.room) {
+      this.roomFrame = buildRoomFrame(this.world);
+      this.scene.add(this.roomFrame);
+      this.world.room.attach(this.scene, this.env, this.roomFrame);
+    }
     this.cam = new ChaseCamera();
     this.cam.camera.far = 6000;
     this.cam.camera.updateProjectionMatrix();
@@ -1021,7 +1028,7 @@ export class Race {
   // Before each frame is drawn: the wet-road reflection (one view, high quality only).
   beforeRender(renderer) {
     const gl = renderer.renderer;
-    const on = !this.split && renderer.quality === 'high';
+    const on = !this.split && renderer.quality === 'high' && !this.world.room;
     const size = gl.getDrawingBufferSize(_s);
     const p = this.player;
     this.reflection.render(gl, this.scene, this.cam.camera, p.gnd?.y ?? p.pos.y, on ? 0.2 : 0, size.x, size.y, this.t);

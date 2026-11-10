@@ -116,11 +116,23 @@ Some roads only exist in one world. Grid City's BLUE ROOFTOPS rise out of the ro
 
 01 Core Circuit · 02 Layered Grid · 03 Shift Tunnels · 04 Orbital Loops · 05 Grid City · 06 Void Field · 07 Helix Ascent · 08 Fractal Route · 09 Shift Lattice · 10 Echo Ruins
 
+## Relativity Room
+
+Course 14 is a nod to the impossible-staircase pictures: one huge cube room with a stair on every face, the floor, four walls and the ceiling, each with its own "down". Hexagonal PORTALS join them. Through a portal you see the next stair carrying on, and as you pass through, the whole room turns round you: the wall ahead becomes your floor, and the stair you just left hangs off a wall. Rivals race sideways and upside down on the stairs around you. It runs two long laps: learn the portals on the first, take the lens-only ones on the second.
+
+- Two SPIRAL STAIRS climb (and fall) two full turns over themselves, a CORKSCREW and a FULL PIPE let the Blade ride upside down, a WALL RUN on the floor throws everyone else off, and WATER and MISSING STEPS (a red bridge, then a blue one) ask for the right lens.
+- The RED INNER STAIR cuts inside the first spiral and through its own red portal, shut in the other lenses.
+- The BLUE MIDDLE STAIR leaves through a blue portal into a stair floating in the middle of the room, tipped over at an angle, and comes back out two walls on.
+- An impossible triangle hangs in the sky, and flights of stairs nobody drives float in every direction.
+
+For the physics it's an ordinary loop of road round a ring of cells (`js/world/paradox.js`); `js/world/rooms.js` draws each cell turned onto its wall of the room, clipped to the cell, and each portal as a view through to the next cell.
+
 ## How it's built
 
 - `js/world/shift.js`: the three lenses and world masks. The rule comes from LAST LINE's red/blue 3-D matinee: a thing drawn for one eye only is there only while that eye is looking.
 - `js/world/track.js`: a closed main loop plus branch paths, each sample, wall, pad and shard tagged with the worlds it's solid in. The ground query is per racer and per lens.
 - `js/vehicles/racer.js`: the driving model is Absurd Combat Racing's truck physics (throttle curve, drift and mini-turbos, grip, slope gravity, suspension), plus each form's width, cling, glide and water drag.
+- `js/world/rooms.js`: the Escher room: stairs drawn on every face of one room, and the portals between them (Relativity Room, `js/world/paradox.js`).
 - `js/vehicles/forms.js`: the Blade and the Skimmer, how they dock and split, and the FORMS table. `js/world/formroutes.js`: the glide gaps, wall runs and slits.
 - `js/vehicles/ai.js`: rivals read the road ahead in all three worlds and pick a lens, a lane and a fork.
 - `js/core/audio.js`: synthesized synthwave split into a red band and a blue band; shifting drops the other band behind a filter.
