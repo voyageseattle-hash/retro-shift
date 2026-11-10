@@ -37,7 +37,7 @@ const VARIANT = {
 
 // the Blade's FLIP: how long the model takes to twist round to its new facing (the physics turns at once)
 export const FLIP_TIME = 0.38;
-const HUB = new THREE.Vector3(0, 0.66, -0.25);
+const _q = new THREE.Quaternion();
 
 const SLOT = 0.42; // the channel's half width
 const DECK_Y = 0.12; // the skirt's height
@@ -807,13 +807,21 @@ export function updateForms(model, mode, dt, speed, bob, body, flip = null) {
     B.rotation.z += TAU * e * flip.dir;
     B.position.y += Math.sin(Math.PI * flip.k) * 0.5;
     // turning round the wheel's hub, not the group's origin on the road
-    _e1.copy(HUB).applyEuler(B.rotation);
-    B.position.x += HUB.x - _e1.x;
-    B.position.y += HUB.y - _e1.y;
-    B.position.z += HUB.z - _e1.z;
+    const hub = P.blade.wheel.position;
+    _e1.copy(hub).applyEuler(B.rotation);
+    B.position.x += hub.x - _e1.x;
+    B.position.y += hub.y - _e1.y;
+    B.position.z += hub.z - _e1.z;
   }
+  // the wheel: it rolls with the road. Through a FLIP it stays upright in its lane while the cab twists round it,
+  // and its spin slams from the old way (backward, seen from the new nose) into the new
+  let rate = speed / P.blade.r;
+  if (flip) rate *= flip.k < 0.3 ? -1 + flip.k : flip.k > 0.55 ? 1 : -0.7 + (1.7 * (flip.k - 0.3)) / 0.25;
+  P.blade.spin = ((P.blade.spin || 0) + rate * dt) % TAU;
+  const W = P.blade.wheel;
+  if (flip) W.quaternion.setFromEuler(B.rotation).invert().multiply(_q.setFromAxisAngle(_e2.set(1, 0, 0), P.blade.spin));
+  else W.quaternion.setFromAxisAngle(_e2.set(1, 0, 0), P.blade.spin);
   P.blade.H.setOpacity(kr);
   P.blade.tyreMat.opacity = 0.9 * kr * P.blade.H.alpha;
-  P.blade.wheel.rotation.x += (speed / P.blade.r) * dt;
   for (const f of P.deck.fans) f.rotation.z += (6 + Math.abs(speed) * 0.4) * dt;
 }
