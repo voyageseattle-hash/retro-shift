@@ -18,6 +18,7 @@ const _c = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const RED_HOT = new THREE.Color(COLORS.red).lerp(new THREE.Color(0xffffff), 0.3).multiplyScalar(1.6);
 const BLUE_HOT = new THREE.Color(COLORS.blue).lerp(new THREE.Color(0xffffff), 0.3).multiplyScalar(1.6);
+const SLIT_H = 8.5;
 const WHITE_HOT = new THREE.Color(0xffffff).multiplyScalar(1.5);
 
 export function layFormRoutes(world) {
@@ -136,7 +137,8 @@ export function addSlit(world, o) {
   const w = (path.halfW + 0.5 - gap) / 2;
   const pieces = [];
   for (const s of [-1, 1]) {
-    const ob = world.addObstacle({ type: 'wall', path: o.path, at: o.at, mask: o.mask ?? M.ALL, w, latM: s * (gap + w) });
+    // (taller than the Skimmer's JUMP reaches, SKIM.hopH: the slit is the Blade's way through, not a hurdle)
+    const ob = world.addObstacle({ type: 'wall', path: o.path, at: o.at, mask: o.mask ?? M.ALL, w, latM: s * (gap + w), h: SLIT_H });
     ob.slit = gap;
     pieces.push(ob);
   }
@@ -146,7 +148,7 @@ export function addSlit(world, o) {
   const i = path.index(o.at);
   const a = path.point(i, -gap, 0, new THREE.Vector3());
   const b = path.point(i, gap, 0, new THREE.Vector3());
-  const h = 4.6;
+  const h = SLIT_H + 0.4;
   const rx = path.rightX(i);
   const rz = path.rightZ(i);
   const fx = path.thx[i];

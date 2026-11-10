@@ -870,7 +870,7 @@ export class TrackWorld {
       // (a slit's two wall pieces give their own width and offset, in metres)
       w = o.w ?? hw + 0.5;
       len = 1.2;
-      h = 4.2;
+      h = o.h ?? 4.2;
       lat = o.latM ?? 0;
     } else if (type === 'gate') {
       // half the road blocked, side by sign of lat

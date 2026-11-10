@@ -20,6 +20,12 @@ export const FORMS = {
   // wide and light: a real glide off anything it leaves at speed, and no drag on water
   [BLUE]: { halfW: 1.4, cling: 0, glide: 1, water: 0 },
 };
+// The Skimmer's LIFT (race.js formMove). One tap HOVERs: it rises to `hoverH` over the road and holds there for
+// `hoverT` seconds, level over a hole, steering like a glide; high enough to clear traffic and the low blocks.
+// A second tap within `doubleTap` seconds JUMPs: a short, heavy hop (`hopG` x gravity, no glide on the way down)
+// to `hopH`, high enough to clear a lens wall (4.2 m, +1 grace) or any block, if you time it. Pillars and the
+// slit stand taller than that, so the Blade's route stays the Blade's.
+export const SKIM = { hoverH: 3.4, hoverT: 1.5, doubleTap: 0.4, hopH: 7, hopG: 1.25 };
 
 // Each craft's pair: deck plan (nose width, tail width, length), deck height, fans, wheel size and spokes, fin,
 // rear wing (low: a low wing on tall endplates; high: a high wing on pylons; pylon: a mid wing on twin pylons).

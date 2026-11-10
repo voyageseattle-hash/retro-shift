@@ -7,7 +7,7 @@ import * as THREE from '../../vendor/three.js';
 import { clamp, damp, sign } from '../core/util.js';
 import { BOTH, RED, BLUE, SHIFT, LENS, solidIn, COLORS } from '../world/shift.js';
 import { buildBody, Trail } from './bodies.js';
-import { FORMS, addForms, updateForms } from './forms.js';
+import { FORMS, SKIM, addForms, updateForms } from './forms.js';
 import { bendRacer, lensHeld, PIPE, SCREW } from '../world/warp.js';
 import { DRIFT_COLORS } from '../game/feel.js';
 import { ACCESS } from '../core/access.js';
@@ -111,7 +111,7 @@ export class Racer {
     this.hurtCd = 0;
     // charges (game/items.js): a held one survives a respawn, the effects don't
     this.cellT = this.empT = this.flipT = 0;
-    this.liftT = this.lanceT = this.braceT = 0;
+    this.hoverT = this.hopT = this.lanceT = this.braceT = 0;
     if (this.beamT > 0) this.setBeam(false);
     this.beamT = 0;
     this.suspension = 0;
@@ -316,18 +316,31 @@ export class Racer {
       // few metres a second for a second and a half, and it steers in the air. Enough to cross a glide gap the
       // others drop into, and to float the far side of a drop while the Blade clings down it.
       // (only over a real drop: skimming a downhill road with the road just underneath is driving, not gliding)
+      // the Skimmer's LIFT (SKIM in forms.js): a HOVER holds it over the road, a JUMP is a short heavy hop
+      const hovering = this.hoverT > 0 && this.mode === BLUE && !this.controlLocked;
+      const hopping = this.hopT > 0;
+      if (this.hoverT > 0) this.hoverT -= dt;
+      if (this.hopT > 0) this.hopT -= dt;
       const high = !this.gnd.onRoad || this.pos.y - this.gnd.y > 2;
-      const gliding = F.glide && high && this.airTime > 0.08 && this.airTime < 1.6 && this.speed > 25 && !this.controlLocked;
+      const gliding = !hovering && !hopping && F.glide && high && this.airTime > 0.08 && this.airTime < 1.6 && this.speed > 25 && !this.controlLocked;
       // (race.js counts a long glide as a lens move for the SHIFT CHAIN)
       this.gliding = gliding;
-      this.yawRate = damp(this.yawRate, -steer * (gliding ? 1.6 : 0.9), 3, dt);
-      if (gliding) {
+      this.yawRate = damp(this.yawRate, -steer * (gliding || hovering ? 1.6 : 0.9), 3, dt);
+      if (hovering) {
+        // ride a cushion SKIM.hoverH over the road; over a hole, hold the height of the road it left
+        if (this.gnd.onRoad) this.hoverBase = this.gnd.y;
+        const base = this.hoverBase ?? this.pos.y - SKIM.hoverH;
+        const want = clamp((base + SKIM.hoverH - this.pos.y) * 5, -5, 9);
+        this.vel.y = damp(this.vel.y, want, 8, dt);
+      } else if (gliding) {
         this.vel.y -= G_AIR * (this.vel.y > 0 ? 0.55 : 0.22) * dt;
         this.vel.y = Math.max(this.vel.y, -3.5);
-      } else this.vel.y -= G_AIR * dt;
-      if (gliding) {
+      } else this.vel.y -= G_AIR * (hopping ? SKIM.hopG : 1) * dt;
+      if (gliding || hovering) {
         // turn the travel with the nose, so steering in the air bends the glide
-        const hs = Math.hypot(this.vel.x, this.vel.z);
+        let hs = Math.hypot(this.vel.x, this.vel.z);
+        // the hover's fans keep pushing on the gas, so a hover from a crawl doesn't just hang there
+        if (hovering && throttle > 0) hs = Math.min(hs + P.accel * 0.35 * throttle * dt, Math.max(hs, P.topSpeed * this.speedMul * (LENS[BLUE]?.top ?? 1)));
         this.vel.x = Math.sin(this.yaw) * hs;
         this.vel.z = Math.cos(this.yaw) * hs;
       } else {
@@ -355,7 +368,10 @@ export class Racer {
       // hover pads hold the road harder the faster you go, so a crest at full speed doesn't throw you off it
       const stick = Math.max(0, this.vel.length() - 45);
       if (h <= 0.02) {
-        if (!this.grounded) this.onLand(-vIntoN, session);
+        if (!this.grounded) {
+          this.onLand(-vIntoN, session);
+          this.hoverT = this.hopT = 0;
+        }
         this.pos.y = g2.y;
         if (vIntoN < 0) this.vel.addScaledVector(nn, -vIntoN);
         this.grounded = true;
