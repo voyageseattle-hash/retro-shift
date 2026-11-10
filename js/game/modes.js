@@ -1,13 +1,32 @@
-// Game modes beyond a single race: the two Grand Prix cups, Time Trial and Mono Run medals, staff ghosts, and the
+// Game modes beyond a single race: the three Grand Prix cups and the bonus course, Time Trial and Mono Run medals, staff ghosts, and the
 // save file that remembers trophies, medals and what they unlock.
 
 import { storage } from '../core/util.js';
 import { M } from '../world/shift.js';
+import { TRACKS } from '../world/tracks.js';
 
 export const CUPS = [
   { id: 'signal', name: 'SIGNAL CUP', color: '#ff4fd8', tracks: ['core', 'layered', 'tunnels', 'orbital', 'city'] },
   { id: 'static', name: 'STATIC CUP', color: '#1e8cff', tracks: ['void', 'helix', 'fractal', 'lattice', 'ruins'] },
+  // The third cup: the five impossible courses, easiest first. It opens with a trophy in both cups above. A course
+  // slots in by adding a track with one of these ids to tracks.js; until all five are there the cup shows COMING SOON.
+  { id: 'paradox', name: 'PARADOX CUP', color: '#b04cff', tracks: ['mobius', 'mirror', 'dream', 'relativity', 'dyson'], unlock: 'cup:paradox' },
 ];
+// The bonus course, outside the cups: it opens with a trophy in all three.
+export const BONUS = { track: 'tesseract', unlock: 'course:tesseract' };
+
+const hasTrack = (id) => TRACKS.some((t) => t.id === id);
+export const cupById = (id) => CUPS.find((c) => c.id === id);
+// Every course of the cup has been built.
+export const cupReady = (cup) => cup.tracks.every(hasTrack);
+// The unlock a course sits behind (its cup's, or the bonus course's own), or null for a course that's always open.
+export function courseLock(trackId) {
+  if (trackId === BONUS.track) return BONUS.unlock;
+  return CUPS.find((c) => c.tracks.includes(trackId))?.unlock || null;
+}
+export const courseOpen = (trackId) => isUnlocked(courseLock(trackId));
+// Courses you can pick right now, in order.
+export const openTracks = () => TRACKS.filter((t) => courseOpen(t.id));
 export const POINTS = [10, 7, 5, 3, 2, 1];
 export const TROPHY = ['', 'GOLD', 'SILVER', 'BRONZE'];
 
@@ -101,7 +120,12 @@ const medalCount = (p) => Object.values(p.trial).filter(Boolean).length + Object
 const golds = (t) => Object.values(t).filter((m) => m >= 3).length;
 const cupTop = (p, id, place) => p.cups[id] && p.cups[id] <= place;
 
+const baseCups = (p) => cupTop(p, 'signal', 3) && cupTop(p, 'static', 3);
+
 export const UNLOCKS = [
+  // Neither opens until its courses are in the game, so the banner never announces something you can't play yet.
+  { id: 'cup:paradox', name: 'PARADOX CUP', hint: 'Take a trophy in the SIGNAL CUP and the STATIC CUP', test: (p) => cupReady(cupById('paradox')) && baseCups(p) },
+  { id: 'course:tesseract', name: 'BONUS COURSE', hint: 'Take a trophy in all three cups', test: (p) => hasTrack(BONUS.track) && baseCups(p) && cupTop(p, 'paradox', 3) },
   { id: 'car:chroma', name: 'CHROMA', hint: 'Take a trophy in the SIGNAL CUP, or earn 15 stars on SHIFT TOUR', test: (p) => cupTop(p, 'signal', 3) || tourStars(p) >= 15 },
   { id: 'car:raster', name: 'RASTER', hint: 'Take a trophy in the STATIC CUP, or earn 35 stars on SHIFT TOUR', test: (p) => cupTop(p, 'static', 3) || tourStars(p) >= 35 },
   { id: 'car:glitch', name: 'GLITCH', hint: 'Earn 5 medals in Time Trial or Mono Run', test: (p) => medalCount(p) >= 5 },

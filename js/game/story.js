@@ -99,6 +99,12 @@ export const CUP_STORY = {
     podium: ['STATIC CUP PODIUM', 'The static settles. GL1TCH waves at you from a world you can’t quite see.'],
     lose: ['STATIC CUP', 'The static wins this time. It always sounds like laughter.'],
   },
+  paradox: {
+    intro: ['THE PARADOX CUP', 'Past the tear, the Grid stops pretending to make sense. Roads with one side, rooms with six floors, a city that folds over your head.', 'Five courses that shouldn’t exist. Race them anyway.'],
+    win: ['PARADOX CUP CHAMPION', 'Up is a suggestion, the finish line was behind you the whole time, and your name is on the board in a colour that has no name.', 'One door is left, and it opens in a direction you can’t point to.'],
+    podium: ['PARADOX CUP PODIUM', 'You came out the way you went in, which out here counts as a result.'],
+    lose: ['PARADOX CUP', 'The stairs only go up. Somehow you still ended at the bottom.'],
+  },
 };
 
 // The two secret drivers come through the seam.

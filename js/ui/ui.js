@@ -13,7 +13,7 @@ import { drawPaths, MiniMap } from './minimap.js';
 import { BOTH, RED, BLUE, MODE_NAME } from '../world/shift.js';
 import { SPLIT_GLYPHS } from '../core/input.js';
 import { formatTime, ordinal, storage } from '../core/util.js';
-import { CUPS, POINTS, TROPHY, getProgress, saveProgress as saveProgressUI, medalInfo, isUnlocked, unlockFor, COLORWAYS, getGarage, setLivery, liveryFor } from '../game/modes.js';
+import { CUPS, BONUS, cupReady, courseOpen, courseLock, openTracks, POINTS, TROPHY, getProgress, saveProgress as saveProgressUI, medalInfo, isUnlocked, unlockFor, COLORWAYS, getGarage, setLivery, liveryFor } from '../game/modes.js';
 import { loadGhost } from '../game/ghost.js';
 import { playerName, setPlayerName, courseName, MAX_PLAYERS } from '../net/online.js';
 import { PREMISE, CUP_STORY, SECRET_SCENES, DRIVERS } from '../game/story.js';
@@ -216,6 +216,13 @@ export class UI {
     s.innerHTML = `<h2>${MODE_TITLE[mode]} · SELECT A COURSE</h2>${mode === 'mono' ? '<div class="sub">Never both worlds. Your BOTH button swaps RED and BLUE, every swap costs SHIFT, and only shards and phasing refill it.</div>' : ''}`;
     const grid = el('div', 'grid');
     const items = TRACKS.map((def) => {
+      if (!courseOpen(def.id)) {
+        const card = el('button', 'item tcard locked');
+        const bonus = def.id === BONUS.track;
+        card.innerHTML = `<div class="tnum">${def.num}</div><div class="tmap tlock">LOCKED</div><div class="tname">${bonus ? '???' : def.name}</div>
+          <div class="tblurb">${bonus ? 'BONUS COURSE · ' : ''}${unlockFor(courseLock(def.id))?.hint || ''}</div><div class="tbest">&nbsp;</div>`;
+        return { node: card, action: () => {} };
+      }
       const best = mode === 'mono' ? loadGhost(def.id, true) : storage.get(`rs.best.${def.id}`, null);
       const medal = medalInfo((mode === 'mono' ? prog.mono : prog.trial)[def.id] || 0);
       const card = el('button', 'item tcard');
@@ -243,7 +250,7 @@ export class UI {
     });
     s.appendChild(grid);
     this.root.appendChild(s);
-    const focus = Math.max(0, TRACKS.findIndex((t) => t.id === this.choice.track));
+    const focus = Math.max(0, TRACKS.findIndex((t) => t.id === this.choice.track && courseOpen(t.id)));
     this.menu = new Menu(this.app, grid, items, { cols: 5, focus, onBack: () => this.title() });
     this.menu.nodes.forEach((n) => grid.appendChild(n));
   }
@@ -408,8 +415,9 @@ export class UI {
     if (def) requestAnimationFrame(() => drawPaths(cv.getContext('2d'), this.preview(def).paths, cv.width, cv.height, 7, 10, null, 2.5));
     const list = el('div', 'list row');
     const cycleCourse = (d) => {
-      const i = TRACKS.findIndex((t) => t.id === net.course);
-      net.setCourse(TRACKS[(i + d + TRACKS.length) % TRACKS.length].id);
+      const open = openTracks();
+      const i = Math.max(0, open.findIndex((t) => t.id === net.course));
+      net.setCourse(open[(i + d + open.length) % open.length].id);
     };
     const items = [
       ...(host ? [{ label: 'START RACE', action: () => net.start() }, { label: '◀ COURSE ▶', action: () => cycleCourse(1), cycle: cycleCourse }] : []),
@@ -566,14 +574,15 @@ export class UI {
     const list = el('div', 'list row');
     s.appendChild(list);
     this.root.appendChild(s);
-    const idx = TRACKS.findIndex((t) => t.id === race.def.id);
+    const open = openTracks();
+    const idx = open.findIndex((t) => t.id === race.def.id);
     const items = [
       { label: 'RETRY', action: () => this.afterScenes(() => this.app.startRace()) },
       {
         label: 'NEXT COURSE',
         action: () =>
           this.afterScenes(() => {
-            this.choice.track = TRACKS[(idx + 1) % TRACKS.length].id;
+            this.choice.track = open[(idx + 1) % open.length].id;
             storage.set('rs.lastTrack', this.choice.track);
             this.app.startRace();
           }),
@@ -664,15 +673,26 @@ export class UI {
       const n = el('button', 'item cupcard');
       n.style.setProperty('--c', cup.color);
       const best = prog.cups[cup.id];
+      const open = isUnlocked(cup.unlock);
+      const ready = cupReady(cup);
+      const first = TRACKS.findIndex((t) => t.id === CUPS[0].tracks[0]);
+      const row = (id, k) => {
+        const d = TRACKS.find((t) => t.id === id);
+        // a course that isn't built yet still gets its number, counted on from the cups before it
+        const num = d?.num || String(first + 1 + CUPS.slice(0, CUPS.indexOf(cup)).reduce((a, c) => a + c.tracks.length, 0) + k).padStart(2, '0');
+        return `<li><span>${num}</span>${d && (open || !cup.unlock) ? d.name : '???'}</li>`;
+      };
+      const status = !ready ? 'COMING SOON' : !open ? `LOCKED · ${unlockFor(cup.unlock)?.hint || ''}` : best && best <= 3 ? `${TROPHY[best]} TROPHY` : best ? `BEST ${ordinal(best)}` : 'NOT WON YET';
+      if (!ready || !open) n.classList.add('locked');
       n.innerHTML = `<div class="cupname">${cup.name}</div>
-        <ol>${cup.tracks.map((id) => { const d = TRACKS.find((t) => t.id === id); return `<li><span>${d.num}</span>${d.name}</li>`; }).join('')}</ol>
-        <div class="trophy ${best && best <= 3 ? `t${best}` : ''}">${best && best <= 3 ? `${TROPHY[best]} TROPHY` : best ? `BEST ${ordinal(best)}` : 'NOT WON YET'}</div>`;
-      return { node: n, action: () => ((this.choice.cup = cup.id), this.carSelect()) };
+        <ol>${cup.tracks.map(row).join('')}</ol>
+        <div class="trophy ${ready && open && best && best <= 3 ? `t${best}` : ''}">${status}</div>`;
+      return { node: n, action: () => (ready && open ? ((this.choice.cup = cup.id), this.carSelect()) : {}) };
     });
     s.appendChild(grid);
     this.root.appendChild(s);
     const focus = Math.max(0, CUPS.findIndex((c) => c.id === this.choice.cup));
-    this.menu = new Menu(this.app, grid, items, { cols: 2, focus, onBack: () => this.title() });
+    this.menu = new Menu(this.app, grid, items, { cols: CUPS.length, focus, onBack: () => this.title() });
     this.menu.nodes.forEach((n) => grid.appendChild(n));
   }
 
@@ -859,7 +879,7 @@ export class UI {
     const best = race.mono ? loadGhost(race.def.id, true) : storage.get(`rs.best.${race.def.id}`, null);
     const bits = [];
     if (race.tutorial) bits.push('FIRST RUN · ESC TO SKIP');
-    if (race.kind === 'gp') bits.push(`${this.app.gp.cup.name} · RACE ${this.app.gp.round + 1}/5`);
+    if (race.kind === 'gp') bits.push(`${this.app.gp.cup.name} · RACE ${this.app.gp.round + 1}/${this.app.gp.cup.tracks.length}`);
     if (best) bits.push(`RECORD ${formatTime(best.time)}`);
     if (race.staffTime) bits.push(`<span style="color:#ffd04a">STAFF ${formatTime(race.staffTime)}</span>`);
     this.hs = [...H.querySelectorAll('.hud-view')].map((V) => {

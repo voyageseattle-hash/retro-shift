@@ -141,9 +141,15 @@ kbd:empty { display: none; }
 .bigmedal.none { color: var(--dim); font-size: 26px; text-shadow: none; }
 .targets { display: flex; flex-direction: column; gap: 4px; font-size: 14px; letter-spacing: 0.1em; }
 .targets div { display: flex; justify-content: space-between; gap: 24px; }
-.cups-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 320px)); gap: 18px; }
+.cups-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 300px)); gap: 18px; }
 .cupcard { transform: none; text-align: left; display: flex; flex-direction: column; gap: 10px; border-color: var(--c); }
 .cupcard.focus { transform: scale(1.04); }
+.cupcard.locked { opacity: 0.55; border-style: dashed; }
+.cupcard.locked.focus { opacity: 0.85; }
+.cupcard.locked .trophy { letter-spacing: 0.06em; line-height: 1.4; }
+.tcard.locked { opacity: 0.55; border-style: dashed; }
+.tcard.locked.focus { opacity: 0.85; }
+.tcard .tlock { display: flex; align-items: center; justify-content: center; color: var(--dim); letter-spacing: 0.3em; font-family: 'Russo One'; }
 .cupcard .cupname { font-family: 'Russo One'; font-style: italic; font-size: 26px; color: var(--c); text-shadow: 0 0 12px var(--c); }
 .cupcard ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 14px; letter-spacing: 0.1em; }
 .cupcard ol span { color: var(--pink); margin-right: 10px; font-family: 'Russo One'; }
