@@ -242,6 +242,7 @@ export const TESSERACT = {
   noPylons: true,
   floorDrop: 44,
   fold: FOLD,
+  dressEnv: tesseractEnv,
   mapLines: EDGES,
   points: MAIN.pts.map((p) => [p.x, p.z, p.h]),
   branches: [
@@ -306,6 +307,19 @@ const ALL_CORNERS = [...O.map((c, k) => ['O' + k, c]), ...I.map((c, k) => ['I' +
 const TIES = 9;
 const SEG_PER_BEAM = 4 + TIES * 4;
 
+// The cubes' faces. Seen corner-on a cube shows three faces round its top corner and hides three round its bottom
+// one; each is drawn as a membrane of lines that crowd in toward the hub (rhombus inside rhombus, the cube-in-a-cube
+// again), blue for the outer cube and red for the inner. Corners in order: the hub one, round the rim, back.
+const FACES = [];
+for (const [c, mask] of [['O', M.B], ['I', M.R]]) {
+  for (const k of [0, 2, 4]) FACES.push([[c + 'T', c + k, c + (k + 1), c + ((k + 2) % 6)], mask]);
+  for (const k of [1, 3, 5]) FACES.push([[c + 'B', c + k, c + ((k + 1) % 6), c + ((k + 2) % 6)], mask]);
+}
+const RUNGS = [0.86, 0.7, 0.56, 0.44, 0.34, 0.26, 0.19, 0.13];
+const FACE_CUT = 3; // each line in this many pieces: a folding face isn't flat
+const FACE_SEGS = RUNGS.length * 2 * FACE_CUT;
+const AXIS_TOP = 620;
+
 class Frame {
   constructor(world) {
     this.group = new THREE.Group();
@@ -333,7 +347,74 @@ class Frame {
       }
       this.sets.set(mask, { beams, feet, lp: lg.getAttribute('position'), rp: rg.getAttribute('position') });
     }
-    // the corners: a cube in a cube, blue outside and red inside, a little above each one
+    // the faces
+    this.faces = [];
+    for (const mask of [M.B, M.R]) {
+      const faces = FACES.filter((f) => f[1] === mask).map((f) => f[0]);
+      const mats = world.layers.materials(mask);
+      const lg = new THREE.BufferGeometry();
+      lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(faces.length * FACE_SEGS * 6), 3).setUsage(THREE.DynamicDrawUsage));
+      const lc = new Float32Array(faces.length * FACE_SEGS * 6);
+      const base = new THREE.Color(mats.base);
+      // (the rungs nearest the hub are the brightest: the figure glows from its middle)
+      for (let f = 0, o = 0; f < faces.length; f++) {
+        for (let q = 0; q < RUNGS.length * 2; q++) {
+          const k = 0.16 + 0.5 * (Math.floor(q / 2) / (RUNGS.length - 1)) ** 1.5;
+          for (let e = 0; e < FACE_CUT * 2; e++, o += 3) lc.set([base.r * k, base.g * k, base.b * k], o);
+        }
+      }
+      lg.setAttribute('color', new THREE.BufferAttribute(lc, 3));
+      const lines = new THREE.LineSegments(lg, mats.line);
+      // and the pane itself: a breath of the cube's colour, so a face reads as glass and not as loose lines
+      const pg = new THREE.BufferGeometry();
+      pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(faces.length * 18), 3).setUsage(THREE.DynamicDrawUsage));
+      const pc = new Float32Array(faces.length * 18);
+      for (let q = 0; q < pc.length; q += 3) pc.set([base.r * 0.007, base.g * 0.007, base.b * 0.007], q);
+      pg.setAttribute('color', new THREE.BufferAttribute(pc, 3));
+      const panes = new THREE.Mesh(pg, mats.ribbon);
+      for (const o of [lines, panes]) {
+        o.frustumCulled = false;
+        o.renderOrder = 2;
+        this.group.add(o);
+      }
+      this.faces.push({ faces, lp: lg.getAttribute('position'), pp: pg.getAttribute('position') });
+    }
+    // the axis: the line the hub's four corners sit on, the one direction here that never folds. A white beam from
+    // the floor up out of sight, with three squares turning round it far above the summit.
+    {
+      const N = world.layers.materials(M.ALL);
+      const y0 = world.floorY;
+      const ap = [];
+      for (const [dx, dz] of [[0.7, 0], [-0.7, 0], [0, 0.7], [0, -0.7]]) ap.push(dx, y0, dz, dx, AXIS_TOP, dz);
+      const ag = new THREE.BufferGeometry();
+      ag.setAttribute('position', new THREE.Float32BufferAttribute(ap, 3));
+      const axis = new THREE.LineSegments(ag, N.wire);
+      const rp = [];
+      const rc = [];
+      const vc = new THREE.Color(COLORS.violet).multiplyScalar(0.55);
+      for (const [dx, dz] of [[1.1, 0], [0, 1.1]]) {
+        rp.push(-dx, y0, -dz, dx, y0, dz, dx, AXIS_TOP, dz, -dx, y0, -dz, dx, AXIS_TOP, dz, -dx, AXIS_TOP, -dz);
+        for (let q = 0; q < 6; q++) rc.push(vc.r, vc.g, vc.b);
+      }
+      const rg = new THREE.BufferGeometry();
+      rg.setAttribute('position', new THREE.Float32BufferAttribute(rp, 3));
+      rg.setAttribute('color', new THREE.Float32BufferAttribute(rc, 3));
+      const glow = new THREE.Mesh(rg, N.ribbon);
+      this.crown = [];
+      for (const [k, size, y, mask] of [[0, 150, 250, M.B], [1, 96, 330, M.R], [2, 60, 395, M.B], [3, 36, 445, M.R]]) {
+        const sq = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(size, size * 0.08, size)), world.layers.materials(mask).wire);
+        sq.position.y = y;
+        sq.userData.w = (k % 2 ? -1 : 1) * (0.1 + k * 0.05);
+        this.crown.push(sq);
+      }
+      for (const o of [axis, glow, ...this.crown]) {
+        o.frustumCulled = false;
+        o.renderOrder = 2;
+        this.group.add(o);
+      }
+    }
+    // the corners: a cube in a cube, blue outside and red inside, a little above each one (the outer cube's own
+    // corners are beacons three times the size: nothing drives through those)
     this.nodes = [];
     const big = new THREE.EdgesGeometry(new THREE.BoxGeometry(7, 7, 7));
     const small = new THREE.EdgesGeometry(new THREE.BoxGeometry(3.4, 3.4, 3.4));
@@ -346,7 +427,9 @@ class Frame {
       const inner = new THREE.LineSegments(small, world.layers.materials(M.R).wire);
       g.add(new THREE.LineSegments(big, world.layers.materials(M.B).wire), inner, new THREE.LineSegments(join, world.layers.materials(M.X).wire));
       g.rotation.set(Math.atan(Math.SQRT1_2), 0, Math.PI / 4); // on its corner, like the course
-      g.userData = { id, c, inner };
+      const big3 = id[0] === 'O';
+      g.scale.setScalar(big3 ? 3 : 1);
+      g.userData = { id, c, inner, lift: big3 ? 30 : 13 };
       this.group.add(g);
       this.nodes.push(g);
     }
@@ -355,6 +438,7 @@ class Frame {
     this.set([1, 0, 0]);
     world.animated.push((t) => {
       for (const g of this.nodes) g.userData.inner.rotation.y = t * 0.9;
+      for (const q of this.crown) q.rotation.y = t * q.userData.w;
     });
   }
 
@@ -367,7 +451,8 @@ class Frame {
       if (!p) this.pos.set(id, (p = new THREE.Vector3()));
       p.set(c.x, y, c.z);
     }
-    for (const g of this.nodes) g.position.copy(this.pos.get(g.userData.id)).y += 13;
+    for (const g of this.nodes) g.position.copy(this.pos.get(g.userData.id)).y += g.userData.lift;
+    this.setFaces();
     const a = new THREE.Vector3();
     const b = new THREE.Vector3();
     const side = new THREE.Vector3();
@@ -424,6 +509,233 @@ class Frame {
   }
 }
 
+// The faces, to where the corners are now.
+Frame.prototype.setFaces = function () {
+  const P = (id) => this.pos.get(id);
+  const at = (c, u, v, out) => {
+    // bilinear over the face: hub corner at (0, 0), the far rim corner at (1, 1)
+    const w00 = (1 - u) * (1 - v);
+    const w10 = u * (1 - v);
+    const w11 = u * v;
+    const w01 = (1 - u) * v;
+    return out.set(
+      c[0].x * w00 + c[1].x * w10 + c[2].x * w11 + c[3].x * w01,
+      c[0].y * w00 + c[1].y * w10 + c[2].y * w11 + c[3].y * w01,
+      c[0].z * w00 + c[1].z * w10 + c[2].z * w11 + c[3].z * w01,
+    );
+  };
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  for (const S of this.faces) {
+    const lp = S.lp.array;
+    const pp = S.pp.array;
+    let o = 0;
+    let q = 0;
+    for (const ids of S.faces) {
+      const c = ids.map(P);
+      // stop short of the edges: a road or a beam runs along each
+      const m = 16 / Math.hypot(c[1].x - c[0].x, c[1].z - c[0].z);
+      for (const s of RUNGS) {
+        for (const flip of [0, 1]) {
+          for (let k = 0; k < FACE_CUT; k++) {
+            const t0 = m + ((s - m) * k) / FACE_CUT;
+            const t1 = m + ((s - m) * (k + 1)) / FACE_CUT;
+            // an L round the hub corner: out along one edge's direction at distance s, then the other
+            if (flip) {
+              at(c, s, t0, a);
+              at(c, s, t1, b);
+            } else {
+              at(c, t0, s, a);
+              at(c, t1, s, b);
+            }
+            lp[o++] = a.x; lp[o++] = a.y; lp[o++] = a.z;
+            lp[o++] = b.x; lp[o++] = b.y; lp[o++] = b.z;
+          }
+        }
+      }
+      const R = [at(c, m, m, new THREE.Vector3()), at(c, 1 - m, m, new THREE.Vector3()), at(c, 1 - m, 1 - m, new THREE.Vector3()), at(c, m, 1 - m, new THREE.Vector3())];
+      for (const k of [0, 1, 2, 0, 2, 3]) {
+        pp[q++] = R[k].x; pp[q++] = R[k].y; pp[q++] = R[k].z;
+      }
+    }
+    S.lp.needsUpdate = S.pp.needsUpdate = true;
+  }
+};
+
+// ------------------------------------------------------------------ the road's finish
+// Iridescent, HYPERCUBE's way: the glass is cut like a floor of cubes seen corner-on (three rhombus facets to each
+// hexagon), and each facet is a thin film that turns colour with the angle you see it from, so the paving shifts
+// under you as you drive and every corner re-deals it. With both worlds open the film runs red through magenta and
+// violet to blue, the two worlds' colours and what lies between them. Through a lens there's only that lens's
+// colour, from deep to hot.
+const IRI = { uIriTint: { value: new THREE.Color(1, 1, 1) }, uIriBoth: { value: 1 }, uIriT: { value: 0 }, uIriK: { value: 1 } };
+function iridescent(world) {
+  for (const mask of [M.ALL, M.R, M.B, M.RO, M.BO, M.X]) {
+    const mat = world.layers.materials(mask).road;
+    const prev = mat.onBeforeCompile;
+    mat.onBeforeCompile = (sh, r) => {
+      prev?.(sh, r);
+      Object.assign(sh.uniforms, IRI);
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vIriP;')
+        .replace('#include <project_vertex>', '#include <project_vertex>\nvIriP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vIriP;\nuniform vec3 uIriTint;\nuniform float uIriBoth;\nuniform float uIriT;\nuniform float uIriK;')
+        .replace(
+          '#include <opaque_fragment>',
+          `#include <opaque_fragment>
+          {
+            vec3 iv = cameraPosition - vIriP;
+            float idist = length(iv);
+            float icos = abs(iv.y) / max(idist, 0.001);
+            // which facet of which cube
+            vec2 ip = vIriP.xz / 4.2;
+            const vec2 is = vec2(1.0, 1.7320508);
+            vec4 ic = floor(vec4(ip, ip - vec2(0.5, 1.0)) / is.xyxy) + 0.5;
+            vec4 ih = vec4(ip - ic.xy * is, ip - (ic.zw + 0.5) * is);
+            vec4 ir = dot(ih.xy, ih.xy) < dot(ih.zw, ih.zw) ? vec4(ih.xy, ic.xy) : vec4(ih.zw, ic.zw + 0.5);
+            float iang = mod(atan(ir.y, ir.x) - 0.5235988, 6.2831853);
+            float facet = floor(iang / 2.0943951);
+            // a dark seam where facets meet
+            float iw = fract(iang / 2.0943951);
+            float seam = smoothstep(0.0, 0.07, min(iw, 1.0 - iw) * length(ir.xy) * 2.0);
+            float inear = 1.0 - smoothstep(70.0, 260.0, idist);
+            float ph = icos * 1.9 + idist * 0.0035 + uIriT * 0.04 + inear * (facet * 0.31 + dot(ir.zw, vec2(0.083, 0.047)));
+            float iu = 0.5 - 0.5 * cos(6.2831853 * ph);
+            vec3 film = mix(vec3(1.0, 0.1, 0.24), vec3(0.14, 0.55, 1.25), smoothstep(0.1, 0.9, iu)) + vec3(0.8, 0.1, 0.95) * (4.0 * iu * (1.0 - iu)) * 0.7;
+            vec3 lens = uIriTint * (0.4 + 1.1 * iu);
+            vec3 icol = mix(lens, film, uIriBoth);
+            float fres = pow(1.0 - icos, 3.0);
+            float ik = uIriK * (0.05 + 0.36 * fres) * mix(1.0, 0.55 + 0.45 * facet * 0.5, inear) * mix(1.0, seam, inear * 0.8);
+            gl_FragColor.rgb += icol * ik;
+          }`,
+        );
+    };
+    const key = mat.customProgramCacheKey.call(mat);
+    mat.customProgramCacheKey = () => `${key}|iri`;
+    mat.needsUpdate = true;
+  }
+  world.animated.push((t) => {
+    const tint = world.layers.level.get('tint');
+    IRI.uIriT.value = t;
+    if (!tint) return;
+    IRI.uIriTint.value.copy(tint);
+    const lo = Math.min(tint.r, tint.g, tint.b);
+    IRI.uIriBoth.value = Math.min(1, Math.max(0, (lo - 0.35) / 0.6));
+  });
+}
+
+// A cube on its corner, like the course: twelve edges.
+const TILT = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(Math.atan(Math.SQRT1_2), 0, Math.PI / 4));
+function cornerCube(L, mask, p, s, yaw = 0, color = null) {
+  const R = new THREE.Matrix4().makeRotationY(yaw).multiply(TILT);
+  const P = [];
+  for (let k = 0; k < 8; k++) P.push(new THREE.Vector3(k & 1 ? s : -s, k & 2 ? s : -s, k & 4 ? s : -s).multiplyScalar(0.5).applyMatrix4(R).add(p));
+  for (let k = 0; k < 8; k++) for (const bit of [1, 2, 4]) if (!(k & bit)) L.line(mask, P[k], P[k | bit], color);
+}
+
+// ------------------------------------------------------------------ the space around it (game/env.js)
+// Everywhere else the floor is a square grid and the horizon a ring of ridges. Here the floor is the grid a floor of
+// cubes makes seen corner-on (three directions of line, red, blue and the violet between), ringed with hexagons
+// out from the figure, and the horizon is the next cube out: the course's own figure again, a mile across, its
+// three top edges meeting over your head. A cube in a cube in a cube.
+function tesseractEnv(env, world) {
+  for (const o of [...(env.floorGrid || []), ...(env.ridges || [])]) o.visible = false;
+  const y = world.floorY;
+  const G = new THREE.Group();
+  env.group.add(G);
+  const seg = (pos, mat) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    const o = new THREE.LineSegments(g, mat);
+    o.frustumCulled = false;
+    G.add(o);
+    return o;
+  };
+  // the floor: lines along the hexagon's three edge directions, through its corners
+  const a = RO / 12;
+  const h = a * Math.sin(60 * D);
+  const far = 2100;
+  const n = Math.ceil(far / h);
+  const mid3 = new THREE.LineBasicMaterial({ color: 0xb04cff, transparent: true, opacity: 0.5 });
+  [env.gridMat, env.gridMatB, mid3].forEach((mat, k) => {
+    const dir = k * 60 * D; // the lines run this way
+    const cx = Math.cos(dir);
+    const cz = Math.sin(dir);
+    const pos = [];
+    for (let q = -n; q <= n; q++) {
+      const ox = -cz * q * h;
+      const oz = cx * q * h;
+      const half = Math.sqrt(Math.max(0, far * far - (q * h) ** 2));
+      pos.push(ox - cx * half, y, oz - cz * half, ox + cx * half, y, oz + cz * half);
+    }
+    seg(pos, mat);
+  });
+  // hexagons out from the figure across the floor, each a step fainter
+  const ringA = [];
+  const ringB = [];
+  for (let k = 0; k < 7; k++) {
+    const r = RO * (1.25 + k * 0.25);
+    for (let q = 0; q < 6; q++) {
+      const p0 = pol(ANG[q], r, 0);
+      const p1 = pol(ANG[(q + 1) % 6], r, 0);
+      for (const d of [0, 1.2, 2.4]) (k % 2 ? ringB : ringA).push(p0.x, y + 0.3 + d * 0, p0.z, p1.x, y + 0.3, p1.z, p0.x * (1 + d / r), y + 0.3, p0.z * (1 + d / r), p1.x * (1 + d / r), y + 0.3, p1.z * (1 + d / r));
+    }
+  }
+  seg(ringA, env.mtnMat);
+  seg(ringB, env.mtnMatB);
+  // the next cube out
+  const R2 = 1750;
+  const HI = 520;
+  const APEX = 1500;
+  const faintA = new THREE.LineBasicMaterial({ color: 0xff2a4a, fog: false, transparent: true, opacity: 0.3, depthWrite: false });
+  const faintB = faintA.clone();
+  const rim = ANG.map((ang, k) => new THREE.Vector3(R2 * Math.cos(ang * D), y + (k % 2 ? 0 : HI), R2 * Math.sin(ang * D)));
+  const apex = new THREE.Vector3(0, y + APEX, 0);
+  const edgeA = [];
+  const edgeB = [];
+  const fat = (out, p, q) => {
+    // (three lines a little apart: some weight at this distance)
+    for (const d of [0, 7, 14]) out.push(p.x, p.y + d, p.z, q.x, q.y + d, q.z);
+  };
+  for (let k = 0; k < 6; k++) fat(k % 2 ? edgeA : edgeB, rim[k], rim[(k + 1) % 6]);
+  for (const k of [0, 2, 4]) fat(edgeB, rim[k], apex);
+  // (the low corners stand on the floor: a stub up from each, so the zigzag has feet)
+  for (const k of [1, 3, 5]) fat(edgeA, rim[k], rim[k].clone().setY(y + 90));
+  seg(edgeA, env.mtnMat);
+  seg(edgeB, env.mtnMatB);
+  // its three top faces: lines crowding toward the apex, as on the course's own faces
+  const fa = [];
+  const fb = [];
+  const v = new THREE.Vector3();
+  const w = new THREE.Vector3();
+  const bil = (c, s, t, out) => out.copy(c[0]).multiplyScalar((1 - s) * (1 - t)).addScaledVector(c[1], s * (1 - t)).addScaledVector(c[2], s * t).addScaledVector(c[3], (1 - s) * t);
+  [0, 2, 4].forEach((k, f) => {
+    const c = [apex, rim[k], rim[(k + 1) % 6], rim[(k + 2) % 6]];
+    for (const s of [0.88, 0.76, 0.64, 0.53, 0.43, 0.34, 0.26, 0.19, 0.13, 0.08]) {
+      for (const flip of [0, 1]) {
+        for (let q = 0; q < 4; q++) {
+          const t0 = (s * q) / 4;
+          const t1 = (s * (q + 1)) / 4;
+          if (flip) (bil(c, s, t0, v), bil(c, s, t1, w));
+          else (bil(c, t0, s, v), bil(c, t1, s, w));
+          (f % 2 ^ flip ? fa : fb).push(v.x, v.y, v.z, w.x, w.y, w.z);
+        }
+      }
+    }
+  });
+  seg(fa, faintA);
+  seg(fb, faintB);
+  G.traverse((o) => (o.renderOrder = -1));
+  const c = new THREE.Color();
+  return () => {
+    mid3.color.copy(env.gridMat.color).lerp(env.gridMatB.color, 0.5);
+    faintA.color.copy(env.tint.grid);
+    faintB.color.copy(env.tint.gridB);
+    void c;
+  };
+}
+
 // ------------------------------------------------------------------ scenery (world/decor.js)
 export function tesseractDecor(world, L, main) {
   world.floorY = Math.min(world.floorY, -3 * UO - 10); // under the lowest corner of any pose
@@ -450,21 +762,52 @@ export function tesseractDecor(world, L, main) {
     L.quad(mb, B[2], B[3], B[3].clone().add(V(0, -0.7, 0)), B[2].clone().add(V(0, -0.7, 0)), null, 0.5);
     L.quad(ma, A[2], A[3], A[3].clone().add(V(0, -0.9, 0)), A[2].clone().add(V(0, -0.9, 0)), null, 0.45);
   }
-  // cubes in cubes adrift around the figure, out of the road's way
+  // Nothing here is scattered. Cubes in cubes hang on a lattice (the floor's own, every fourth point, at three
+  // heights), all on their corners and all facing the same way, like the atoms of a crystal the course was cut from.
   const rng = world.rng;
-  for (let k = 0; k < 150; k++) {
-    const a = rng() * Math.PI * 2;
-    const d = 80 + rng() * 1000;
-    const p = V(Math.cos(a) * d, world.floorY + 14 + rng() * 230, Math.sin(a) * d);
-    let near = false;
-    for (const path of world.paths) for (let q = 0; q < path.N && !near; q += 4) near = Math.hypot(path.px[q] - p.x, path.pz[q] - p.z) < 34;
-    if (near) continue;
-    const s = 5 + rng() * 13;
-    const yaw = rng() * 3;
-    const [ma, mb] = k % 2 ? [M.R, M.B] : [M.B, M.R];
-    L.box(ma, p.x, p.y, p.z, s, s, s, yaw, null, true);
-    L.box(mb, p.x, p.y, p.z, s * 0.45, s * 0.45, s * 0.45, yaw, null, false);
+  const nearRoad = (x, z, r) => {
+    for (const path of world.paths) for (let q = 0; q < path.N; q += 3) if (Math.hypot(path.px[q] - x, path.pz[q] - z) < r + path.halfW) return true;
+    return false;
+  };
+  const A = RO / 3;
+  const LEVELS = [world.floorY + 16, 185, 270];
+  for (let j = -7; j <= 7; j++) {
+    for (let i = -8; i <= 8; i++) {
+      const x = (i + j / 2) * A;
+      const z = j * A * Math.sin(60 * D);
+      const d = Math.hypot(x, z);
+      if (d < 60 || d > 1250) continue;
+      const lv = (((i - j) % 3) + 3) % 3;
+      if (lv === 0 && nearRoad(x, z, 26)) continue;
+      const s = lv === 0 ? 15 : 11 + lv * 5;
+      const p = V(x, LEVELS[lv] + (lv === 0 ? s * 0.4 : 0), z);
+      const [ma, mb] = (i + j) % 2 ? [M.R, M.B] : [M.B, M.R];
+      cornerCube(L, ma, p, s);
+      cornerCube(L, mb, p, s * 0.45);
+      // (the ones on the floor are lit from inside)
+      if (lv === 0) cornerCube(L, M.X, p, s * 0.2, 0, COLORS.pink);
+    }
   }
+  // Out past the figure, stacks: a cube on a cube on a cube, each six tenths of the one under it, turning as they go
+  // up. One on each of the floor's rings' corners.
+  for (let k = 0; k < 12; k++) {
+    const ang = k * 30 + 15;
+    const r = k % 2 ? 1130 : 940;
+    const x = r * Math.cos(ang * D);
+    const z = r * Math.sin(ang * D);
+    if (nearRoad(x, z, 70)) continue;
+    let s = 84;
+    let y0 = world.floorY;
+    for (let q = 0; q < 5; q++) {
+      const mask = (k + q) % 2 ? M.R : M.B;
+      L.box(mask, x, y0 + s / 2, z, s, s, s, ang * D + q * 0.5236, null, true);
+      L.box(mask === M.R ? M.B : M.R, x, y0 + s / 2, z, s * 0.5, s * 0.5, s * 0.5, ang * D + q * 0.5236, null, false);
+      y0 += s;
+      s *= 0.6;
+    }
+  }
+  void rng;
+  iridescent(world);
   // one lap, so nothing here is left to find on the next: a board before each lens road, in its lens's colour, and
   // one before each fold line
   for (const p of world.paths) {
