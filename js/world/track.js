@@ -426,6 +426,7 @@ export class TrackWorld {
     this.shards = [];
     this.buildMain();
     this.buildBranches();
+    this.paths.extra = def.mapLines; // lines the map draws under the roads (ui/minimap.js)
     this.applyGaps();
     layFormRoutes(this);
     layWarps(this);
@@ -489,8 +490,11 @@ export class TrackWorld {
       const E = B.clone().addScaledVector(tB, -lead).addScaledVector(RB, out - off);
       const midA = A.clone().addScaledVector(tA, lead * 0.5).addScaledVector(RA, (out - off) * 0.35);
       const midB = B.clone().addScaledVector(tB, -lead * 0.5).addScaledVector(RB, (out - off) * 0.35);
-      S.y = A.y;
-      E.y = B.y;
+      // (grade: true keeps the peel on the road's own slope, for a fork off a climb or a fall)
+      if (!b.grade) {
+        S.y = A.y;
+        E.y = B.y;
+      }
       const pts = [A.clone().addScaledVector(tA, -4), A, midA, S];
       const lift = b.lift ?? 0;
       const inner = [];

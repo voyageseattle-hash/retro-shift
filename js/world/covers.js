@@ -1,7 +1,8 @@
 // Covers for the lens-only routes. A blue-only shortcut is hidden in the red world: in BOTH and RED a billboard
 // stands across its mouth and a row of red buildings fills the ground it runs over, so all you see is skyline.
 // Shift to BLUE and the red world goes, taking the cover with it, and the road is there. A red-only route gets
-// blue cover the same way. (Grid City's rooftops and the Shift Tunnels hatch have their own.)
+// blue cover the same way. (Grid City's rooftops and the Shift Tunnels hatch have their own, and a route with
+// `cover: false` hides itself: the Hypercube's are beams of the tesseract until you look through their lens.)
 
 import * as THREE from '../../vendor/three.js';
 import { M, RED, BLUE, colorForMask } from './shift.js';
@@ -30,7 +31,7 @@ export function buildCovers(world) {
   let n = 0;
   for (const b of world.paths) {
     const d = b.def;
-    if (b === main || !d || d.hatch || d.facade || (d.mask !== M.RO && d.mask !== M.BO)) continue;
+    if (b === main || !d || d.hatch || d.facade || d.cover === false || (d.mask !== M.RO && d.mask !== M.BO)) continue;
     const cover = d.mask === M.BO ? M.R : M.B; // the other world's colour, there in BOTH and that lens
     const lens = d.mask === M.BO ? BLUE : RED; // the lens that takes it away
     const fr = {};

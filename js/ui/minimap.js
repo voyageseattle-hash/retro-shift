@@ -27,6 +27,18 @@ export function drawPaths(ctx, paths, w, h, mode = 7, pad = 10, racers = null, l
   const Z = (z) => h - (oz + (z - z0) * s);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+  // a course's own figure under its roads (the Hypercube's edges)
+  if (paths.extra) {
+    ctx.strokeStyle = '#b04cff';
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth = lineW * 0.35;
+    ctx.beginPath();
+    for (const [ax, az, bx, bz] of paths.extra) {
+      ctx.moveTo(X(ax), Z(az));
+      ctx.lineTo(X(bx), Z(bz));
+    }
+    ctx.stroke();
+  }
   for (const p of paths) {
     const last = p.closed ? p.N : p.N - 1;
     for (let i = 0; i < last; i += 2) {

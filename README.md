@@ -116,6 +116,10 @@ Some roads only exist in one world. Grid City's BLUE ROOFTOPS rise out of the ro
 
 01 Core Circuit · 02 Layered Grid · 03 Shift Tunnels · 04 Orbital Loops · 05 Grid City · 06 Void Field · 07 Helix Ascent · 08 Fractal Route · 09 Shift Lattice · 10 Echo Ruins
 
+## The Hypercube
+
+16 HYPERCUBE is a bonus course laid along the edges of a tesseract: a cube inside a cube, seen corner-on, so the map is a hexagon inside a hexagon. It is one long lap of about 5 km that crosses the middle twice, once through the pit and once over the summit. The tesseract turns twice a lap, at the FOLD LINE signs: first INSIDE OUT (the inner cube swells and the outer one flattens), then INVERTED (every climb becomes a drop), and the road, rails and everything on it goes with it. RED shows the RED CELL, a road that dives under the pit; BLUE shows the BLUE CELL, a road round the summit; THE RIM is a wall run along the last outer edge. The sky carries the tesseract itself, turning in four dimensions, one cell red and one blue.
+
 ## How it's built
 
 - `js/world/shift.js`: the three lenses and world masks. The rule comes from LAST LINE's red/blue 3-D matinee: a thing drawn for one eye only is there only while that eye is looking.
