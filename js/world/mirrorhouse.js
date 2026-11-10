@@ -108,7 +108,7 @@ export const MIRROR_HOUSE = {
   blurb: 'A hall of mirrors. Half the roads are reflections, and some of the glass hides a way through.',
   decor: 'mirror',
   decorFn: mirrorDecor,
-  skyPiece: 'solid',
+  skyPiece: 'none',
   seed: 1212,
   laps: 2,
   sun: 0,

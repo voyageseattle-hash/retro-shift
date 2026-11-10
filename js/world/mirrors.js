@@ -20,6 +20,7 @@ import { M, RED, BLUE, solidIn, colorForMask, COLORS } from './shift.js';
 import { smoothstep, damp, clamp } from '../core/util.js';
 import { addSign } from './signs.js';
 import { REFL } from './fx.js';
+import { HouseArt, bigTop } from './mirrorart.js';
 
 const _v = new THREE.Vector3();
 const _a = new THREE.Vector3();
@@ -324,8 +325,33 @@ export function buildMirrors(world) {
     const p = O.clone().addScaledVector(t, -0.03);
     const q = p.clone().addScaledVector(r, ob.w * 2);
     L.quad(ob.mask, p.clone().setY(p.y + h - 0.3), q.clone().setY(q.y + h - 0.3), q.clone().setY(q.y + h), p.clone().setY(p.y + h), col, 0.9);
+    // door furniture, standing just proud of the glass so it's in front of its own reflection: the seam between the
+    // two leaves, a push bar on each, a transom and a kick rail, and marquee bulbs round the frame
+    const F = (s, y) => p.clone().addScaledVector(r, s).addScaledVector(t, -0.04).setY(p.y + y);
+    const W = ob.w * 2;
+    const soft = dim(col, 0.55);
+    L.line(ob.mask, F(W / 2, 0.1), F(W / 2, h - 0.3), col);
+    L.line(ob.mask, F(0.3, h - 1.1), F(W - 0.3, h - 1.1), soft);
+    L.line(ob.mask, F(0.3, 0.55), F(W - 0.3, 0.55), soft);
+    for (const s of [-1, 1]) {
+      const x0 = W / 2 + s * 0.35;
+      const x1 = W / 2 + s * 1.5;
+      L.quad(ob.mask, F(x0, 1.1), F(x1, 1.1), F(x1, 1.26), F(x0, 1.26), col, 1);
+      L.line(ob.mask, F(x0, 1.18), F(x0, 0.9), soft);
+      // a lozenge of bevelled glass in each leaf
+      const cx = W / 2 + s * W * 0.25;
+      const loz = [F(cx - 0.7, 3), F(cx, 4), F(cx + 0.7, 3), F(cx, 2)];
+      for (let k = 0; k < 4; k++) L.line(ob.mask, loz[k], loz[(k + 1) % 4], soft);
+    }
+    const bulbs = world.mirrorArt?.bulbs;
+    if (bulbs) {
+      bulbs.run(F(0, 0.6), F(0, h + 0.3), ob.mask, 0.9);
+      bulbs.run(F(0, h + 0.3), F(W, h + 0.3), ob.mask, 0.9);
+      bulbs.run(F(W, h + 0.3), F(W, 0.6), ob.mask, 0.9);
+    }
   }
 
+  world.mirrorArt?.finish(world, world.mirrorArt.ballAt, 30);
   world.mirrors = new MirrorSet(world, [...planes.values()]);
 }
 
@@ -392,6 +418,8 @@ export class MirrorSet {
     const dt = this.last ? clamp((now - this.last) / 1000, 0, 0.1) : 0;
     this.last = now;
     TIME.value = o.t ?? now / 1000;
+    gl.getDrawingBufferSize(_size);
+    this.world.mirrorArt?.update(dt, TIME.value, mode, o.instant, _size.y);
     for (const p of this.planes) {
       for (const q of p.panes) {
         const want = solidIn(q.mask, mode) && !q.ob?.broken ? 1 : 0;
@@ -478,7 +506,7 @@ export class MirrorSet {
 }
 
 // ------------------------------------------------------------------ the house
-// Scenery: the halls' doorways, a chequered floor in the foyer, and a sky full of broken glass.
+// Scenery: the halls' walls and doorways, the big top over the house (mirrorart.js) and broken glass hanging in it.
 export function mirrorDecor(world, L, main, rng) {
   const hw = main.halfW;
   // the halls' walls: dark panels behind the rails, red world and blue world by turns, so both worlds together
@@ -518,9 +546,27 @@ export function mirrorDecor(world, L, main, rng) {
       const up = (p, d) => p.clone().setY(p.y + d);
       L.quad(mask, up(A, -0.5), up(B, -0.5), B, A, null, 0.75);
       L.quad(mask, up(a, 2.2), up(b, 2.2), up(b, 2.35), up(a, 2.35), null, 0.3);
+      // a harlequin lattice over the panel: two tall diamonds, each with a lit lozenge at its heart
+      const y0 = 2.6;
+      const y1 = WALL_H - 0.8;
+      const lc = dim(colorForMask(mask), 0.4);
+      for (let c = 0; c < 2; c++) {
+        const l = a.clone().lerp(b, c / 2);
+        const m = a.clone().lerp(b, (c + 0.5) / 2);
+        const r = a.clone().lerp(b, (c + 1) / 2);
+        const ym = (y0 + y1) / 2;
+        L.line(mask, up(l, ym), up(m, y1), lc);
+        L.line(mask, up(m, y1), up(r, ym), lc);
+        L.line(mask, up(r, ym), up(m, y0), lc);
+        L.line(mask, up(m, y0), up(l, ym), lc);
+        const e = (f, y) => up(l.clone().lerp(r, f), y);
+        L.quad(mask, e(0.38, ym), e(0.5, ym + 1.1), e(0.62, ym), e(0.5, ym - 1.1), null, 0.22);
+      }
     }
   }
-  // doorways: a square neon frame over the road every so often, red and blue by turns
+  // doorways: a proscenium over the road every so often, red and blue by turns: square posts and a beam, an arch
+  // inside them strung with marquee bulbs, and a diamond for a keystone
+  const art = (world.mirrorArt = new HouseArt(world));
   for (let i = 30, k = 0; i < main.N; i += 64, k++) {
     const mask = k % 2 ? M.R : M.B;
     const a = main.point(i, -(hw + 1.6), 0, new THREE.Vector3());
@@ -529,23 +575,60 @@ export function mirrorDecor(world, L, main, rng) {
     const A = a.clone().setY(top);
     const B = b.clone().setY(top);
     const up = (p, d) => p.clone().setY(p.y + d);
+    const t = new THREE.Vector3(main.thx[i], 0, main.thz[i]).multiplyScalar(0.5);
     for (const [p, q] of [[a, A], [b, B]]) {
-      const t = new THREE.Vector3(main.thx[i], 0, main.thz[i]).multiplyScalar(0.5);
       L.quad(mask, p.clone().sub(t), p.clone().add(t), q.clone().add(t), q.clone().sub(t), null, 0.55);
       L.line(mask, p, q);
     }
     L.quad(mask, A, B, up(B, 0.9), up(A, 0.9), null, 0.8);
     L.line(mask, A, B);
     L.line(mask, up(A, 0.9), up(B, 0.9));
+    // the arch: springs from 6 m up the posts to just under the beam
+    const SPRING = 6;
+    const arch = [];
+    for (let q = 0; q <= 14; q++) {
+      const th = (q / 14) * Math.PI;
+      const p = a.clone().lerp(b, 0.5 - 0.5 * Math.cos(th));
+      arch.push(p.setY(p.y + SPRING + Math.sin(th) * (top - SPRING - 0.5 - Math.max(a.y, b.y))));
+    }
+    for (let q = 0; q < 14; q++) {
+      L.line(mask, arch[q], arch[q + 1]);
+      // the spandrel between arch and beam: a faint sheet of the doorway's colour
+      const f0 = q / 14;
+      const f1 = (q + 1) / 14;
+      const c0 = A.clone().lerp(B, 0.5 - 0.5 * Math.cos(f0 * Math.PI));
+      const c1 = A.clone().lerp(B, 0.5 - 0.5 * Math.cos(f1 * Math.PI));
+      L.quad(mask, arch[q], arch[q + 1], c1, c0, null, 0.1);
+      art.bulbs.run(arch[q], arch[q + 1], mask, 1.25);
+    }
+    art.bulbs.run(up(a, 1.4), up(a, SPRING), mask, 1.25);
+    art.bulbs.run(up(b, 1.4), up(b, SPRING), mask, 1.25);
+    const key = A.clone().lerp(B, 0.5);
+    const r = new THREE.Vector3(main.rightX(i), 0, main.rightZ(i));
+    L.quad(M.ALL, key.clone().addScaledVector(r, -0.8).setY(top + 0.45), up(key, 1.6), key.clone().addScaledVector(r, 0.8).setY(top + 0.45), up(key, -0.7), COLORS.white, 0.45);
   }
-  // broken glass hanging in the dark around the house: tilted frames, each with a faint sheet in it
+  // marquee bulbs along the top of every mirror, in the mirror's colour: they go out with the glass
+  for (const S of world.mirrorLay?.sides || []) {
+    const { m, O, a, n, strip } = S;
+    const h = (m.h ?? 9) + 0.85;
+    const at = (q) => new THREE.Vector3(O.x + a.x * q.s + n.x * 0.15, q.y - 0.12 + h, O.z + a.z * q.s + n.z * 0.15);
+    let from = strip[0];
+    for (const q of strip) {
+      if (q.s - from.s < 8 && q !== strip[strip.length - 1]) continue;
+      art.bulbs.run(at(from), at(q), m.mask, 1.6);
+      from = q;
+    }
+  }
+  // the big top overhead, and the mirror ball hung from its peak
+  art.ballAt = bigTop(world, L, main);
+  // broken glass hanging under the canopy: tilted frames, each with a faint sheet in it
   const ctr = new THREE.Vector3();
   for (let i = 0; i < main.N; i++) ctr.add(_v.set(main.px[i], 0, main.pz[i]));
   ctr.multiplyScalar(1 / main.N);
-  for (let k = 0; k < 110; k++) {
+  for (let k = 0; k < 80; k++) {
     const ang = rng() * Math.PI * 2;
     const rad = 60 + rng() * 520;
-    const c = new THREE.Vector3(ctr.x + Math.cos(ang) * rad, world.maxY + 14 + rng() * 120, ctr.z + Math.sin(ang) * rad * 0.95);
+    const c = new THREE.Vector3(ctr.x + Math.cos(ang) * rad, world.maxY + 14 + rng() * 60 * (1.6 - rad / 580), ctr.z + Math.sin(ang) * rad * 0.95);
     // (not over the road, where it would hang in the mirrors' way)
     let clear = true;
     for (let i = 0; i < main.N && clear; i += 6) if ((main.px[i] - c.x) ** 2 + (main.pz[i] - c.z) ** 2 < 40 * 40 && c.y - main.py[i] < 40) clear = false;
