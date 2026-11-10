@@ -7,7 +7,7 @@ import * as THREE from '../../vendor/three.js';
 import { clamp, damp, sign } from '../core/util.js';
 import { BOTH, RED, BLUE, SHIFT, LENS, solidIn, COLORS } from '../world/shift.js';
 import { buildBody, Trail } from './bodies.js';
-import { FORMS, addForms, updateForms } from './forms.js';
+import { FORMS, FLIP_TIME, addForms, updateForms } from './forms.js';
 import { bendRacer, lensHeld, PIPE, SCREW } from '../world/warp.js';
 import { DRIFT_COLORS } from '../game/feel.js';
 import { ACCESS } from '../core/access.js';
@@ -202,6 +202,22 @@ export class Racer {
     this.boostTime = Math.max(this.boostTime, time);
     this.boostPower = Math.max(this.boostTime > time ? this.boostPower : 1, power);
   }
+  // The Blade's FLIP: end for end on the spot, the same speed the other way. The physics turns at once; the model
+  // catches up through a Möbius half twist (twistT, read by updateForms).
+  flip() {
+    this.yaw = Math.atan2(Math.sin(this.yaw + Math.PI), Math.cos(this.yaw + Math.PI));
+    // reverse the motion along the road, keep what's into or off it
+    const n = this.grounded ? _up.set(this.gnd.nx, this.gnd.ny, this.gnd.nz) : _up.set(0, 1, 0);
+    const vn = this.vel.dot(n);
+    this.vel.negate().addScaledVector(n, 2 * vn);
+    this.drift.active = false;
+    this.drift.level = this.drift.charge = 0;
+    this.spinTime = 0;
+    this.yawRate = 0;
+    this.twistT = FLIP_TIME;
+    this.twistDir = this.twistDir === 1 ? -1 : 1;
+  }
+
   spinOut(time = 1, dir = 1) {
     if (this.invuln > 0) return false;
     this.spinTime = time;
@@ -491,7 +507,8 @@ export class Racer {
     this.bob = (this.bob || this.index) + dt;
     body.position.y = 0.35 + this.suspension * 0.6 + Math.sin(this.bob * 4) * 0.05;
     body.rotation.set(0, this.drift.active ? this.drift.dir * -0.28 : 0, this.bodyRoll);
-    updateForms(this.model, this.mode, dt, this.speed, this.bob, body);
+    if (this.twistT > 0) this.twistT = Math.max(0, this.twistT - dt);
+    updateForms(this.model, this.mode, dt, this.speed, this.bob, body, this.twistT > 0 ? { k: 1 - this.twistT / FLIP_TIME, dir: this.twistDir } : null);
     // lens colour: the wedge glows the colour of the world it's in
     const m = this.model;
     const col = this.mode === RED ? COLORS.red : this.mode === BLUE ? COLORS.blue : 0xffffff;

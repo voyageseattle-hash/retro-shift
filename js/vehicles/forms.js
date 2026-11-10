@@ -35,6 +35,10 @@ const VARIANT = {
   greatwedge: { nose: 1.0, tail: 1.45, len: 4.6, h: 0.55, fans: 2, r: 0.7, spokes: 10, fin: 'tall', wing: 'high', kit: 'shark' },
 };
 
+// the Blade's FLIP: how long the model takes to twist round to its new facing (the physics turns at once)
+export const FLIP_TIME = 0.38;
+const HUB = new THREE.Vector3(0, 0.66, -0.25);
+
 const SLOT = 0.42; // the channel's half width
 const DECK_Y = 0.12; // the skirt's height
 const ADD = { transparent: true, blending: THREE.AdditiveBlending, depthWrite: false };
@@ -750,7 +754,8 @@ export function addForms(model, carId, paint, alpha = 1) {
 
 // Per frame: each half eases toward being there (1) or not (0) for the current lens, and moves as it goes:
 // the deck halves slide apart and drop away, the Blade folds down into the channel and the cover slides over.
-export function updateForms(model, mode, dt, speed, bob, body) {
+// `flip` (the Blade FLIPping): k from 0 to 1 through the twist, dir the way it rolls.
+export function updateForms(model, mode, dt, speed, bob, body, flip = null) {
   const P = model.pair;
   if (!P) return;
   const want = { red: mode !== BLUE ? 1 : 0, blue: mode !== RED ? 1 : 0 };
@@ -788,9 +793,25 @@ export function updateForms(model, mode, dt, speed, bob, body) {
   // the Blade folds down into the channel, squashing flat, as it leaves; alone, it leans into turns like a bike
   const B = P.blade.g;
   B.visible = kr > 0.01;
-  B.position.y = -(1 - kr) * 0.5;
+  B.position.set(0, -(1 - kr) * 0.5, 0);
   B.scale.set(1, Math.max(0.05, kr), 1);
+  B.rotation.order = 'YZX';
+  B.rotation.y = 0;
   B.rotation.z = body.rotation.z * 2.4 * (1 - kb);
+  if (flip) {
+    // a Möbius half twist round the wheel: the nose swings round to where the tail was (the model starts at the old
+    // facing, half a turn back from the new one) while the whole bike rolls once over, like a band twisting, and
+    // hops clear of the road at the middle of it so the roll never sinks into it
+    const e = flip.k < 0.5 ? 2 * flip.k * flip.k : 1 - 2 * (1 - flip.k) * (1 - flip.k);
+    B.rotation.y = -Math.PI * (1 - e) * flip.dir;
+    B.rotation.z += TAU * e * flip.dir;
+    B.position.y += Math.sin(Math.PI * flip.k) * 0.5;
+    // turning round the wheel's hub, not the group's origin on the road
+    _e1.copy(HUB).applyEuler(B.rotation);
+    B.position.x += HUB.x - _e1.x;
+    B.position.y += HUB.y - _e1.y;
+    B.position.z += HUB.z - _e1.z;
+  }
   P.blade.H.setOpacity(kr);
   P.blade.tyreMat.opacity = 0.9 * kr * P.blade.H.alpha;
   P.blade.wheel.rotation.x += (speed / P.blade.r) * dt;

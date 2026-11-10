@@ -42,6 +42,8 @@ const HORNS = { vector: 'honk1', scanline: 'honk2', polygon: 'honk3', chroma: 'h
 const G_AIR_RACE = 27; // racer.js G_AIR
 // recharge time of each form's move (seconds)
 const FORM_CD = { lift: 5, lance: 6, brace: 8 };
+// a LANCE's second tap inside this many seconds is a FLIP
+const FLIP_TAP = 0.4;
 const NO_INPUT = { throttle: 0, brake: 0, steer: 0, drift: false, item: false, special: false, jump: false, reset: false, look: false };
 
 export class Race {
@@ -224,8 +226,23 @@ export class Race {
   // LANCEs forward and runs straight through whoever's in front, the pair BRACEs behind a shield that sends a hit
   // back at whoever threw it. One move, then a few seconds to recharge.
   formMove(r) {
-    if (this.state !== 'race' || r.finished || r.respawnT > 0 || (r.formCd || 0) > 0 || r.empT > 0) return false;
+    if (this.state !== 'race' || r.finished || r.respawnT > 0 || r.empT > 0) return false;
     const near = this.near(r);
+    // the second tap of a LANCE, while it's still young: the Blade FLIPs end for end round its wheel in a Möbius
+    // half twist, the LANCE cancelled, and goes back the way it came at the same speed
+    if (r.mode === RED && r.lanceT > 0 && this.t - (r.lanceAt ?? -9) < FLIP_TAP) {
+      r.lanceT = 0;
+      r.boostTime = 0;
+      r.flip();
+      if (near) this.debris.sparks(_v.copy(r.pos).setY(r.pos.y + 0.3), _a.set(0, 1, 0), 30, 0xff4a6a, 14, r.gnd.y);
+      if (r.isPlayer) {
+        this.emitP(r, 'popup', { text: 'FLIP', color: '#ff4a6a', small: true });
+        this.app.audio.play('phase');
+        this.camOf(r).fovPunch(5);
+      }
+      return true;
+    }
+    if ((r.formCd || 0) > 0) return false;
     if (r.mode === BLUE) {
       if (!r.grounded) return false;
       r.vel.addScaledVector(_v.set(r.gnd.nx, r.gnd.ny, r.gnd.nz), 12);
@@ -240,6 +257,7 @@ export class Race {
       }
     } else if (r.mode === RED) {
       r.lanceT = 0.7;
+      r.lanceAt = this.t;
       r.giveBoost(0.7, 1.45);
       r.formCd = FORM_CD.lance;
       if (r.isPlayer) {
