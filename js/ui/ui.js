@@ -406,8 +406,10 @@ export class UI {
       <div class="sub">${host ? 'Share the code. Friends pick ONLINE, then JOIN A ROOM.' : `Waiting for the host to start the ${tag ? 'round of LENS TAG' : 'race'}.`}</div>
       <div class="rgrid"><table class="standings lobby-table">${rows}</table>
       <div class="lobby-course"><span>${tag ? 'LENS TAG · BATTLE' : 'COURSE'}</span><b>${tag ? ARENA.name : courseName(net.course)}</b><canvas width="220" height="130"></canvas></div></div>`;
+    // (LENS TAG plays the PRISM BOWL: the course map isn't its)
+    if (tag) s.querySelector('.lobby-course canvas').style.visibility = 'hidden';
     const cv = s.querySelector('canvas');
-    const def = tag ? ARENA : TRACKS.find((t) => t.id === net.course);
+    const def = TRACKS.find((t) => t.id === net.course);
     if (def) requestAnimationFrame(() => drawPaths(cv.getContext('2d'), this.preview(def).paths, cv.width, cv.height, 7, 10, null, 2.5));
     const list = el('div', 'list row');
     const cycleCourse = (d) => {
