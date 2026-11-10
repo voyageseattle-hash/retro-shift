@@ -73,7 +73,7 @@ export function boardTexture(title, sub, color, arrow) {
 
 // An overhead board on a gantry: over the half of the road the route leaves from (side +1 right, -1 left), or
 // over the middle (side 0), facing the oncoming car.
-function addSign(world, path, i, side, title, sub, mask, arrow = 0) {
+export function addSign(world, path, i, side, title, sub, mask, arrow = 0) {
   i = path.wrap(i);
   const color = colorForMask(mask) === colorForMask(M.ALL) ? 0xff4fd8 : colorForMask(mask);
   const W = side ? 9 : 11;

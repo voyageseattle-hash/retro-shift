@@ -30,7 +30,7 @@ export function buildCovers(world) {
   let n = 0;
   for (const b of world.paths) {
     const d = b.def;
-    if (b === main || !d || d.hatch || d.facade || (d.mask !== M.RO && d.mask !== M.BO)) continue;
+    if (b === main || !d || d.hatch || d.facade || d.cover === false || (d.mask !== M.RO && d.mask !== M.BO)) continue;
     const cover = d.mask === M.BO ? M.R : M.B; // the other world's colour, there in BOTH and that lens
     const lens = d.mask === M.BO ? BLUE : RED; // the lens that takes it away
     const fr = {};

@@ -589,6 +589,7 @@ export const COURSE_SONG = {
   fractal: 'helixB',
   lattice: 'ruinsB',
   ruins: 'ruins',
+  mirror: 'tunnelB',
 };
 
 const STING_MIX = {
