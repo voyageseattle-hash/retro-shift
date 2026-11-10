@@ -63,6 +63,7 @@ Touch controls appear on phones and tablets.
 ## Modes
 
 - **Grand Prix**: the SIGNAL CUP and the STATIC CUP, five courses each, six racers, points for every place (10, 7, 5, 3, 2, 1). Trophies unlock cars and colours.
+  The SIGNAL CUP's roads have a phosphor finish, a CRT glow with scanlines that roll toward the horizon and burn brighter with speed, and each course has its own take on it: RASTER on Core Circuit, INTERLACE on Layered Grid, VECTOR beams in Shift Tunnels, an oscilloscope SCOPE on Orbital Loops and a DOT MASK on Grid City (`js/world/phosphor.js`; `?nophosphor` turns it off to compare).
 - **SHIFT TOUR**: thirty events across the ten courses in five legs, and a finale, each with a twist: a lens switched off, a form route you have to take, a storm, the police, a rival to beat head to head, a speed you can't drop under, a quota of takedowns, drift turbos, chains, phases or PERFECT SHIFTs. Each pays up to three stars, and stars open the next leg, new paint and a second way to two of the cars.
 - **Single Race**: any course against five rivals.
 - **Time Trial**: alone against your best ghost and the staff ghost, for bronze, silver and gold medals.

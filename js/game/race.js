@@ -25,6 +25,7 @@ import { Quake } from './quake.js';
 import { chainMove, chainTick, chainEnd, shiftTiming, perfectFx, newChain, newTally } from './chain.js';
 import { PIPE } from '../world/warp.js';
 import { disposeTree } from '../core/renderer.js';
+import { PHOSPHOR } from '../world/phosphor.js';
 
 const _v = new THREE.Vector3();
 const _a = new THREE.Vector3();
@@ -1022,6 +1023,7 @@ export class Race {
   beforeRender(renderer) {
     const gl = renderer.renderer;
     const on = !this.split && renderer.quality === 'high';
+    PHOSPHOR.uDetail.value = renderer.quality === 'low' ? 0 : 1;
     const size = gl.getDrawingBufferSize(_s);
     const p = this.player;
     this.reflection.render(gl, this.scene, this.cam.camera, p.gnd?.y ?? p.pos.y, on ? 0.2 : 0, size.x, size.y, this.t);

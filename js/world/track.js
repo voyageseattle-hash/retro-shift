@@ -15,6 +15,7 @@ import { layStorms } from './storms-def.js';
 import { layFormRoutes, addSlit, routeMask, layRouteBoosts } from './formroutes.js';
 import { layWarps, buildWarps, PIPE } from './warp.js';
 import { FORMS } from '../vehicles/forms.js';
+import { buildPhosphor } from './phosphor.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -443,6 +444,7 @@ export class TrackWorld {
     buildSigns(this);
     buildCovers(this);
     buildShapeCues(this); // accessibility: a shape per world (shapes.js), shown from settings
+    buildPhosphor(this); // Signal Cup road finish
     this.group.add(this.layers.build());
     this._f = {};
     this._g = { y: -1e4, nx: 0, ny: 1, nz: 0, lat: 0, path: null, i: 0, f: 0, rx: 1, rz: 0, mask: 0, onRoad: false };
