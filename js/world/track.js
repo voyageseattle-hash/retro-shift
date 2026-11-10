@@ -4,6 +4,7 @@
 // from Absurd Combat Racing's TrackWorld; the multi-path, per-lens ground query is new.
 
 import { buildShapeCues } from './shapes.js';
+import { buildGrain } from './grain.js';
 import * as THREE from '../../vendor/three.js';
 import { clamp, lerp, wrapAngle, mulberry32, smoothstep } from '../core/util.js';
 import { M, BOTH, RED, BLUE, solidIn, colorForMask, COLORS } from './shift.js';
@@ -443,6 +444,7 @@ export class TrackWorld {
     buildSigns(this);
     buildCovers(this);
     buildShapeCues(this); // accessibility: a shape per world (shapes.js), shown from settings
+    buildGrain(this); // Static Cup road finish
     this.group.add(this.layers.build());
     this._f = {};
     this._g = { y: -1e4, nx: 0, ny: 1, nz: 0, lat: 0, path: null, i: 0, f: 0, rx: 1, rz: 0, mask: 0, onRoad: false };
