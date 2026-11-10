@@ -99,6 +99,12 @@ export const CUP_STORY = {
     podium: ['STATIC CUP PODIUM', 'The static settles. GL1TCH waves at you from a world you can’t quite see.'],
     lose: ['STATIC CUP', 'The static wins this time. It always sounds like laughter.'],
   },
+  toybox: {
+    intro: ['THE TOYBOX CUP', 'Somewhere the seam runs through a kid’s bedroom. The lights are off, the blacklight is on, and from down here every toy is a mile long.', 'Five toys, one room. Don’t wake the cat.'],
+    win: ['TOYBOX CUP CHAMPION', 'The flippers have stopped, the last domino is down and the book is shut. A glow star peels off the ceiling and lands at your wheels like a medal.', 'Under the bed, something that isn’t a toy is waiting for you.'],
+    podium: ['TOYBOX CUP PODIUM', 'Not bad for something small enough to be lost down the back of the desk.'],
+    lose: ['TOYBOX CUP', 'Back in the box. The cat opens one eye, and closes it again.'],
+  },
   paradox: {
     intro: ['THE PARADOX CUP', 'Past the tear, the Grid stops pretending to make sense. Roads with one side, rooms with six floors, a city that folds over your head.', 'Five courses that shouldn’t exist. Race them anyway.'],
     win: ['PARADOX CUP CHAMPION', 'Up is a suggestion, the finish line was behind you the whole time, and your name is on the board in a colour that has no name.', 'One door is left, and it opens in a direction you can’t point to.'],
