@@ -14,6 +14,7 @@ import { TrackWorld } from './world/track.js';
 import { Environment } from './game/env.js';
 import { trackById, TRACKS } from './world/tracks.js';
 import { BOTH, RED, BLUE } from './world/shift.js';
+import { toyboxEnv, SPOTS } from './world/toybox.js';
 import { CUPS, POINTS, loadStaff, recordCup, checkUnlocks, liveryFor } from './game/modes.js';
 import { Showroom } from './game/showroom.js';
 import { Online } from './net/online.js';
@@ -62,6 +63,8 @@ class App {
       this.ui.choice.mode = params.get('mode') || (params.get('trial') ? 'trial' : 'race');
       if (params.get('car')) this.ui.choice.car = params.get('car');
       this.autopilot = params.has('staff');
+      // preview: ?track=core&toybox=desk puts any course in the TOYBOX CUP's bedroom (a key of SPOTS in world/toybox.js)
+      if (SPOTS[params.get('toybox')]) Object.assign(trackById(params.get('track')), { dressEnv: toyboxEnv(params.get('toybox')), skyPiece: 'none' });
       this.startRace();
     } else {
       this.ui.title();

@@ -62,7 +62,7 @@ Touch controls appear on phones and tablets.
 
 ## Modes
 
-- **Grand Prix**: the SIGNAL CUP and the STATIC CUP, five courses each, six racers, points for every place (10, 7, 5, 3, 2, 1). Trophies unlock cars and colours. A trophy in both opens the PARADOX CUP (five impossible courses), and a trophy in all three opens a bonus course.
+- **Grand Prix**: the SIGNAL CUP and the STATIC CUP, five courses each, six racers, points for every place (10, 7, 5, 3, 2, 1). Trophies unlock cars and colours. A trophy in both opens the TOYBOX CUP (five toys in a kid's bedroom after lights-out), a trophy there opens the PARADOX CUP (five impossible courses), and a trophy there opens a bonus course. A trophy in all four cups opens a secret course.
 - **SHIFT TOUR**: thirty events across the ten courses in five legs, and a finale, each with a twist: a lens switched off, a form route you have to take, a storm, the police, a rival to beat head to head, a speed you can't drop under, a quota of takedowns, drift turbos, chains, phases or PERFECT SHIFTs. Each pays up to three stars, and stars open the next leg, new paint and a second way to two of the cars.
 - **Single Race**: any course against five rivals.
 - **Time Trial**: alone against your best ghost and the staff ghost, for bronze, silver and gold medals.
