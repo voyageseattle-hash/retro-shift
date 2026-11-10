@@ -23,7 +23,7 @@ export const REFL = {
 export function patchWave(mat, per, edge = true) {
   const prev = mat.onBeforeCompile;
   mat.onBeforeCompile = (sh, r) => {
-    prev?.(sh, r);
+    prev?.call(mat, sh, r);
     Object.assign(sh.uniforms, WAVE, per);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWaveP;')
@@ -51,7 +51,9 @@ export function patchWave(mat, per, edge = true) {
 }
 
 export function patchWet(mat) {
-  mat.onBeforeCompile = (sh) => {
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, r) => {
+    prev?.call(mat, sh, r);
     Object.assign(sh.uniforms, REFL);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nuniform mat4 uReflM;\nvarying vec4 vReflUv;\nvarying vec3 vWetP;')

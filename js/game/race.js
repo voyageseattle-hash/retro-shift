@@ -172,6 +172,8 @@ export class Race {
       c2.camera.updateProjectionMatrix();
       this.cams.push(c2);
     }
+    // a fold course (world/fold.js) carries each camera through its fold
+    for (const c of this.cams) c.fold = this.world.fold;
     this.players.forEach((p, k) => this.cams[k].snap(p));
     this.items = new Items(this);
     this.scene.add(this.items.group);
@@ -855,10 +857,13 @@ export class Race {
     this.app.net?.applyPuppets(this);
     for (const r of this.racers) if (r.puppet ? r.root.visible : r.respawnT <= 0) r.syncVisual(dt);
     for (const r of this.racers) if (r.drawIn !== undefined && r.respawnT <= 0) this.drawIn(r, dt);
+    this.world.fold?.follow(this, dt);
     if (this.split) {
       // the obstacles move once; each view then fades the worlds for its own player's lens (see views())
       for (const fn of this.world.animated) fn(this.t, dt);
       this.players.forEach((pl, k) => {
+        this.world.fold?.useView(k, pl);
+        this.world.fold?.update(dt, this.t, pl.mode);
         this.world.layers.useView(k);
         this.world.layers.update(dt, pl.mode, this.t);
       });
@@ -899,7 +904,8 @@ export class Race {
     cam.getWorldDirection(_v);
     const fl = Math.hypot(_v.x, _v.z) || 1;
     this._listener ||= { pos: new THREE.Vector3(), fwd: { x: 0, z: 1 }, vel: p.vel };
-    this._listener.pos.copy(cam.position);
+    // (heard from where the camera is on the flat course, not where a fold has carried it)
+    this._listener.pos.copy(cam.userData.flat || cam.position);
     this._listener.fwd.x = _v.x / fl;
     this._listener.fwd.z = _v.z / fl;
     this._listener.vel = p.vel;
@@ -1024,7 +1030,7 @@ export class Race {
     const on = !this.split && renderer.quality === 'high';
     const size = gl.getDrawingBufferSize(_s);
     const p = this.player;
-    this.reflection.render(gl, this.scene, this.cam.camera, p.gnd?.y ?? p.pos.y, on ? 0.2 : 0, size.x, size.y, this.t);
+    this.reflection.render(gl, this.scene, this.cam.camera, p.gnd?.y ?? p.pos.y, on && !this.world.fold ? 0.2 : 0, size.x, size.y, this.t);
   }
 
   // What to draw: one full-screen view, or two stacked views (player 1 on top), each prepared for its own lens.
@@ -1037,6 +1043,7 @@ export class Race {
       w: 1,
       h: 0.5,
       before: () => {
+        this.world.fold?.useView(k, pl);
         this.world.layers.useView(k);
         this.world.layers.update(0, pl.mode, this.t);
         this.env.useView(k);

@@ -219,7 +219,9 @@ export class ChaseCamera {
       this.shake = Math.max(0, this.shake - dt * 1.7);
     }
     c.up.copy(this.upV);
-    c.lookAt(this.look);
+    // (on a fold course the camera is carried through the fold with everything else: world/fold.js)
+    if (this.fold) this.fold.aim(c, this.look);
+    else c.lookAt(this.look);
     const roll = this.roll + rollShake;
     if (roll) c.rotateZ(roll);
     const fov = clamp(this.fov + this.fovKick, 30, 110);

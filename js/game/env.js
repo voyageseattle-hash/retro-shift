@@ -5,6 +5,7 @@ import * as THREE from '../../vendor/three.js';
 import { MODE_TINT, BOTH } from '../world/shift.js';
 import { damp } from '../core/util.js';
 import { SkyPiece, SKY_PIECE } from './skypieces.js';
+import { exemptFold } from '../world/fold.js';
 
 const SUN_SHADER = {
   uniforms: { uTop: { value: new THREE.Color(0xff3a7a) }, uBot: { value: new THREE.Color(0x3a6aff) }, uTime: { value: 0 } },
@@ -151,6 +152,8 @@ export class Environment {
     this.tint = { grid: new THREE.Color(0xff2a4a), gridB: new THREE.Color(0x1e8cff), fog: new THREE.Color(0x020103), top: new THREE.Color(0xff3a7a), bot: new THREE.Color(0x3a6aff) };
     this.mode = BOTH;
     this.pulse = 0;
+    // the sky stays where it is when a course folds (world/fold.js)
+    exemptFold(this.group);
   }
 
   // Split-screen: the sky and grid tint follow each player's own lens.
