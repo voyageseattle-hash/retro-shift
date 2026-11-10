@@ -828,7 +828,6 @@ export class Race {
 
     if (this.recorder && this.state === 'race' && !p.finished) this.recorder.sample(this.raceTime, p);
     this.event?.update(sim); // the event runner (events.js), when this race is an event
-    this.tag?.update(sim); // LENS TAG (tag.js), when this race is one
     // rivals talk when they get past you (not too often)
     if (this.state === 'race' && !this.solo && !this.split && !p.finished) {
       const place = this.placeOf(p);
@@ -856,7 +855,6 @@ export class Race {
     this.app.net?.applyPuppets(this);
     for (const r of this.racers) if (r.puppet ? r.root.visible : r.respawnT <= 0) r.syncVisual(dt);
     for (const r of this.racers) if (r.drawIn !== undefined && r.respawnT <= 0) this.drawIn(r, dt);
-    this.tag?.afterVisuals(); // (LENS TAG hides IT from a lens that can't see it)
     if (this.split) {
       // the obstacles move once; each view then fades the worlds for its own player's lens (see views())
       for (const fn of this.world.animated) fn(this.t, dt);
@@ -1045,7 +1043,6 @@ export class Race {
         this.env.update(this.dtLast || 0, this.t, this.cams[k].camera);
         this.traffic.render(pl.mode, pl);
         this.police.render(pl.mode, pl);
-        this.tag?.render(k);
       },
     }));
   }

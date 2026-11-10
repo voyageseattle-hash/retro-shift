@@ -104,6 +104,25 @@ export class LensTag {
     race.app.audio.playCourse('void');
     for (const r of race.racers) r.baseSpeedMul = r.speedMul;
     this.buildBeacon();
+    // listen in on the race (as the event runner does): the round after each frame's sim, and each view drawn with
+    // IT hidden from a lens that can't see it. (Race.bump calls contact() itself.)
+    const update = race.update.bind(race);
+    race.update = (dt) => {
+      update(dt);
+      this.update(dt);
+    };
+    const before = race.beforeRender.bind(race);
+    race.beforeRender = (renderer) => {
+      this.afterVisuals();
+      before(renderer);
+    };
+    const views = race.views.bind(race);
+    race.views = () =>
+      views().map((v, k) => {
+        if (!race.split) return v;
+        const b = v.before;
+        return { ...v, before: () => (this.render(k), b?.()) };
+      });
   }
 
   // The beacon over IT: a tall column of light, a spinning crown, and a ring on the road round the car. Drawn for
