@@ -562,3 +562,29 @@ body.shapes .lens-card.blue b::before { content: '● '; }
   .h-event.tour .ev-note { font-size: 11px; }
   .bigstars { font-size: 44px; }
 }
+
+/* ---------------------------------------------------------------- LENS TAG (ui/tagui.js) */
+.h-tag { position: absolute; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; letter-spacing: 0.08em; }
+.h-tag .tg-clock { font-family: 'Russo One', sans-serif; font-style: italic; font-size: 30px; color: #fff; text-shadow: 0 0 12px rgba(255, 79, 216, 0.7); transform: skewX(-10deg); }
+.h-tag .tg-clock u { text-decoration: none; margin-left: 10px; font-size: 20px; color: #ff4fd8; animation: blink 0.6s steps(2) infinite; }
+.h-tag ol { list-style: none; margin: 0; padding: 4px 12px; display: flex; gap: 14px; background: var(--panel); border: 1.5px solid var(--violet); transform: skewX(-10deg); font-size: 13px; }
+.h-tag li { display: flex; gap: 5px; align-items: baseline; color: #cfc2ee; }
+.h-tag li i { font-style: normal; }
+.h-tag li b { color: #fff; font-size: 15px; }
+.h-tag li.me span { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
+.h-tag li.it { color: #ffd04a; }
+.h-tag li.it b { color: #ffd04a; }
+.h-tag .tg-sig { display: flex; flex-direction: column; align-items: center; gap: 1px; margin-top: 4px; text-shadow: 0 0 3px #000, 0 0 10px rgba(0, 0, 0, 0.8); }
+.h-tag .tg-sig em { font-style: italic; font-family: 'Russo One', sans-serif; font-size: 20px; letter-spacing: 0.06em; }
+.h-tag .tg-sig small { font-size: 12px; color: #e0d4ff; letter-spacing: 0.14em; }
+.h-tag em.red { color: #ff4a6a; }
+.h-tag em.blue { color: #4ab0ff; }
+.h-tag em.both, .h-tag em.you { color: #ffd04a; }
+.h-tag em.lost { color: #8a7aa8; }
+.h-tag em.shimmer { animation: tagShimmer 0.35s steps(3) infinite; }
+.h-tag.am-it ol { border-color: #ffd04a; box-shadow: 0 0 18px rgba(255, 208, 74, 0.45); }
+.h-tag.double ol { border-color: #ff4fd8; }
+@keyframes tagShimmer { 0% { opacity: 1; } 50% { opacity: 0.35; } 100% { opacity: 0.8; } }
+#hud.split .h-tag { top: 30px; transform: translateX(-50%) scale(0.8); transform-origin: top center; }
+@media (max-width: 640px) { .h-tag { top: 56px; } .h-tag .tg-clock { font-size: 22px; } .h-tag ol { font-size: 11px; gap: 8px; } .h-tag .tg-sig em { font-size: 16px; } }
+.tag-results .standings td:last-child { color: #8a7aa8; }

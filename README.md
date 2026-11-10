@@ -67,6 +67,7 @@ Touch controls appear on phones and tablets.
 - **Single Race**: any course against five rivals.
 - **Time Trial**: alone against your best ghost and the staff ghost, for bronze, silver and gold medals.
 - **Mono Run**: never both worlds. You start in RED, the BOTH button swaps lenses, every swap costs SHIFT, and only shards and phasing refill it. Road that exists only in the overlap is opened to both lenses.
+- **LENS TAG**: a battle in the PRISM BOWL, alone against five CPUs or two players split-screen against four. No laps: one craft is IT and scores a point for every second it keeps the tag. IT is in plain sight only through its own lens (or to everyone while it sits in BOTH); through the other lens it isn't there at all, not even on the map. A hunter in BOTH sees IT's shimmer, a flickering beacon in IT's colour, from anywhere, but can't tag it and IT phases straight through them. So you look in BOTH and strike in a lens: touch IT in its lens to take the tag (a LANCE reaches further). IT drains SHIFT like anyone, runs a touch slower, and has a moment of safety after each tag. The last 20 seconds of the 2:30 round score double. Each lens has a hideout road only it can drive.
 - **SHIFT SCHOOL**: seven short drills, one for each thing a course asks of you (the three forms, lens walls, a lens route, the slit, the glide gap, charges and the hull), each with bronze, silver and gold.
 
 ## 2 Player

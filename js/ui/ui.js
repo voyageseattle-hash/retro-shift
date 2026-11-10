@@ -120,6 +120,7 @@ export class UI {
       { label: 'TIME TRIAL', action: () => ((this.choice.mode = 'trial'), this.app.audio.announce('timetrial'), this.trackSelect()) },
       { label: 'MONO RUN', action: () => ((this.choice.mode = 'mono'), this.app.audio.announce('monorun'), this.trackSelect()) },
       { label: '2 PLAYER', action: () => ((this.choice.mode = 'split'), this.app.audio.announce('twoplayer'), this.trackSelect()) },
+      { label: 'LENS TAG', action: () => this.app.openTag() },
       { label: 'ONLINE', action: () => (this.app.audio.announce('online'), this.onlineMenu()) },
       { label: 'GARAGE', action: () => this.garage() },
       { label: 'FIRST RUN', action: () => this.app.startTutorial() },
@@ -270,7 +271,7 @@ export class UI {
   carSelect(who = 1) {
     this.clear();
     const s = el('div', 'screen cars');
-    const split = this.choice.mode === 'split';
+    const split = this.choice.mode === 'split' || (this.choice.mode === 'tag' && !!this.choice.tagSplit);
     s.innerHTML = `<h2>${split ? `PLAYER ${who} · ` : ''}SELECT A CRAFT</h2>${split ? `<div class="sub">${who === 1 ? 'Player 1 drives with W A S D, shifts with Q · F · E, drifts with SPACE.' : 'Player 2 drives with the arrows, shifts with , . /, drifts with RIGHT SHIFT. Gamepads work too.'}</div>` : ''}<div class="stage-gap"></div>`;
     const grid = el('div', 'grid cars-grid');
     const items = CARS.map((car) => {
@@ -301,7 +302,7 @@ export class UI {
     this.root.appendChild(s);
     const cur = who === 2 ? this.choice.car2 || storage.get('rs.lastCar2', 'scanline') : this.choice.car;
     const focus = Math.max(0, CARS.findIndex((c) => c.id === cur));
-    this.menu = new Menu(this.app, grid, items, { cols: 4, focus, onBack: () => (who === 2 ? this.carSelect(1) : this.choice.mode === 'online' ? this.lobby() : this.choice.mode === 'gp' ? this.cupSelect() : this.trackSelect()) });
+    this.menu = new Menu(this.app, grid, items, { cols: 4, focus, onBack: () => (who === 2 ? this.carSelect(1) : this.choice.mode === 'tag' ? this.app.openTag() : this.choice.mode === 'online' ? this.lobby() : this.choice.mode === 'gp' ? this.cupSelect() : this.trackSelect()) });
     this.menu.nodes.forEach((n) => grid.appendChild(n));
   }
 
@@ -1174,7 +1175,7 @@ export class UI {
         <p>${race.mono ? 'SWAP flips your lens.' : 'RED is fastest · BLUE grips and drifts · BOTH refills SHIFT'}</p>`;
       if (h.controlsHtml !== html) h.controls.innerHTML = h.controlsHtml = html;
     }
-    if (drawMap) h.map.draw(race.world, race.racers, p.mode, p);
+    if (drawMap) h.map.draw(race.world, race.tag ? race.tag.mapRacers(p) : race.racers, p.mode, p);
   }
 }
 
