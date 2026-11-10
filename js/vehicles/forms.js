@@ -37,6 +37,11 @@ const VARIANT = {
 
 // the Blade's FLIP: how long the model takes to twist round to its new facing (the physics turns at once)
 export const FLIP_TIME = 0.38;
+// how the FLIP looks (the user picked 'spin'; the others are kept in case that changes):
+//   'spin'   no roll: the cab spins flat half a turn one way while the wheel spins the other
+//   'twist'  a Möbius half twist: the whole Blade swings round while rolling once over, with a small hop
+//   'upright' the 'twist' roll for the cab, while the wheel stays upright in its lane
+export const FLIP_STYLE = 'spin';
 const _q = new THREE.Quaternion();
 
 const SLOT = 0.42; // the channel's half width
@@ -798,15 +803,21 @@ export function updateForms(model, mode, dt, speed, bob, body, flip = null) {
   B.rotation.order = 'YZX';
   B.rotation.y = 0;
   B.rotation.z = body.rotation.z * 2.4 * (1 - kb);
+  const ease = flip ? (flip.k < 0.5 ? 2 * flip.k * flip.k : 1 - 2 * (1 - flip.k) * (1 - flip.k)) : 0;
   if (flip) {
-    // the cab and the wheel counter-spin flat round the hub: the cab swings half a turn one way to its new facing
-    // (the model starts at the old facing, half a turn back from the new one) while the wheel whips round the
-    // other way, a full turn against the cab, so the two cross like the halves of a twisting band
-    const e = flip.k < 0.5 ? 2 * flip.k * flip.k : 1 - 2 * (1 - flip.k) * (1 - flip.k);
-    B.rotation.y = -Math.PI * (1 - e) * flip.dir;
+    // the cab swings half a turn to its new facing (the model starts at the old facing, half a turn back from the
+    // new one), round the wheel's hub
+    B.rotation.y = -Math.PI * (1 - ease) * flip.dir;
+    if (FLIP_STYLE !== 'spin') {
+      // rolling once over like a band twisting, and hopping clear of the road at the middle so the roll never
+      // sinks into it
+      B.rotation.z += TAU * ease * flip.dir;
+      B.position.y += Math.sin(Math.PI * flip.k) * 0.5;
+    }
     const hub = P.blade.wheel.position;
     _e1.copy(hub).applyEuler(B.rotation);
     B.position.x += hub.x - _e1.x;
+    B.position.y += hub.y - _e1.y;
     B.position.z += hub.z - _e1.z;
   }
   // the wheel: it rolls with the road, and through a FLIP its roll slams from the old way into the new
@@ -815,9 +826,12 @@ export function updateForms(model, mode, dt, speed, bob, body, flip = null) {
   P.blade.spin = ((P.blade.spin || 0) + rate * dt) % TAU;
   const W = P.blade.wheel;
   W.quaternion.setFromAxisAngle(_e2.set(1, 0, 0), P.blade.spin);
-  if (flip) {
-    const e = flip.k < 0.5 ? 2 * flip.k * flip.k : 1 - 2 * (1 - flip.k) * (1 - flip.k);
-    W.quaternion.premultiply(_q.setFromAxisAngle(_e1.set(0, 1, 0), -TAU * e * flip.dir));
+  if (flip && FLIP_STYLE === 'spin') {
+    // spinning the other way to the cab: a full turn against it, so the two cross like halves of a twisting band
+    W.quaternion.premultiply(_q.setFromAxisAngle(_e1.set(0, 1, 0), -TAU * ease * flip.dir));
+  } else if (flip && FLIP_STYLE === 'upright') {
+    // undo the cab's turn and roll: the wheel stays upright in its lane while the cab twists round it
+    W.quaternion.premultiply(_q.setFromEuler(B.rotation).invert());
   }
   P.blade.H.setOpacity(kr);
   P.blade.tyreMat.opacity = 0.9 * kr * P.blade.H.alpha;
