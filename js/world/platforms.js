@@ -23,7 +23,9 @@
 
 import * as THREE from '../../vendor/three.js';
 import { clamp, wrapAngle } from '../core/util.js';
-import { solidIn, COLORS, colorForMask } from './shift.js';
+import { solidIn, COLORS, colorForMask, RED, BLUE } from './shift.js';
+
+const LENSES = [RED, BLUE];
 import { Layers } from './layers.js';
 
 // how far short of a capped end a craft is held (its nose stops just inside the edge)
@@ -75,6 +77,7 @@ export class Platforms {
     path.extra = true;
     path.twoWay = true; // no wrong way on it (race.js): the same strip is driven either way
     path.platform = platform || null;
+    path.oneWay = main.length > 0; // a slip road: the CPU only takes it start to end
     path.kmax = 0;
     for (let i = 2; i < path.N - 2; i++) path.kmax = Math.max(path.kmax, Math.abs(path.curv[i]));
     path.base = {};
@@ -220,7 +223,17 @@ export class Platforms {
   // The road's samples are read as they stand, so draw a platform's roads before anything moves.
   drawRoad(L, path, mask, col = colorForMask(mask), { rails = true, y = 0 } = {}) {
     const hw = path.halfW;
-    const P = (i, lat, h) => path.point(i, lat, h + y, new THREE.Vector3());
+    // a platform's road is drawn in the platform's own space, since its geometry rides in the platform's group
+    const pl = path.platform;
+    const cs = pl ? Math.cos(pl.yaw) : 1;
+    const sn = pl ? Math.sin(pl.yaw) : 0;
+    const P = (i, lat, h) => {
+      const v = path.point(i, lat, h + y, new THREE.Vector3());
+      if (!pl) return v;
+      const dx = v.x - pl.pos.x;
+      const dz = v.z - pl.pos.z;
+      return v.set(dx * cs - dz * sn, v.y - pl.pos.y, dx * sn + dz * cs);
+    };
     for (let i = 0; i < path.N - 1; i++) {
       const j = i + 1;
       L.roadQuad(mask, P(i, -hw, -0.02), P(j, -hw, -0.02), P(j, hw, -0.02), P(i, hw, -0.02));
@@ -350,15 +363,21 @@ export class Platforms {
   }
 
   // Is this end of a road open to someone in `mode`?
-  open(S, mode) {
+  // (`ahead`: only roads that lead on. A one-way road entered by its far end leads back where it came from.)
+  open(S, mode, ahead = false) {
     if (S.main) return true;
-    for (const q of S.links) if (solidIn(q.path.mask[0], mode)) return true;
-    return false;
+    return !!this.beyond(S, mode, ahead);
   }
   // The road a craft in `mode` drives onto through this end: { path, dir } (dir 1: from its start), or null.
-  beyond(S, mode) {
-    for (const q of S.links) if (solidIn(q.path.mask[0], mode)) return q;
+  beyond(S, mode, ahead = false) {
+    for (const q of S.links) if (solidIn(q.path.mask[0], mode) && !(ahead && q.path.oneWay && q.end)) return q;
     return null;
+  }
+
+  // Seconds until a platform next sets off (0 while it's moving, Infinity if it never will). Subclasses say; the
+  // CPU uses it to stop short of a joint that's about to part.
+  leaves(pl) {
+    return pl?.moving ? 0 : Infinity;
   }
 
   // After a craft has moved: the bumper across an end of its road that's joined to nothing in its lens.
@@ -398,7 +417,7 @@ export class Platforms {
     const r = ai.r;
     const w = this.world;
     const g = r.gnd;
-    const P = g.onRoad && g.path?.sockets ? g.path : null;
+    let P = g.onRoad && g.path?.sockets ? g.path : null;
     const ctl = r.ctl;
     const limit = 26 + ai.skill * 16;
     const vFor = (k) => (k > 1e-3 ? Math.sqrt(limit / k) : 1e3);
@@ -408,6 +427,7 @@ export class Platforms {
         if (!g.onRoad && r.airTime < 0.5 && r.respawnT <= 0) return true;
         // back on the loop
         ai.rigOn = false;
+        ai.rigTurned = false;
         ai.route = null;
         Object.assign(ai, { path: w.main, _branch: null, planT: 0 });
         ai.decided.clear();
@@ -444,7 +464,7 @@ export class Platforms {
       const d = dist(G.i);
       // past it, or it shut before we got there: carry on round
       // (still on the loop's strip for the first part of the bend, so "past it" is well past the slip road's start)
-      if (d < -50 || (d < 14 && d > -4 && !(G.open & lens))) {
+      if (d < -50 || (d < 30 && d > -4 && !(G.open & lens))) {
         ai.route = null;
         return false;
       }
@@ -472,20 +492,49 @@ export class Platforms {
 
     // ---- on one of our roads: drive to its far end, and on through whatever it's joined to
     ai.rigOn = true;
+    let f = g.f;
+    let gi = g.i;
+    if (P.pair) {
+      // Two one-way roads that lie over each other where they meet a platform (a way in and a way out): the ground
+      // can name either. Keep to the one we were on; coming off a platform, it's the way out.
+      const prev = ai.rigPath;
+      const want = prev === P.pair ? prev : prev !== P && !P.sockets[1].main && g.f > 0.5 ? P.pair : null;
+      if (want && want.frame(r.pos.x, r.pos.z, -1, _f2, r.pos.y) !== false && Math.abs(_f2.lat) < want.halfW + 1) {
+        P = want;
+        f = _f2.f;
+        gi = _f2.i;
+      }
+    }
     if (ai.rigPath !== P) {
       ai.rigPath = P;
       // which way: away from the end we came in by (the nearer one), unless we're plainly travelling the other way
-      const s0 = g.f * P.length;
+      const s0 = f * P.length;
       ai.rigDir = s0 < P.length / 2 ? 1 : -1;
-      const along = r.vel.x * P.thx[g.i] + r.vel.z * P.thz[g.i];
+      const along = r.vel.x * P.thx[gi] + r.vel.z * P.thz[gi];
       if (Math.abs(along) > 12 && s0 > 6 && s0 < P.length - 6) ai.rigDir = along > 0 ? 1 : -1;
+      if (P.oneWay) ai.rigDir = 1;
       ai.rigWait = 0;
     }
+    // knocked out of the lens we came in for (an item, a rival's flip) while the road under us is in both: shift back
+    if (ai.route && r.mode !== ai.route.lens && solidIn(P.mask[0], ai.route.lens)) r.shiftTo(ai.route.lens, r.session);
     const dir = ai.rigDir;
-    const s = g.f * P.length;
+    const s = f * P.length;
     const rem = dir > 0 ? P.length - s : s;
     const E = P.sockets[dir > 0 ? 1 : 0];
-    const open = this.open(E, r.mode);
+    let open = this.open(E, r.mode, true);
+    if (!open) {
+      // knocked into the wrong lens for the road ahead (an item, a rival's flip): shift back to the one that's joined
+      for (const L of LENSES) {
+        if (L === r.mode || !solidIn(P.mask[0], L) || !this.open(E, L, true)) continue;
+        if (r.shiftTo(L, r.session)) open = true;
+        break;
+      }
+    } else if (!E.main) {
+      // joined now, but will it still be when we get there? A platform about to leave takes its joint with it.
+      let left = this.leaves(P.platform);
+      for (const q of E.links) left = Math.min(left, this.leaves(q.path.platform));
+      if (left < (rem + 5) / Math.max(r.speed, 12) + 0.15) open = false;
+    }
     const A = 6 + Math.max(8, r.speed) * 0.4;
     let vmax = vFor(P.kmax);
     if (!open) {
@@ -501,7 +550,7 @@ export class Platforms {
       m.frame(E.x, E.z, r.hints[m.id] ?? -1, _f, E.y);
       m.point(_f.i + Math.round((A - rem + 4) / m.ds), _f.lat, 0, _p);
     } else {
-      const Q = this.beyond(E, r.mode);
+      const Q = this.beyond(E, r.mode, true);
       const qd = Q.end ? -1 : 1;
       const qs = Q.end ? Q.path.length - (A - rem) : A - rem;
       Q.path.pointF(clamp(qs / Q.path.length, 0, 1), 0, 0, _p);
@@ -523,7 +572,11 @@ export class Platforms {
     ai.rigWait = waiting && Math.abs(r.speed) < 3 ? ai.rigWait + dt : 0;
     if (ai.rigWait > this.patience) {
       ai.rigWait = 0;
-      r.session?.onFell?.(r);
+      // try the way we came, once; after that the race puts the craft back on the loop
+      if (!ai.rigTurned) {
+        ai.rigTurned = true;
+        ai.rigDir = -dir;
+      } else r.session?.onFell?.(r);
     }
     return true;
   }
@@ -537,6 +590,6 @@ export class Platforms {
     return C._lat0;
   }
 }
-Platforms.prototype.patience = 9;
+Platforms.prototype.patience = 5.5;
 
 export { COLORS };

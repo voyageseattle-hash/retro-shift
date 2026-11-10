@@ -141,7 +141,7 @@ export class Puzzle {
   // Drive in at a mouth (side, and which cell along it) at time t0, in a colour, and see where the road leads:
   // { side, idx, t, length, carried } where and when you come out (carried: slides ridden on the way), or null if it never gets you out (a wait of more than `patience`
   // at any one cap). v: speed on a straight; bends are taken slower.
-  ride(side, idx, colour, t0, v = 52, patience = 5) {
+  ride(side, idx, colour, t0, v = 52, patience = 4) {
     let cell = mouthCell(side, idx);
     let B = this.at(t0);
     let k = B.cells[cell];

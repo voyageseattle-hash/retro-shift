@@ -83,6 +83,7 @@ export class MiniMap {
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    drawPaths(ctx, world.paths, w, h, mode, 10, racers, 3, me);
+    // (a course with moving platforms shows their roads too, where they are right now)
+    drawPaths(ctx, world.rig ? world.rig.surfaces : world.paths, w, h, mode, 10, racers, 3, me);
   }
 }

@@ -114,6 +114,8 @@ export class SlideFifteen extends Platforms {
       const out = new Path(`out${side}${idx}`, this.slipPoints(side, idx, false), false, HW, { bankFactor: 0 });
       this.addRoad(out, null, { mask: LENS_ROAD, main: [1] });
       this.joinMain(out, LENS_ROAD);
+      inn.pair = out;
+      out.pair = inn;
       this.slips.push({ inn, out, gate });
     }
     this.sound = { warn: null, done: 0 };
@@ -155,6 +157,18 @@ export class SlideFifteen extends Platforms {
     out.busy = this._pl.busy;
   }
 
+  leaves(pl) {
+    if (!pl) return Infinity;
+    const { START, PERIOD, SLIDE } = this.puzzle.T;
+    const steps = this.puzzle.steps;
+    for (let j = Math.max(0, Math.floor((this.time - START) / PERIOD)); j < steps.length; j++) {
+      if (steps[j].k !== pl.k) continue;
+      const t0 = START + j * PERIOD;
+      if (this.time < t0 + SLIDE) return Math.max(0, t0 - this.time);
+    }
+    return Infinity;
+  }
+
   step(dt, race) {
     super.step(dt, race);
     // the tells you can hear: a rattle before a tile goes, a clack as it lands, a chime when the picture is whole
@@ -182,9 +196,14 @@ export class SlideFifteen extends Platforms {
     let best = 0;
     let lens = 0;
     // (the mouth has to still be open when we reach it: not if its tile is about to go)
-    const B = this.puzzle.at(t0 - 0.4);
-    const k = B.cells[mouthCell(G.side, G.idx)];
-    if (!k || B.warn?.k === k) return 0;
+    // (arrival is a guess, so it has to hold for a while either side)
+    const cell = mouthCell(G.side, G.idx);
+    const k = this.puzzle.at(t0).cells[cell];
+    if (!k) return 0;
+    for (let t = t0 - 1.6; t <= t0 + 1; t += 0.4) {
+      const B = this.puzzle.at(t);
+      if (B.cells[cell] !== k || B.warn?.k === k) return 0;
+    }
     for (const colour of [0, 1]) {
       const W = worth(this.puzzle, G.side, G.idx, colour, t0, 46 + ai.skill * 8);
       if (W && W.gain > best) {
