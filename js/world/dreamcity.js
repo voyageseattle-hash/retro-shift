@@ -1,6 +1,12 @@
 // Scenery for DREAM FOLD: a street-level city laid out on a grid under and around the raised road, so that when the
 // course folds (fold.js) there is a whole city to curl up into the sky.
 //
+// The look is a paper city at night. The ground is a sheet printed with its crease pattern, with the fold lines of
+// each lap marked on it the way a folding diagram marks them. The towers are papercraft: pitched and pyramid roofs,
+// stepped tiers, a scatter of lit windows. Paper lanterns hang over the streets, flocks of paper darts circle the
+// districts, and the sky is a mobile: a red moon, a blue moon and a handful of stars, each hung on a thread
+// (dreamsky.js). The road is finished in creased foil (dreamfoil.js).
+//
 // Along the road the towers are fixed. Away from it the city is cut into districts, each a square of towers that is
 // one piece and can move: on the last lap the districts slide into the empty lots beside them, then lift off
 // the ground and turn, slowly, like the glass in a kaleidoscope. A district only ever moves through ground
@@ -10,6 +16,9 @@ import * as THREE from '../../vendor/three.js';
 import { M, COLORS } from './shift.js';
 import { Layers } from './layers.js';
 import { damp, smoothstep } from '../core/util.js';
+import { foilRoads } from './dreamfoil.js';
+import { hangSky } from './dreamsky.js';
+import { paperTower, lanterns, flock } from './dreampaper.js';
 
 const CELL = 80; // a district's lot
 const REACH = 34; // a district's towers stay inside this circle, so it can turn where it stands
@@ -70,14 +79,53 @@ export function buildDreamCity(world, L, main, rng) {
       L.fillQuad(M.ALL, a.set(x, y0, z), b.set(x, y0, z + STEP), c.set(x + STEP, y0, z + STEP), d.set(x + STEP, y0, z));
     }
   }
-  const dimR = new THREE.Color(COLORS.red).multiplyScalar(0.42);
-  const dimB = new THREE.Color(COLORS.blue).multiplyScalar(0.42);
-  for (let x = X0; x <= X1; x += STEP) {
+  // the sheet's crease pattern: streets one way in red and the other in blue, and a violet diagonal across every
+  // block that leans the other way on the next, so the ground reads as a sheet of folded paper, not a floor grid.
+  // (all of it dim: when RED stands the city up as a wall this is most of the screen, and bright lines there turn
+  // to haze in the bloom)
+  const dimR = new THREE.Color(COLORS.red).multiplyScalar(0.3);
+  const dimB = new THREE.Color(COLORS.blue).multiplyScalar(0.3);
+  const dimV = new THREE.Color(COLORS.violet).multiplyScalar(0.17);
+  const BLOCK = STEP * 2;
+  for (let x = X0; x <= X1; x += BLOCK) {
     for (let z = Z0; z < Z1; z += STEP / 2) L.lineXYZ(M.ALL, x, y0 + 0.06, z, x, y0 + 0.06, z + STEP / 2, dimR);
   }
-  for (let z = Z0; z <= Z1; z += STEP) {
+  for (let z = Z0; z <= Z1; z += BLOCK) {
     for (let x = X0; x < X1; x += STEP) L.lineXYZ(M.ALL, x, y0 + 0.06, z, x + STEP, y0 + 0.06, z, dimB);
   }
+  for (let x = X0, ix = 0; x < X1; x += BLOCK, ix++) {
+    for (let z = Z0, iz = 0; z < Z1; z += BLOCK, iz++) {
+      const lean = (ix + iz) % 2;
+      // (in four pieces, short enough to bend)
+      for (let q = 0; q < 4; q++) {
+        const u0 = q / 4;
+        const u1 = (q + 1) / 4;
+        const za = lean ? z + BLOCK * (1 - u0) : z + BLOCK * u0;
+        const zb = lean ? z + BLOCK * (1 - u1) : z + BLOCK * u1;
+        if (Math.max(za, zb) > Z1) continue;
+        L.lineXYZ(M.ALL, x + BLOCK * u0, y0 + 0.06, za, x + BLOCK * u1, y0 + 0.06, zb, dimV);
+      }
+    }
+  }
+  // the fold lines, marked on the sheet as a folding diagram marks them: long dashes where the city creases on the
+  // first lap, dash and dot where it creases on the last
+  const marks = [].concat(world.def.fold?.z ?? []);
+  marks.forEach((mz, lap) => {
+    const y = y0 + 0.14;
+    const cycle = lap ? 20 : 16;
+    for (let x = X0; x < X1; x += cycle) {
+      const runs = lap ? [[0, 10], [14, 2]] : [[0, 11]];
+      for (const [o, len] of runs) {
+        const xa = x + o;
+        const xb = Math.min(X1, xa + len);
+        L.quad(M.ALL, a.set(xa, y, mz - 0.7), b.set(xb, y, mz - 0.7), c.set(xb, y, mz + 0.7), d.set(xa, y, mz + 0.7), COLORS.white, 0.6);
+      }
+    }
+    for (let x = X0; x < X1; x += STEP) {
+      L.lineXYZ(M.ALL, x, y, mz - 2.2, x + STEP, y, mz - 2.2, dimV);
+      L.lineXYZ(M.ALL, x, y, mz + 2.2, x + STEP, y, mz + 2.2, dimV);
+    }
+  });
 
   // ------------------------------------------------------------------ lots
   // a lot is free when no road comes near the circle a district turns in; the others get fixed towers where there's room
@@ -112,7 +160,8 @@ export function buildDreamCity(world, L, main, rng) {
         const gap = roadGap(x, z, 70);
         if (gap < Math.hypot(w, dd) / 2 + 3.5) continue;
         const h = Math.min(height(), 7 + gap * 0.75);
-        L.tower(rng() < 0.5 ? M.R : M.B, x, y0, z, w, h, dd, 0);
+        // (the rows by the road are drawn at full strength, the blocks behind them dimmer: depth, and less to haze)
+        paperTower(L, rng() < 0.5 ? M.R : M.B, x, y0, z, w, h, dd, rng, { top: TOP, glow: gap < 30 ? 1 : 0.6, lit: gap < 45 ? 0.3 : 0.16 });
       }
     }
   }
@@ -140,11 +189,14 @@ export function buildDreamCity(world, L, main, rng) {
         const dd = n === 1 ? 34 + rng() * 10 : 11 + rng() * 6.5;
         const h = Math.min(TOP - 14, n === 1 ? 30 + rng() * 22 : height());
         // mostly the district's own world, with a tower of the other one in it now and then
-        sub.tower(rng() < 0.2 ? other : mask, (ax * 2 - n + 1) * pitch, 0, (az * 2 - n + 1) * pitch, w, h, dd, 0);
+        paperTower(sub, rng() < 0.2 ? other : mask, (ax * 2 - n + 1) * pitch, 0, (az * 2 - n + 1) * pitch, w, h, dd, rng, { top: TOP - 8, glow: 0.7, lit: 0.22 });
       }
     }
     // a plinth, so a district that has lifted off reads as a slab of city, not loose towers
     sub.box(mask, 0, -0.6, 0, REACH * 1.9, 1.2, REACH * 1.9, 0, null, true);
+    // (and its underside is the sheet it was cut from: the crease pattern again, seen when it floats overhead)
+    const e = REACH * 0.95;
+    for (const [x0_, z0_, x1_, z1_] of [[-e, -e, e, e], [-e, e, e, -e], [0, -e, 0, e], [-e, 0, e, 0]]) sub.lineXYZ(mask, x0_, -1.25, z0_, x1_, -1.25, z1_);
     const g = sub.build();
     g.position.set(q.x, y0, q.z);
     world.group.add(g);
@@ -167,6 +219,23 @@ export function buildDreamCity(world, L, main, rng) {
       }
     }
   }
+
+  // ------------------------------------------------------------------ the air over the streets
+  // paper lanterns over the crossings near the road, and a flock of paper darts circling over some of the districts
+  const spots = [];
+  for (let x = X0 + STEP; x < X1; x += BLOCK) {
+    for (let z = Z0 + STEP; z < Z1; z += BLOCK) {
+      const gap = roadGap(x, z, 60);
+      if (gap > 5 && gap < 46 && rng() < 0.5) spots.push([x, y0 + 12 + rng() * Math.min(26, TOP - 22), z]);
+    }
+  }
+  lanterns(world, L, spots, rng);
+  const roost = districts.filter(() => rng() < 0.16).slice(0, 7);
+  roost.forEach((D, k) => flock(world, L, k % 2 ? M.B : M.R, D.x, y0 + Math.min(TOP - 8, 32 + rng() * 12), D.z, rng));
+
+  // ------------------------------------------------------------------ the sky and the road's finish
+  const lens = hangSky(world, L, rng);
+  foilRoads(world, L, lens);
 
   // ------------------------------------------------------------------ between laps
   let lapSeen = 0;

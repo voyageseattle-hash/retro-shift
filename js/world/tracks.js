@@ -442,6 +442,7 @@ export const TRACKS = [
     // two long laps: the crease moves between them, so the second lap's floor, curl and ceiling are new ground
     laps: 2,
     sun: 2,
+    skyPiece: 'none', // its sky is its own: paper moons on threads (world/dreamsky.js)
     floorDrop: 8,
     fold: { z: [400, 190], r: 80 },
     points: [
