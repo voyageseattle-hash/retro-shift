@@ -148,7 +148,9 @@ class App {
     const j = m.wrap(i + 30);
     const q = m.point(j, 0, 0);
     A.camera.position.set(p.x + m.rightX(i) * 30, p.y + 22, p.z + m.rightZ(i) * 30);
-    A.camera.lookAt(q.x, q.y + 2, q.z);
+    A.camera.up.set(0, 1, 0);
+    if (A.world.fold) A.world.fold.aim(A.camera, q.setY(q.y + 2));
+    else A.camera.lookAt(q.x, q.y + 2, q.z);
     A.world.update(dt, A.t, A.mode);
     A.env.update(dt, A.t, A.camera);
     this.renderer.setGrade('neon', 0, 0);

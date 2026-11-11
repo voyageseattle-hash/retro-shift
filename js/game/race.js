@@ -178,6 +178,8 @@ export class Race {
       this.cams.push(c2);
     }
     if (this.mob) for (const c of this.cams) c.mob = this.mob;
+    // a fold course (world/fold.js) carries each camera through its fold
+    for (const c of this.cams) c.fold = this.world.fold;
     this.players.forEach((p, k) => this.cams[k].snap(p));
     this.items = new Items(this);
     this.scene.add(this.items.group);
@@ -862,10 +864,13 @@ export class Race {
     this.app.net?.applyPuppets(this);
     for (const r of this.racers) if (r.puppet ? r.root.visible : r.respawnT <= 0) r.syncVisual(dt);
     for (const r of this.racers) if (r.drawIn !== undefined && r.respawnT <= 0) this.drawIn(r, dt);
+    this.world.fold?.follow(this, dt);
     if (this.split) {
       // the obstacles move once; each view then fades the worlds for its own player's lens (see views())
       for (const fn of this.world.animated) fn(this.t, dt);
       this.players.forEach((pl, k) => {
+        this.world.fold?.useView(k, pl);
+        this.world.fold?.update(dt, this.t, pl.mode);
         this.world.layers.useView(k);
         this.world.layers.update(dt, pl.mode, this.t);
       });
@@ -909,7 +914,7 @@ export class Race {
     cam.getWorldDirection(_v);
     const fl = Math.hypot(_v.x, _v.z) || 1;
     this._listener ||= { pos: new THREE.Vector3(), fwd: { x: 0, z: 1 }, vel: p.vel };
-    this._listener.pos.copy(this.mob ? this.cam.pos : cam.position);
+    this._listener.pos.copy(this.mob ? this.cam.pos : cam.userData.flat || cam.position);
     this._listener.fwd.x = _v.x / fl;
     this._listener.fwd.z = _v.z / fl;
     if (this.mob) {
@@ -1039,8 +1044,8 @@ export class Race {
     const on = !this.split && renderer.quality === 'high';
     const size = gl.getDrawingBufferSize(_s);
     const p = this.player;
-    // (no wet-road mirror on a road that's drawn turned over)
-    this.reflection.render(gl, this.scene, this.cam.camera, p.gnd?.y ?? p.pos.y, on && !this.mob ? 0.2 : 0, size.x, size.y, this.t);
+    // (no wet-road mirror on a road that's drawn turned over or folded)
+    this.reflection.render(gl, this.scene, this.cam.camera, p.gnd?.y ?? p.pos.y, on && !this.mob && !this.world.fold ? 0.2 : 0, size.x, size.y, this.t);
     this.mob?.apply(this.scene);
   }
 
@@ -1054,6 +1059,7 @@ export class Race {
       w: 1,
       h: 0.5,
       before: () => {
+        this.world.fold?.useView(k, pl);
         this.world.layers.useView(k);
         this.world.layers.update(0, pl.mode, this.t);
         this.env.useView(k);

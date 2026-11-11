@@ -431,6 +431,45 @@ export const TRACKS = [
 
   // ------------------------------------------------------------------ 11 (tracks-mobius.js)
   make(MOBIUS),
+  // ------------------------------------------------------------------ 13
+  // THE FOLD (world/fold.js). To the engine this is a long flat loop: north up the east side, a hairpin at the top,
+  // south down the west side. What you see is the city past the crease (z 340) curled up and laid back over the start,
+  // so the top hairpin hangs upside down above the grid. Each lens holds the city in its own shape.
+  make({
+    id: 'dream',
+    num: '13',
+    name: 'DREAM FOLD',
+    blurb: 'A city that folds over your head. Each lens bends it another way.',
+    decor: 'dream',
+    seed: 1313,
+    // two long laps: the crease moves between them, so the second lap's floor, curl and ceiling are new ground
+    laps: 2,
+    sun: 2,
+    skyPiece: 'none', // its sky is its own: paper moons on threads (world/dreamsky.js)
+    floorDrop: 8,
+    fold: { z: [400, 190], r: 80 },
+    points: [
+      [0, 0, 0], [0, 180, 0], [0, 340, 0], [22, 520, 0], [-12, 690, 0], [30, 800, 2], [58, 900, 5], [14, 992, 6],
+      [-92, 1012, 6], [-192, 958, 4], [-222, 850, 0], [-180, 740, 0], [-204, 600, 0], [-168, 460, 0], [-190, 330, 0],
+      [-262, 240, 2], [-330, 150, 5], [-322, 30, 5], [-232, -62, 2], [-130, -110, 0], [-40, -120, 0], [0, -70, 0],
+    ],
+    features: (P) => ({
+      branches: [
+        // across the inside of the top hairpin, over the roofs: upside down above the start in the fold
+        { from: P(5, 0.5), to: P(9, 0.4), mask: M.RO, side: -1, lift: 12, label: 'RED ROOFLINE' },
+        // under the last district, inside the long bend home
+        { from: P(14, 0.35), to: P(18, 0.3), mask: M.BO, side: -1, lift: 0, bulge: -18, label: 'BLUE ARCADE' },
+        // the form routes (formroutes.js): up the curl a gap only the Skimmer glides, down it a wall only the Blade rides
+        { from: P(2, 0.35), to: P(3, 0.85), mask: M.ALL, side: 1, lift: 4, label: 'GLIDE GAP', sub: 'BLUE FLOATS IT', profile: [{ at: 0.5, kind: 'step', drop: 3.5, len: 55, end: 0.82 }] },
+        { from: P(11, 0.4), to: P(13, 0.4), mask: M.ALL, side: 1, lift: 9, label: 'WALL RUN', sub: 'RED CLINGS · OTHERS FALL', wallrun: { from: 0.28, to: 0.76, bank: 0.95 } },
+      ],
+      gaps: [{ at: P(10, 0.35), len: 40, mask: M.B, noRails: true }, { at: P(16, 0.3), len: 40, mask: M.R, noRails: true }, { path: 'b2', at: 0.5, len: 50, glide: true, noRails: true }],
+      obstacles: [...field(P(4, 0.2), 0.035, 6, 131), wall(P(7, 0.1), M.B), ...chicane(P(12, 0.3), 0.009, 4), wall(P(19, 0.3), M.R)],
+      boosts: [{ at: P(0, 0.5) }, { at: P(2, 0.1) }, { at: P(6, 0.2), mask: M.RO }, { at: P(11, 0.1) }, { at: P(15, 0.2), mask: M.BO }, { at: P(20, 0.2) }, { path: 'b2', at: 0.8 }, { path: 'b3', at: 0.85 }],
+      shards: [{ at: P(1, 0.3), n: 3 }, { at: P(8, 0.3), n: 3 }, { at: P(13, 0.5), n: 3, mask: M.R }, { at: P(17, 0.5), n: 3, mask: M.B }],
+      tips: [{ at: P(0, 0.3), text: 'THE CITY FOLDS · RED STANDS IT UP · BLUE ROLLS IT FLAT · THE ROAD IS THE SAME ROAD', key: 'both' }],
+    }),
+  }),
 ];
 
 export const trackById = (id) => TRACKS.find((t) => t.id === id) || TRACKS[0];

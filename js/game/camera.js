@@ -218,11 +218,12 @@ export class ChaseCamera {
       rollShake = Math.sin(t * 0.7 + 4.2) * s * 0.07;
       this.shake = Math.max(0, this.shake - dt * 1.7);
     }
-    // (a course that's drawn bent, mobius.js, bends the view with it)
+    // (a course that's drawn bent, mobius.js, bends the view with it; a fold course carries the camera through its fold, fold.js)
     if (this.mob) this.mob.camera(c, this.look, this.upV);
     else {
       c.up.copy(this.upV);
-      c.lookAt(this.look);
+      if (this.fold) this.fold.aim(c, this.look);
+      else c.lookAt(this.look);
     }
     const roll = this.roll + rollShake;
     if (roll) c.rotateZ(roll);

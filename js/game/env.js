@@ -6,6 +6,7 @@ import { MODE_TINT, BOTH } from '../world/shift.js';
 import { damp } from '../core/util.js';
 import { SkyPiece, SKY_PIECE } from './skypieces.js';
 import { mobiusEnv } from '../world/mobius-art.js';
+import { exemptFold } from '../world/fold.js';
 
 const SUN_SHADER = {
   uniforms: { uTop: { value: new THREE.Color(0xff3a7a) }, uBot: { value: new THREE.Color(0x3a6aff) }, uTime: { value: 0 } },
@@ -154,6 +155,8 @@ export class Environment {
     this.pulse = 0;
     // the Möbius strip has its own space round it: no ground, a horizon that turns over (world/mobius-art.js)
     if (world.def.decor === 'mobius') this.dress = mobiusEnv(this, world);
+    // the sky stays where it is when a course folds (world/fold.js)
+    exemptFold(this.group);
   }
 
   // Split-screen: the sky and grid tint follow each player's own lens.

@@ -21,7 +21,7 @@ const port = 8000 + Math.floor(Math.random() * 1000);
 const server = spawn('python3', ['-m', 'http.server', String(port), '--bind', '127.0.0.1'], { cwd: root, stdio: 'ignore' });
 await new Promise((r) => setTimeout(r, 800));
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-const ids = only || ['core', 'layered', 'tunnels', 'orbital', 'city', 'void', 'helix', 'fractal', 'lattice', 'ruins', 'mobius'];
+const ids = only || ['core', 'layered', 'tunnels', 'orbital', 'city', 'void', 'helix', 'fractal', 'lattice', 'ruins', 'mobius', 'dream'];
 for (const id of ids) {
   for (const kind of kinds) {
     let best = null;

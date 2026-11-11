@@ -14,6 +14,7 @@ import { buildCovers } from './covers.js';
 import { layStorms } from './storms-def.js';
 import { layFormRoutes, addSlit, routeMask, layRouteBoosts } from './formroutes.js';
 import { layWarps, buildWarps, PIPE } from './warp.js';
+import { layFold, runFold } from './fold.js';
 import { FORMS } from '../vehicles/forms.js';
 import { Mobius } from './mobius.js';
 
@@ -435,6 +436,7 @@ export class TrackWorld {
       this.mob = new Mobius(this, def.mobius);
       this.layers.bend = (a) => this.mob.mapArray(a);
     }
+    layFold(this, !!opts.preview);
     this.minY = Math.min(...this.paths.map((p) => p.minY));
     this.maxY = Math.max(...this.paths.map((p) => p.maxY));
     this.floorY = this.minY - (def.floorDrop ?? 26);
@@ -453,6 +455,7 @@ export class TrackWorld {
     if (this.mob) for (const S of this.layers.signs) if (S.at) S.at = this.mob.map(S.at, new THREE.Vector3());
     buildShapeCues(this); // accessibility: a shape per world (shapes.js), shown from settings
     this.group.add(this.layers.build());
+    this.fold?.uncull(this.group);
     this._f = {};
     this._g = { y: -1e4, nx: 0, ny: 1, nz: 0, lat: 0, path: null, i: 0, f: 0, rx: 1, rz: 0, mask: 0, onRoad: false };
   }
@@ -1309,6 +1312,7 @@ export class TrackWorld {
 
   update(dt, t, mode) {
     for (const fn of this.animated) fn(t, dt);
+    runFold(this, dt, t, mode);
     this.layers.update(dt, mode, t);
   }
 }

@@ -10,6 +10,10 @@ Race in **BOTH** worlds (red + blue), **RED only**, or **BLUE only**. Every piec
 
 Shift into a wall in the last moment before it and you get a CLOSE PHASE: a boost and some SHIFT back.
 
+## The course that folds
+
+**DREAM FOLD** (course 13) is a city that bends. With both worlds open the street ahead curls up into the sky and the far end of the city comes back over the start line, upside down, with the top hairpin hanging above the grid. RED stands the city on end as a wall; BLUE rolls the whole of it into a wheel. The road is the same road in every shape: only the picture bends (`js/world/fold.js`), so the lens routes, the rivals and your line are unchanged. It runs two long laps, and on the second the crease moves toward the start and the districts slide, lift off and turn. The course map draws it folded.
+
 ## Two machines in one
 
 Every craft is two vehicles locked together: the **BLADE**, a narrow red monowheel bike, docked in the channel of the **SKIMMER**, a wide blue hover deck. BOTH drives the pair. Shift to RED and the deck halves unlatch and fall away, leaving the Blade; shift to BLUE and the bike folds flat into the deck and a cover slides over it, leaving the Skimmer. Each form reads the road its own way:
