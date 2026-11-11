@@ -154,6 +154,11 @@ export class Environment {
     this.group.add(this.stars);
     // (the room's far walls are 600 m off: they need to stay in sight)
     this.fog = world.def.room ? new THREE.Fog(0x0a0310, 320, 1900) : new THREE.Fog(0x0a0310, 180, 1100);
+    // a course out in space (def.space) brings its own sky and has no ground: nothing of this is drawn
+    if (world.def.space) {
+      this.group.visible = false;
+      if (world.def.fog) [this.fog.near, this.fog.far] = world.def.fog;
+    }
     this.bg = new THREE.Color(0x000000);
     this.tint = { grid: new THREE.Color(0xff2a4a), gridB: new THREE.Color(0x1e8cff), fog: new THREE.Color(0x020103), top: new THREE.Color(0xff3a7a), bot: new THREE.Color(0x3a6aff) };
     this.mode = BOTH;

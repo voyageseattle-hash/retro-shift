@@ -17,6 +17,7 @@ import { layFormRoutes, addSlit, routeMask, layRouteBoosts } from './formroutes.
 import { layWarps, buildWarps, PIPE } from './warp.js';
 import { layFold, runFold } from './fold.js';
 import { layMirrors, buildMirrors } from './mirrors.js';
+import { layCurved, spot, drawnAt } from './curved.js';
 import { FORMS } from '../vehicles/forms.js';
 import { Mobius } from './mobius.js';
 
@@ -208,6 +209,8 @@ export class Path {
   // The road as it's drawn: point(), bent where a pipe curls it up or a corkscrew rolls it (warp.js). Off those it
   // is point() exactly.
   wpoint(i, lat, h = 0, out = new THREE.Vector3()) {
+    // a curved course (curved.js): the flat point, moved by this sample's frame into the drawn world
+    if (this.frames) return drawnAt(this, Math.round(i), this.point(i, lat, h, out), out);
     const j = this.wrap(Math.round(i));
     if (!this.warpK?.[j] && !this.warpK?.[this.wrap(j + 1)]) return this.point(i, lat, h, out);
     return this.bend(i, lat, h, out);
@@ -441,6 +444,7 @@ export class TrackWorld {
     }
     layFold(this, !!opts.preview);
     layMirrors(this);
+    layCurved(this);
     this.minY = Math.min(...this.paths.map((p) => p.minY));
     this.maxY = Math.max(...this.paths.map((p) => p.maxY));
     this.floorY = this.minY - (def.floorDrop ?? 26);
@@ -815,7 +819,7 @@ export class TrackWorld {
     const p = path.point(i, 0, cy);
     root.position.copy(p);
     root.rotation.y = Math.atan2(path.thx[i], path.thz[i]);
-    this.group.add(root);
+    spot(this, path, i).add(root);
     const h = 4.2;
     const ob = { path, i, f: path.frac(i), lat: 0, w, len, h, mask, type: 'wall', door: true, root, sweep: 0, phase: 0, baseLat: 0 };
     this.obstacles.push(ob);
@@ -940,7 +944,7 @@ export class TrackWorld {
     const p = path.point(i, lat, h / 2);
     root.position.copy(p);
     root.rotation.y = Math.atan2(path.thx[i], path.thz[i]);
-    this.group.add(root);
+    spot(this, path, i).add(root);
     const ob = { path, i, f: path.frac(i), lat, w, len, h, mask, type, root, sweep: o.sweep || 0, phase: o.phase || 0, baseLat: lat };
     this.obstacles.push(ob);
     if (ob.sweep || root.userData.spin) this.animated.push((t) => {
@@ -984,35 +988,52 @@ export class TrackWorld {
     const col = colorForMask(mask);
     const L = this.layers;
     const w = path.halfW - 1.5;
+    const pt = (i2, la, h, out) => (path.frames ? path.wpoint(i2, la, h, out) : path.point(i2, la, h, out));
     // the ramp: chevrons climbing toward the lip
     const n = 6;
     for (let k = 0; k < n; k++) {
       const i0 = path.wrap(i + k);
       const y0 = 0.06 + (k / n) * 0.9;
       const y1 = 0.06 + ((k + 1) / n) * 0.9;
-      const tip = path.point(i0 + 1, lat, y1, new THREE.Vector3());
-      const l0 = path.point(i0, lat - w, y0, new THREE.Vector3());
-      const r0 = path.point(i0, lat + w, y0, new THREE.Vector3());
-      const c0 = path.point(i0, lat, y0 + 0.02, new THREE.Vector3());
-      L.quad(mask, l0, c0, tip, path.point(i0 + 1, lat - w, y1, new THREE.Vector3()), col, 0.5 + k * 0.12);
-      L.quad(mask, r0, c0, tip, path.point(i0 + 1, lat + w, y1, new THREE.Vector3()), col, 0.5 + k * 0.12);
+      const tip = pt(i0 + 1, lat, y1, new THREE.Vector3());
+      const l0 = pt(i0, lat - w, y0, new THREE.Vector3());
+      const r0 = pt(i0, lat + w, y0, new THREE.Vector3());
+      const c0 = pt(i0, lat, y0 + 0.02, new THREE.Vector3());
+      L.quad(mask, l0, c0, tip, pt(i0 + 1, lat - w, y1, new THREE.Vector3()), col, 0.5 + k * 0.12);
+      L.quad(mask, r0, c0, tip, pt(i0 + 1, lat + w, y1, new THREE.Vector3()), col, 0.5 + k * 0.12);
       L.line(mask, l0, tip, col);
       L.line(mask, r0, tip, col);
     }
     // the arch over the lip, and an up arrow in it
-    const top = path.point(path.wrap(i + n), lat, 0, new THREE.Vector3());
-    const right = new THREE.Vector3(path.rightX(path.wrap(i + n)), 0, path.rightZ(path.wrap(i + n)));
-    let prev = null;
-    for (let k = 0; k <= 12; k++) {
-      const a = (k / 12) * Math.PI;
-      const p = top.clone().addScaledVector(right, -Math.cos(a) * (w + 0.6)).setY(top.y + Math.sin(a) * 5.5);
-      if (prev) L.line(mask, prev, p, col);
-      prev = p;
+    const iT = path.wrap(i + n);
+    if (path.frames) {
+      // (a curved course: the arch stands on the road's own up)
+      let prev = null;
+      for (let k = 0; k <= 12; k++) {
+        const a = (k / 12) * Math.PI;
+        const p = path.wpoint(iT, lat - Math.cos(a) * (w + 0.6), Math.sin(a) * 5.5, new THREE.Vector3());
+        if (prev) L.line(mask, prev, p, col);
+        prev = p;
+      }
+      const up = (dx, dy, ex, ey) => L.line(mask, path.wpoint(iT, lat + dx, dy, new THREE.Vector3()), path.wpoint(iT, lat + ex, ey, new THREE.Vector3()), col);
+      up(0, 1.4, 0, 4.2);
+      up(-1, 3.2, 0, 4.2);
+      up(1, 3.2, 0, 4.2);
+    } else {
+      const top = pt(path.wrap(i + n), lat, 0, new THREE.Vector3());
+      const right = new THREE.Vector3(path.rightX(path.wrap(i + n)), 0, path.rightZ(path.wrap(i + n)));
+      let prev = null;
+      for (let k = 0; k <= 12; k++) {
+        const a = (k / 12) * Math.PI;
+        const p = top.clone().addScaledVector(right, -Math.cos(a) * (w + 0.6)).setY(top.y + Math.sin(a) * 5.5);
+        if (prev) L.line(mask, prev, p, col);
+        prev = p;
+      }
+      const up = (dx, dy, ex, ey) => L.line(mask, top.clone().addScaledVector(right, dx).setY(top.y + dy), top.clone().addScaledVector(right, ex).setY(top.y + ey), col);
+      up(0, 1.4, 0, 4.2);
+      up(-1, 3.2, 0, 4.2);
+      up(1, 3.2, 0, 4.2);
     }
-    const up = (dx, dy, ex, ey) => L.line(mask, top.clone().addScaledVector(right, dx).setY(top.y + dy), top.clone().addScaledVector(right, ex).setY(top.y + ey), col);
-    up(0, 1.4, 0, 4.2);
-    up(-1, 3.2, 0, 4.2);
-    up(1, 3.2, 0, 4.2);
     this.launchers.push({ path, i, f: path.frac(i), lat, w, len: path.ds * n, mask, over: l.over ?? 50 });
   }
 
@@ -1027,8 +1048,14 @@ export class TrackWorld {
     root.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), mats.wire));
     const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.45), mats.solid);
     root.add(core);
-    path.wpoint(i, lat, 1.4, root.position);
-    this.group.add(root);
+    if (path.frames) {
+      // (a curved course: it bobs and spins in the flat world, carried into the drawn one by its holder)
+      path.point(i, lat, 1.4, root.position);
+      spot(this, path, i).add(root);
+    } else {
+      path.wpoint(i, lat, 1.4, root.position);
+      this.group.add(root);
+    }
     // `at`: where it's picked up, on the flat strip the physics drives (the same place unless the road is bent there)
     const sh = { path, i, f: path.frac(i), lat, mask, root, taken: 0, y0: root.position.y, at: path.point(i, lat, 1.4, new THREE.Vector3()) };
     this.shards.push(sh);
@@ -1053,14 +1080,23 @@ export class TrackWorld {
         if ((k + r) % 2) continue;
         const l0 = -hw + (k * 2 * hw) / 10;
         const l1 = -hw + ((k + 1) * 2 * hw) / 10;
-        const a = m.point(at + r, l0, 0.05, new THREE.Vector3());
-        const b = m.point(at + r + 1, l0, 0.05, new THREE.Vector3());
-        const c = m.point(at + r + 1, l1, 0.05, new THREE.Vector3());
-        const d = m.point(at + r, l1, 0.05, new THREE.Vector3());
+        const a = m.wpoint(at + r, l0, 0.05, new THREE.Vector3());
+        const b = m.wpoint(at + r + 1, l0, 0.05, new THREE.Vector3());
+        const c = m.wpoint(at + r + 1, l1, 0.05, new THREE.Vector3());
+        const d = m.wpoint(at + r, l1, 0.05, new THREE.Vector3());
         L.quad(M.ALL, a, b, c, d, 0xffffff, 0.3);
       }
     }
     // gantry
+    if (m.frames) {
+      // (a curved course: posts and a beam on the road's own up)
+      for (const s of [-1, 1]) {
+        for (const o of [-0.5, 0.5]) L.line(M.ALL, m.wpoint(at, s * (hw + 1.5 + o), 0, new THREE.Vector3()), m.wpoint(at, s * (hw + 1.5 + o), 10, new THREE.Vector3()), s < 0 ? COLORS.red : COLORS.blue);
+      }
+      for (const y of [9.7, 11.3]) L.line(M.ALL, m.wpoint(at, -hw - 2, y, new THREE.Vector3()), m.wpoint(at, hw + 2, y, new THREE.Vector3()), COLORS.white);
+      L.quad(M.ALL, m.wpoint(at, -hw - 2, 9.7, new THREE.Vector3()), m.wpoint(at, hw + 2, 9.7, new THREE.Vector3()), m.wpoint(at, hw + 2, 11.3, new THREE.Vector3()), m.wpoint(at, -hw - 2, 11.3, new THREE.Vector3()), COLORS.white, 0.25);
+      return;
+    }
     const p = m.point(at, 0, 0, new THREE.Vector3());
     const yaw = Math.atan2(m.thx[at], m.thz[at]);
     const right = new THREE.Vector3(m.rightX(at), 0, m.rightZ(at));

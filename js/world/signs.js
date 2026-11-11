@@ -5,6 +5,7 @@
 import * as THREE from '../../vendor/three.js';
 import { M, RED, BLUE, solidIn, colorForMask } from './shift.js';
 import { signFormRoutes } from './formroutes.js';
+import { spot } from './curved.js';
 
 const hexCss = (c) => `#${c.toString(16).padStart(6, '0')}`;
 
@@ -86,7 +87,7 @@ export function addSign(world, path, i, side, title, sub, mask, arrow = 0) {
   board.rotation.y = Math.atan2(-path.thx[i], -path.thz[i]);
   // after the see-through buildings and road glass, so nothing tints it out
   board.renderOrder = 10;
-  world.group.add(board);
+  spot(world, path, i).add(board);
   // a red board goes with the red world (gone through the blue lens), a blue one with the blue world
   const red = solidIn(mask, RED) && !solidIn(mask, BLUE);
   const blue = solidIn(mask, BLUE) && !solidIn(mask, RED);
@@ -94,6 +95,14 @@ export function addSign(world, path, i, side, title, sub, mask, arrow = 0) {
   // the gantry: a post at each edge of the road and a beam across under the board
   const L = world.layers;
   const top = lift + H * 0.15;
+  if (path.frames) {
+    // (a curved course: the gantry stands on the road's own up)
+    const P = (s, y) => path.wpoint(i, s * (path.halfW + 0.5), y, new THREE.Vector3());
+    L.line(M.ALL, P(-1, 0), P(-1, top), color);
+    L.line(M.ALL, P(1, 0), P(1, top), color);
+    L.line(M.ALL, P(-1, top), P(1, top), color);
+    return;
+  }
   const a = path.point(i, -path.halfW - 0.5, 0, new THREE.Vector3());
   const b = path.point(i, path.halfW + 0.5, 0, new THREE.Vector3());
   L.lineXYZ(M.ALL, a.x, a.y, a.z, a.x, a.y + top, a.z, color);
@@ -107,12 +116,13 @@ export function buildSigns(world) {
   const back = (path, at, metres) => path.index(at) - Math.round(metres / path.ds);
   for (const p of world.paths) {
     const b = p.def;
-    // lens-only routes are secrets, hidden behind the other world's billboards and buildings (covers.js)
-    if (p === main || !b?.label || b.hatch || b.facade || b.mask === M.RO || b.mask === M.BO) continue;
+    // lens-only routes are secrets, hidden behind the other world's billboards and buildings (covers.js); a course
+    // with one lap to find them in can mark one `signed`, and its board shows in every lens
+    if (p === main || !b?.label || b.hatch || b.facade || ((b.mask === M.RO || b.mask === M.BO) && !b.signed)) continue;
     const where = lensWords(b.mask ?? M.ALL, false);
     // (a form route says which machine it takes)
     const sub = b.sub ?? (b.mask === M.RO || b.mask === M.BO ? `${where} LENS ONLY` : where ? `${where} ROAD` : b.mask === M.X ? 'BOTH WORLDS ONLY' : '');
-    addSign(world, main, back(main, b.from, 75), p.side, b.label, sub, b.mask ?? M.ALL, p.side);
+    addSign(world, main, back(main, b.from, 75), p.side, b.label, sub, b.signed ? M.ALL : (b.mask ?? M.ALL), p.side);
   }
   for (const o of def.obstacles || []) {
     if (o.type !== 'wall' || o.path) continue;

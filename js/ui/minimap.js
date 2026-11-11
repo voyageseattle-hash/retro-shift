@@ -7,6 +7,7 @@ const hex = (c) => `#${c.toString(16).padStart(6, '0')}`;
 
 // Raw path polylines from a track definition, without building the 3D world (for previews).
 export function drawPaths(ctx, paths, w, h, mode = 7, pad = 10, racers = null, lineW = 3, me = racers?.find((r) => r.isPlayer)) {
+  if (paths[0]?.globe) return drawGlobe(ctx, paths, w, h, mode, pad, racers, lineW, me);
   // a folding course (world/fold.js) is drawn folded, as it stands right now, from the side and a little above
   if (paths[0]?.fold) return drawFolded(ctx, paths, paths[0].fold, w, h, mode, pad, racers, lineW, me);
   let x0 = Infinity;
@@ -163,6 +164,115 @@ function drawFolded(ctx, paths, fold, w, h, mode, pad, racers, lineW, me) {
     dot(me, 5, true);
   }
   return { X, Z: Y };
+}
+
+// A course that goes round a sphere (curved.js; the main path carries `globe`: { R, star, holes: [{ axis, r }] }):
+// the sphere seen from outside with its openings toward you and the star showing through, the road on the outside
+// in the usual colours and the road on the inside, seen through the shell, in the star's.
+function drawGlobe(ctx, paths, w, h, mode, pad, racers, lineW, me) {
+  const G = paths[0].globe;
+  const [a, b] = [G.holes[0].axis, G.holes[G.holes.length - 1].axis];
+  const norm = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+  const cross = (p, q) => [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]];
+  const dot = (p, q) => p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
+  let up = norm(cross([a.x, a.y, a.z], [b.x, b.y, b.z]));
+  const mid = norm([a.x + b.x, a.y + b.y, a.z + b.z]);
+  const v = norm([mid[0] + up[0] * 0.45, mid[1] + up[1] * 0.45, mid[2] + up[2] * 0.45]);
+  const right = norm(cross(up, v));
+  up = cross(v, right);
+  const s = (Math.min(w, h) / 2 - pad) / (G.R * 1.04);
+  const X = (p) => w / 2 + dot(p, right) * s;
+  const Y = (p) => h / 2 - dot(p, up) * s;
+  const rad = G.R * s;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  // the star, and its light on the inside of the shell
+  const glow = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, rad);
+  glow.addColorStop(0, 'rgba(255,214,130,0.95)');
+  glow.addColorStop((G.star / G.R) * 0.9, 'rgba(255,120,150,0.8)');
+  glow.addColorStop(Math.min(0.6, (G.star / G.R) * 1.5), 'rgba(150,70,220,0.22)');
+  glow.addColorStop(1, 'rgba(60,40,140,0.12)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(w / 2, h / 2, rad, 0, Math.PI * 2);
+  ctx.fill();
+  // the shell: its outline and a few great circles
+  ctx.strokeStyle = '#8f7cff';
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.9;
+  ctx.beginPath();
+  ctx.arc(w / 2, h / 2, rad, 0, Math.PI * 2);
+  ctx.stroke();
+  const ring = (axis, r, alpha, width, color) => {
+    // a circle on the shell round `axis` (unit), of radius r; only the half that faces you
+    const e1 = norm(cross(axis, Math.abs(axis[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]));
+    const e2 = cross(axis, e1);
+    const sn = Math.min(1, r / G.R);
+    const cs = Math.sqrt(1 - sn * sn);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    let pen = false;
+    ctx.beginPath();
+    for (let k = 0; k <= 48; k++) {
+      const t = (k / 48) * Math.PI * 2;
+      const p = [0, 1, 2].map((j) => G.R * (axis[j] * cs + (e1[j] * Math.cos(t) + e2[j] * Math.sin(t)) * sn));
+      const front = dot(p, v) > 0;
+      ctx.globalAlpha = alpha;
+      if (front && pen) ctx.lineTo(X(p), Y(p));
+      else if (front) ctx.moveTo(X(p), Y(p));
+      pen = front;
+    }
+    ctx.stroke();
+  };
+  ring(up, G.R, 0.22, 1, '#8f7cff');
+  ring(right, G.R, 0.22, 1, '#8f7cff');
+  ring(norm([up[0] + right[0], up[1] + right[1], up[2] + right[2]]), G.R, 0.16, 1, '#8f7cff');
+  ring(norm([up[0] - right[0], up[1] - right[1], up[2] - right[2]]), G.R, 0.16, 1, '#8f7cff');
+  // the road, inside first (seen through the shell), then the outside over it
+  const P = (p, i) => [p.frames.o[i * 3], p.frames.o[i * 3 + 1], p.frames.o[i * 3 + 2]];
+  for (const pass of [0, 1]) {
+    for (const p of paths) {
+      const last = p.closed ? p.N : p.N - 1;
+      for (let i = 0; i < last; i += 2) {
+        const j = p.closed ? (i + 2) % p.N : Math.min(p.N - 1, i + 2);
+        const q0 = P(p, i);
+        const q1 = P(p, j);
+        const out = Math.hypot(q0[0], q0[1], q0[2]) > G.R;
+        if (out !== (pass === 1)) continue;
+        const mask = p.mask[i];
+        const on = solidIn(mask, mode);
+        if (!on && !p.closed) continue;
+        const near = dot(q0, v) > 0;
+        ctx.strokeStyle = mask !== M.ALL ? hex(colorForMask(mask)) : out ? '#f4ecff' : '#ffb054';
+        ctx.globalAlpha = (on ? 1 : 0.2) * (out ? (near ? 1 : 0.16) : near ? 0.95 : 0.5);
+        ctx.lineWidth = (p.closed ? lineW : lineW * 0.75) * (out && near ? 1 : 0.7);
+        ctx.beginPath();
+        ctx.moveTo(X(q0), Y(q0));
+        ctx.lineTo(X(q1), Y(q1));
+        ctx.stroke();
+      }
+    }
+    // the openings, between the two
+    if (pass === 0) for (const hole of G.holes) ring([hole.axis.x, hole.axis.y, hole.axis.z], hole.r, 1, Math.max(1.5, lineW * 0.6), '#7fe9ff');
+  }
+  ctx.globalAlpha = 1;
+  if (racers) {
+    const dotAt = (r, size, fill, edge) => {
+      const p = [r.root.position.x, r.root.position.y, r.root.position.z];
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.arc(X(p), Y(p), size, 0, Math.PI * 2);
+      ctx.fill();
+      if (edge) {
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    };
+    for (const r of racers) if (r !== me) dotAt(r, 3, r.isPlayer ? '#ffffff' : hex(r.color));
+    if (me) dotAt(me, 5, '#ffffff', true);
+  }
+  return { X: (x) => x, Z: (z) => z };
 }
 
 export class MiniMap {
