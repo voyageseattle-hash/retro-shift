@@ -632,6 +632,10 @@ export class Audio extends Engine {
         this.thump(t, 150 * j, 62, 0.06, 0.2 * v);
         break;
       }
+      case 'toybell':
+        // the bell on the toy cars' ramp (TOPPLE RUN): one is about to go (arg: how near, 0..1)
+        this.arp(t, [91, 96, 91, 96], 0.085, 0.07 * clamp(arg ?? 1, 0.1, 1), 'bell');
+        break;
       case 'smash':
         super.play('crunch');
         super.play('spark');

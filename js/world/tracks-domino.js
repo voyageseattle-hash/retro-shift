@@ -7,6 +7,8 @@
 //                         crest as they fall, flat fast road once they're down
 //   TOP EDGE              along the top of a row packed tight: only the RED Blade balances up there
 //   BOOK BRIDGE           a gap, until the chain knocks a book flat across it
+//   the planks            a stretch of RUG RUN with no road of its own: the fallen dominoes are the road
+//   the toy cars          the end of the chain shunts a queue of them off a ramp into the start straight
 //   BLUE SPUR             a spur of blue dominoes behind a stack of domino boxes, there in BLUE only
 //   SHORT ROW             a low row across a cut: the BLUE Skimmer LIFTs over it, the BOTH Pair smashes through it
 
@@ -111,7 +113,7 @@ export const TOPPLE_RUN = {
       // b5 SHORT ROW: across the south-west corner
       { from: P(25, 0.5), to: P(28, 0.45), mask: M.ALL, side: -1, halfWidth: 6.5, label: 'SHORT ROW', sub: 'BLUE LIFTS OVER · BOTH SMASHES', dominoes: { name: 'R', row: 0.5 } },
     ],
-    gaps: [{ path: 'b2', at: 0.42, len: 36, mask: 0, noRails: true, secret: true }],
+    gaps: [{ path: 'b2', at: 0.42, len: 36, mask: 0, noRails: true, secret: true }, { path: 'b0', at: 0.42, len: 79, mask: 0, secret: true, planks: true }],
     boosts: [{ path: 'b0', at: 0.5 }, { path: 'b1', at: 0.3 }, { path: 'b1', at: 0.6 }, { path: 'b3', at: 0.5 }, { at: P(0, 0.35) }, { at: P(3, 0.3), lat: -0.4 }, { at: P(9, 0.0) }, { at: P(14, 0.3), lat: -0.4 }, { at: P(16, 0.5) }, { at: P(19, 0.6), lat: -0.4 }, { at: P(23, 0.0), lat: 0 }, { at: P(27, 0.6), lat: -0.4 }],
     shards: [{ at: P(2, 0.5), n: 3 }, { at: P(8, 0.5), n: 3, lat: 0.3 }, { at: P(12, 0.5), n: 3, lat: -0.3 }, { at: P(16, 0.0), n: 3 }, { at: P(18, 0.5), n: 3, lat: -0.3 }, { at: P(22, 0.5), n: 3 }, { at: P(26, 0.8), n: 3, lat: -0.4 }],
     tips: [

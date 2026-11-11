@@ -169,6 +169,8 @@ A toy road round the edge of the bedroom rug, and one chain of giant dominoes sn
 - **BLUE SPUR** is behind a stack of domino boxes that the blue lens takes away.
 - **SHORT ROW** is a low row of slabs across a cut: the BOTH Pair goes straight through, the BLUE Skimmer LIFTs over.
 - Late in the race a toy crane stands CRANE LANE back up, then tips it from the far end, toward you. A slab that lands on you in a lens it's solid in bowls you over.
+- One stretch of RUG RUN has no road of its own. The dominoes there are planks as wide as the lane, and once the wave has laid them down they are the road.
+- The end of the chain shunts a queue of **toy cars** on a ramp beside the grid, and the front one rolls off into the start straight, crosses it and runs off the far side. Another follows about every 39 seconds, after a bell and a rock on its springs. Red car, blue car, turn about: the other lens drives straight through.
 - Come off the road and you land on the rug, which puts you straight back on, slower. No wreck.
 
 ## How it's built
