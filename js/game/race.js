@@ -691,6 +691,9 @@ export class Race {
     // be a loop above or below, and you'd fall straight back out
     r.hints[this.world.main.id] = sp.i;
     r.hints._cur = this.world.main.id;
+    // and the road record itself: until the first step on the ground it still says where the car fell from, and a
+    // rival reading the road from there can shift to a lens that has no road at the respawn point (a fall loop)
+    r.track = { path: this.world.main, i: sp.i, f: 0, lat: sp.lat };
     if (r.mono) r.energy = Math.max(r.energy, SHIFT.monoCost);
     else {
       r.mode = BOTH;
@@ -704,7 +707,8 @@ export class Race {
     // traffic and the police convoy pass through you while you blink back in
     r.respawnGrace = 1.5;
     r.vel.set(Math.sin(sp.yaw), 0, Math.cos(sp.yaw)).multiplyScalar(12);
-    if (r.ai) Object.assign(r.ai, { path: this.world.main, _branch: null, turn: 0, pinned: 0, planT: 0 });
+    // (the lens it wanted where it fell is forgotten too: it reads the road again from here before it shifts)
+    if (r.ai) Object.assign(r.ai, { path: this.world.main, _branch: null, turn: 0, pinned: 0, planT: 0, wantMode: r.mode, think: 0, modeHold: 0 });
     // the car draws itself back in, line by line, with a flash where it lands
     r.drawIn = 0;
     if (this.near(r)) this.debris.sparks(r.pos, _v.set(0, 0, 0), 28, 0xffffff, 12, r.pos.y - 0.3);
