@@ -22,6 +22,7 @@ export class SpeedLines {
     this.geo = g;
     this.mesh = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending }));
     this.mesh.frustumCulled = false;
+    this.mesh.material.userData.noFold = true; // laid out round the camera itself (world/fold.js)
     this.mesh.renderOrder = 20;
     this.tint = new THREE.Color(1, 1, 1);
   }

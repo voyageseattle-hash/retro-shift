@@ -10,14 +10,16 @@ import { TRACKS } from '../world/tracks.js';
 import { TrackWorld } from '../world/track.js';
 import { CARS } from '../vehicles/racer.js';
 import { drawPaths, MiniMap } from './minimap.js';
+import { MAP_STYLES, MAP_LABEL, mapStyle, drawCard } from './coursemap.js';
 import { BOTH, RED, BLUE, MODE_NAME } from '../world/shift.js';
 import { SPLIT_GLYPHS } from '../core/input.js';
 import { formatTime, ordinal, storage } from '../core/util.js';
-import { CUPS, POINTS, TROPHY, getProgress, saveProgress as saveProgressUI, medalInfo, isUnlocked, unlockFor, COLORWAYS, getGarage, setLivery, liveryFor } from '../game/modes.js';
+import { CUPS, isBonus, cupReady, courseOpen, courseLock, openTracks, POINTS, TROPHY, getProgress, saveProgress as saveProgressUI, medalInfo, isUnlocked, unlockFor, COLORWAYS, getGarage, setLivery, liveryFor } from '../game/modes.js';
 import { loadGhost } from '../game/ghost.js';
 import { playerName, setPlayerName, courseName, MAX_PLAYERS } from '../net/online.js';
 import { PREMISE, CUP_STORY, SECRET_SCENES, DRIVERS } from '../game/story.js';
 import { accessScreen } from './access.js';
+import { ARENA } from '../game/tag.js';
 
 export const el = (tag, cls, html) => {
   const e = document.createElement(tag);
@@ -120,6 +122,7 @@ export class UI {
       { label: 'TIME TRIAL', action: () => ((this.choice.mode = 'trial'), this.app.audio.announce('timetrial'), this.trackSelect()) },
       { label: 'MONO RUN', action: () => ((this.choice.mode = 'mono'), this.app.audio.announce('monorun'), this.trackSelect()) },
       { label: '2 PLAYER', action: () => ((this.choice.mode = 'split'), this.app.audio.announce('twoplayer'), this.trackSelect()) },
+      { label: 'LENS TAG', action: () => this.app.openTag() },
       { label: 'ONLINE', action: () => (this.app.audio.announce('online'), this.onlineMenu()) },
       { label: 'GARAGE', action: () => this.garage() },
       { label: 'FIRST RUN', action: () => this.app.startTutorial() },
@@ -146,7 +149,7 @@ export class UI {
       </div>
       <p class="rule"><b>TWO MACHINES IN ONE</b>: every craft is a red Blade docked in a blue Skimmer, and BOTH drives the pair, which jumps what the Blade clings to and the Skimmer glides. The boards before a drop, a crest, water, a slit, a wall run or a glide gap say which form reads it; pick the form, take the route, and watch your SHIFT.</p>
       <p class="rule">Shift into a wall at the last moment for a CLOSE PHASE boost. A road that only your lens can see doesn't drain SHIFT. Watch the road: if the strip under you is the colour you shifted away from, it's gone. Grab white shards for SHIFT, phase through walls for a little more.</p>
-      <p class="rule"><b>HULL</b>: hits take hull (the cells under SHIFT), they don't wreck you; only an empty hull comes apart, and it patches itself up between hits, faster in BOTH. <b>SEAM CHARGES</b>: drive through a prism gate to roll one, fire it with your CHARGE button: LENS CELL, EMP, FLIP, LIGHTSPEED, SEAM WALL or PATCH. <b>FORM MOVES</b>: the Skimmer LIFTs over trouble, the Blade LANCEs through a rival, the pair BRACEs behind a shield. <b>LAUNCHERS</b>: a hole in one lens is a ramp in the other. Honk at a rival to taunt them, if you can take the heat.</p>
+      <p class="rule"><b>HULL</b>: hits take hull (the cells under SHIFT), they don't wreck you; only an empty hull comes apart, and it patches itself up between hits, faster in BOTH. <b>SEAM CHARGES</b>: drive through a prism gate to roll one, fire it with your CHARGE button: LENS CELL, EMP, FLIP, LIGHTSPEED, SEAM WALL or PATCH. <b>FORM MOVES</b>: the Skimmer LIFTs (tap to HOVER over traffic and low blocks, double-tap to JUMP a wall), the Blade LANCEs through a rival (tap again quickly to SWITCHBACK: spin end for end and go back the way you came at the same speed), the pair BRACEs behind a shield. <b>LAUNCHERS</b>: a hole in one lens is a ramp in the other. Honk at a rival to taunt them, if you can take the heat.</p>
       <p class="rule"><b>STORMS</b>: meteors fall in the red world, lightning strikes in the blue. Dodge the rings, or shift to the other lens, where the storm isn't, and lose that lens's shortcuts.</p>
       <p class="rule"><b>ROAD WORKS</b> on Fractal Route move to a new stretch every lap: blue barriers shut the left lane, a red digger shuts the right, and the crane's load swings over the slit between. RED opens the left lane, BLUE the right. <b>ECHO RUINS</b> shakes itself apart over three laps: a quake, then lava (BLUE cools it, RED and BOTH burn), then the plates split and the road you learned is gone. Hold speed for the rift; RED clings down the drop and the slab, BLUE glides.</p>
       <p class="rule"><b>HEAVY TRAFFIC</b> (Grid City): every car on the road is in one world. Weave through it in BOTH, or shift to a lens to clear half the road and give up that lens's routes. Rear-end one flat out and it comes apart, and so does a good piece of your hull. <b>POLICE CHASE</b> (Void Field): once a lap a getaway car and three cruisers tear through the field. Cruisers ram and fire lasers, each shot marked by rings a beat before it lands. The chase only exists in BOTH: hold a lens to drive straight through it, and mind that lens's holes in the road.</p>
@@ -185,6 +188,7 @@ export class UI {
       { label: '', cycle: (d) => ((S.difficulty = (S.difficulty + d + 3) % 3), save(), refresh()), action: () => items[2].cycle(1) },
       { label: '', cycle: (d) => ((S.quality = quals[(quals.indexOf(S.quality) + d + quals.length) % quals.length]), save(), refresh()), action: () => items[3].cycle(1) },
       { label: '', cycle: () => ((S.assist = S.assist === false), save(), refresh()), action: () => items[4].cycle(1) },
+      { label: '', cycle: (d) => ((S.map = MAP_STYLES[(MAP_STYLES.indexOf(mapStyle(S)) + d + MAP_STYLES.length) % MAP_STYLES.length]), save(), refresh()), action: () => items[5].cycle(1) },
       { label: 'ACCESSIBILITY', action: () => accessScreen(this) },
       { label: 'BACK', action: () => this.title() },
     ];
@@ -192,7 +196,7 @@ export class UI {
     this.root.appendChild(s);
     this.menu = new Menu(this.app, list, items, { onBack: () => this.title() });
     const refresh = () => {
-      const labels = [`MUSIC ◀ ${pct(S.music)} ▶`, `EFFECTS ◀ ${pct(S.sfx)} ▶`, `RIVALS ◀ ${diffs[S.difficulty]} ▶`, `GRAPHICS ◀ ${S.quality.toUpperCase()} ▶`, `STEERING ◀ ${S.assist === false ? 'FULL CONTROL' : 'ASSIST'} ▶`];
+      const labels = [`MUSIC ◀ ${pct(S.music)} ▶`, `EFFECTS ◀ ${pct(S.sfx)} ▶`, `RIVALS ◀ ${diffs[S.difficulty]} ▶`, `GRAPHICS ◀ ${S.quality.toUpperCase()} ▶`, `STEERING ◀ ${S.assist === false ? 'FULL CONTROL' : 'ASSIST'} ▶`, `MAP ◀ ${MAP_LABEL[mapStyle(S)]} ▶`];
       labels.forEach((l, k) => (this.menu.nodes[k].innerHTML = l));
     };
     refresh();
@@ -216,6 +220,13 @@ export class UI {
     s.innerHTML = `<h2>${MODE_TITLE[mode]} · SELECT A COURSE</h2>${mode === 'mono' ? '<div class="sub">Never both worlds. Your BOTH button swaps RED and BLUE, every swap costs SHIFT, and only shards and phasing refill it.</div>' : ''}`;
     const grid = el('div', 'grid');
     const items = TRACKS.map((def) => {
+      if (!courseOpen(def.id)) {
+        const card = el('button', 'item tcard locked');
+        const bonus = isBonus(def.id);
+        card.innerHTML = `<div class="tnum">${def.num}</div><div class="tmap tlock">LOCKED</div><div class="tname">${bonus ? '???' : def.name}</div>
+          <div class="tblurb">${bonus ? 'BONUS COURSE · ' : ''}${unlockFor(courseLock(def.id))?.hint || ''}</div><div class="tbest">&nbsp;</div>`;
+        return { node: card, action: () => {} };
+      }
       const best = mode === 'mono' ? loadGhost(def.id, true) : storage.get(`rs.best.${def.id}`, null);
       const medal = medalInfo((mode === 'mono' ? prog.mono : prog.trial)[def.id] || 0);
       const card = el('button', 'item tcard');
@@ -229,8 +240,7 @@ export class UI {
       const medalTag = medal && mode !== 'race' ? ` <span class="medal" style="--mc:${medal.color}">${medal.name}</span>` : '';
       card.appendChild(el('div', 'tbest', best ? `BEST ${formatTime(best.time)}${medalTag}` : '&nbsp;'));
       requestAnimationFrame(() => {
-        const ctx = cv.getContext('2d');
-        drawPaths(ctx, this.preview(def).paths, cv.width, cv.height, 7, 10, null, 2.5);
+        drawCard(cv, this.preview(def).paths, mapStyle(this.settings), def);
       });
       return {
         node: card,
@@ -243,7 +253,7 @@ export class UI {
     });
     s.appendChild(grid);
     this.root.appendChild(s);
-    const focus = Math.max(0, TRACKS.findIndex((t) => t.id === this.choice.track));
+    const focus = Math.max(0, TRACKS.findIndex((t) => t.id === this.choice.track && courseOpen(t.id)));
     this.menu = new Menu(this.app, grid, items, { cols: 5, focus, onBack: () => this.title() });
     this.menu.nodes.forEach((n) => grid.appendChild(n));
   }
@@ -270,7 +280,7 @@ export class UI {
   carSelect(who = 1) {
     this.clear();
     const s = el('div', 'screen cars');
-    const split = this.choice.mode === 'split';
+    const split = this.choice.mode === 'split' || (this.choice.mode === 'tag' && !!this.choice.tagSplit);
     s.innerHTML = `<h2>${split ? `PLAYER ${who} · ` : ''}SELECT A CRAFT</h2>${split ? `<div class="sub">${who === 1 ? 'Player 1 drives with W A S D, shifts with Q · F · E, drifts with SPACE.' : 'Player 2 drives with the arrows, shifts with , . /, drifts with RIGHT SHIFT. Gamepads work too.'}</div>` : ''}<div class="stage-gap"></div>`;
     const grid = el('div', 'grid cars-grid');
     const items = CARS.map((car) => {
@@ -301,7 +311,7 @@ export class UI {
     this.root.appendChild(s);
     const cur = who === 2 ? this.choice.car2 || storage.get('rs.lastCar2', 'scanline') : this.choice.car;
     const focus = Math.max(0, CARS.findIndex((c) => c.id === cur));
-    this.menu = new Menu(this.app, grid, items, { cols: 4, focus, onBack: () => (who === 2 ? this.carSelect(1) : this.choice.mode === 'online' ? this.lobby() : this.choice.mode === 'gp' ? this.cupSelect() : this.trackSelect()) });
+    this.menu = new Menu(this.app, grid, items, { cols: 4, focus, onBack: () => (who === 2 ? this.carSelect(1) : this.choice.mode === 'tag' ? this.app.openTag() : this.choice.mode === 'online' ? this.lobby() : this.choice.mode === 'gp' ? this.cupSelect() : this.trackSelect()) });
     this.menu.nodes.forEach((n) => grid.appendChild(n));
   }
 
@@ -393,26 +403,36 @@ export class UI {
     if (!net.active) return this.onlineMenu();
     const s = el('div', 'screen lobby');
     const host = net.isHost;
-    const rows = Array.from({ length: MAX_PLAYERS }, (_, k) => {
+    const tag = net.mode === 'tag';
+    const rows = Array.from({ length: Math.max(net.players.length, tag ? MAX_PLAYERS : 6) }, (_, k) => {
       const p = net.players[k];
       if (!p) return `<tr class="empty"><td>${k + 1}</td><td>AI RIVAL</td><td></td></tr>`;
       const car = CARS.find((c) => c.id === p.car) || CARS[0];
       return `<tr class="${p.slot === net.mySlot ? 'me' : ''}"><td>${k + 1}</td><td>${p.name}${p.slot === 0 ? ' <small>HOST</small>' : ''}</td><td style="color:${hex(car.color)}">${car.name}</td></tr>`;
     }).join('');
     s.innerHTML = `<h2>ROOM <span class="code">${net.code}</span></h2>
-      <div class="sub">${host ? 'Share the code. Friends pick ONLINE, then JOIN A ROOM.' : 'Waiting for the host to start the race.'}</div>
+      <div class="sub">${host ? 'Share the code. Friends pick ONLINE, then JOIN A ROOM.' : `Waiting for the host to start the ${tag ? 'round of LENS TAG' : 'race'}.`}</div>
       <div class="rgrid"><table class="standings lobby-table">${rows}</table>
-      <div class="lobby-course"><span>COURSE</span><b>${courseName(net.course)}</b><canvas width="220" height="130"></canvas></div></div>`;
+      <div class="lobby-course"><span>${tag ? 'LENS TAG · BATTLE' : 'COURSE'}</span><b>${tag ? ARENA.name : courseName(net.course)}</b><canvas width="220" height="130"></canvas></div></div>`;
+    // (LENS TAG plays the PRISM BOWL: the course map isn't its)
+    if (tag) s.querySelector('.lobby-course canvas').style.visibility = 'hidden';
     const cv = s.querySelector('canvas');
     const def = TRACKS.find((t) => t.id === net.course);
-    if (def) requestAnimationFrame(() => drawPaths(cv.getContext('2d'), this.preview(def).paths, cv.width, cv.height, 7, 10, null, 2.5));
+    if (def) requestAnimationFrame(() => drawCard(cv, this.preview(def).paths, mapStyle(this.settings), def));
     const list = el('div', 'list row');
     const cycleCourse = (d) => {
-      const i = TRACKS.findIndex((t) => t.id === net.course);
-      net.setCourse(TRACKS[(i + d + TRACKS.length) % TRACKS.length].id);
+      const open = openTracks();
+      const i = Math.max(0, open.findIndex((t) => t.id === net.course));
+      net.setCourse(open[(i + d + open.length) % open.length].id);
     };
     const items = [
-      ...(host ? [{ label: 'START RACE', action: () => net.start() }, { label: '◀ COURSE ▶', action: () => cycleCourse(1), cycle: cycleCourse }] : []),
+      ...(host
+        ? [
+            { label: tag ? 'START LENS TAG' : 'START RACE', action: () => net.start() },
+            { label: tag ? '◀ MODE: LENS TAG ▶' : '◀ MODE: RACE ▶', action: () => net.setMode(tag ? 'race' : 'tag'), cycle: () => net.setMode(tag ? 'race' : 'tag') },
+            ...(tag ? [] : [{ label: '◀ COURSE ▶', action: () => cycleCourse(1), cycle: cycleCourse }]),
+          ]
+        : []),
       { label: 'CHANGE CRAFT', action: () => this.carSelect() },
       { label: 'LEAVE ROOM', action: () => (net.close(), this.onlineMenu()) },
     ];
@@ -566,14 +586,15 @@ export class UI {
     const list = el('div', 'list row');
     s.appendChild(list);
     this.root.appendChild(s);
-    const idx = TRACKS.findIndex((t) => t.id === race.def.id);
+    const open = openTracks();
+    const idx = open.findIndex((t) => t.id === race.def.id);
     const items = [
       { label: 'RETRY', action: () => this.afterScenes(() => this.app.startRace()) },
       {
         label: 'NEXT COURSE',
         action: () =>
           this.afterScenes(() => {
-            this.choice.track = TRACKS[(idx + 1) % TRACKS.length].id;
+            this.choice.track = open[(idx + 1) % open.length].id;
             storage.set('rs.lastTrack', this.choice.track);
             this.app.startRace();
           }),
@@ -664,15 +685,25 @@ export class UI {
       const n = el('button', 'item cupcard');
       n.style.setProperty('--c', cup.color);
       const best = prog.cups[cup.id];
+      const open = isUnlocked(cup.unlock);
+      const ready = cupReady(cup);
+      const row = (id, k) => {
+        const d = TRACKS.find((t) => t.id === id);
+        // a course that isn't built yet still gets its number, counted on from the cups before it
+        const num = d?.num || String(cup.from + k).padStart(2, '0');
+        return `<li><span>${num}</span>${d && (open || !cup.unlock) ? d.name : '???'}</li>`;
+      };
+      const status = !ready ? 'COMING SOON' : !open ? `LOCKED · ${unlockFor(cup.unlock)?.hint || ''}` : best && best <= 3 ? `${TROPHY[best]} TROPHY` : best ? `BEST ${ordinal(best)}` : 'NOT WON YET';
+      if (!ready || !open) n.classList.add('locked');
       n.innerHTML = `<div class="cupname">${cup.name}</div>
-        <ol>${cup.tracks.map((id) => { const d = TRACKS.find((t) => t.id === id); return `<li><span>${d.num}</span>${d.name}</li>`; }).join('')}</ol>
-        <div class="trophy ${best && best <= 3 ? `t${best}` : ''}">${best && best <= 3 ? `${TROPHY[best]} TROPHY` : best ? `BEST ${ordinal(best)}` : 'NOT WON YET'}</div>`;
-      return { node: n, action: () => ((this.choice.cup = cup.id), this.carSelect()) };
+        <ol>${cup.tracks.map(row).join('')}</ol>
+        <div class="trophy ${ready && open && best && best <= 3 ? `t${best}` : ''}">${status}</div>`;
+      return { node: n, action: () => (ready && open ? ((this.choice.cup = cup.id), this.carSelect()) : {}) };
     });
     s.appendChild(grid);
     this.root.appendChild(s);
     const focus = Math.max(0, CUPS.findIndex((c) => c.id === this.choice.cup));
-    this.menu = new Menu(this.app, grid, items, { cols: 2, focus, onBack: () => this.title() });
+    this.menu = new Menu(this.app, grid, items, { cols: CUPS.length, focus, onBack: () => this.title() });
     this.menu.nodes.forEach((n) => grid.appendChild(n));
   }
 
@@ -859,7 +890,7 @@ export class UI {
     const best = race.mono ? loadGhost(race.def.id, true) : storage.get(`rs.best.${race.def.id}`, null);
     const bits = [];
     if (race.tutorial) bits.push('FIRST RUN · ESC TO SKIP');
-    if (race.kind === 'gp') bits.push(`${this.app.gp.cup.name} · RACE ${this.app.gp.round + 1}/5`);
+    if (race.kind === 'gp') bits.push(`${this.app.gp.cup.name} · RACE ${this.app.gp.round + 1}/${this.app.gp.cup.tracks.length}`);
     if (best) bits.push(`RECORD ${formatTime(best.time)}`);
     if (race.staffTime) bits.push(`<span style="color:#ffd04a">STAFF ${formatTime(race.staffTime)}</span>`);
     this.hs = [...H.querySelectorAll('.hud-view')].map((V) => {
@@ -900,7 +931,7 @@ export class UI {
         count: q('.h-count'),
         wrong: q('.h-wrong'),
         flash: q('.h-flash'),
-        map: new MiniMap(q('.h-map')),
+        map: new MiniMap(q('.h-map'), mapStyle(this.settings), race.split ? null : { race, renderer: this.app.renderer }),
       };
       h.course.textContent = `${race.def.num} ${race.def.name}`;
       h.best.innerHTML = bits.join('<br>');
@@ -1174,7 +1205,7 @@ export class UI {
         <p>${race.mono ? 'SWAP flips your lens.' : 'RED is fastest · BLUE grips and drifts · BOTH refills SHIFT'}</p>`;
       if (h.controlsHtml !== html) h.controls.innerHTML = h.controlsHtml = html;
     }
-    if (drawMap) h.map.draw(race.world, race.racers, p.mode, p);
+    if (drawMap) h.map.draw(race.world, race.tag ? race.tag.mapRacers(p) : race.racers, p.mode, p);
   }
 }
 

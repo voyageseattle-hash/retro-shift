@@ -1,4 +1,4 @@
-// Online races for up to 6 people, modelled on Absurd Combat Racing's netcode: one player's browser hosts, everyone
+// Online races for up to 8 people, modelled on Absurd Combat Racing's netcode: one player's browser hosts, everyone
 // else joins with a four-letter room code, and empty grid slots are filled with AI rivals.
 //
 // Retro Shift keeps it lighter: each browser drives its own craft with full local physics (so steering, drifting and
@@ -12,16 +12,20 @@ import { CARS } from '../vehicles/racer.js';
 import { TRACKS } from '../world/tracks.js';
 import { storage } from '../core/util.js';
 
-export const MAX_PLAYERS = 6;
+export const MAX_PLAYERS = 8;
+// a race grid is topped up with AI rivals to six (more if more people came); a LENS TAG room to eight
+const FIELD = { race: 6, tag: 8 };
 const SEND_RATE = 30;
+const ALT_PAINT = [0x6aff9a, 0xff9a3a, 0xf4f0ff, 0xff6ad8];
 const INTERP = 0.1;
-const PROTOCOL = 1;
+const PROTOCOL = 2;
 
 // One racer's state, packed into a short array.
-const F = { grounded: 1, drift: 2, boost: 4, hidden: 8, finished: 16 };
+// (twist: the Blade is mid-SWITCHBACK, so its half turn of yaw is drawn as the spin, not smeared sideways)
+const F = { grounded: 1, drift: 2, boost: 4, hidden: 8, finished: 16, twist: 32 };
 function pack(r) {
   const q = (v, k = 100) => Math.round(v * k) / k;
-  const flags = (r.grounded ? F.grounded : 0) | (r.drift.active ? F.drift : 0) | (r.boostTime > 0 ? F.boost : 0) | (r.respawnT > 0 ? F.hidden : 0) | (r.finished ? F.finished : 0);
+  const flags = (r.grounded ? F.grounded : 0) | (r.drift.active ? F.drift : 0) | (r.boostTime > 0 ? F.boost : 0) | (r.respawnT > 0 ? F.hidden : 0) | (r.finished ? F.finished : 0) | (r.twistT > 0 ? F.twist : 0);
   return [q(r.pos.x), q(r.pos.y), q(r.pos.z), q(r.yaw, 1000), q(r.vel.x), q(r.vel.y), q(r.vel.z), q(r.speed), r.mode, flags, q(r.prog, 10000), r.lap, r.finished ? q(r.finishTime, 1000) : 0, isFinite(r.bestLap) ? q(r.bestLap, 1000) : 0, r.drift.dir, r.drift.level, q(r.up.x), q(r.up.z), q(r.energy)];
 }
 
@@ -36,6 +40,7 @@ export class Online {
     this.code = '';
     this.players = []; // lobby: { slot, id, name, car, livery }
     this.course = 'core';
+    this.mode = 'race'; // 'race' or 'tag' (LENS TAG, game/tag.js)
     this.mySlot = 0;
     this.buffers = new Map(); // slot -> [{ at, d }]
     this.latest = new Map(); // host: slot -> packed state from that client
@@ -110,7 +115,7 @@ export class Online {
     this.ready = new Set();
   }
   changed() {
-    if (this.isHost) this.t.broadcast({ t: 'lobby', players: this.players, course: this.course, code: this.code });
+    if (this.isHost) this.t.broadcast({ t: 'lobby', players: this.players, course: this.course, mode: this.mode, code: this.code });
     this.onChange();
   }
 
@@ -155,6 +160,14 @@ export class Online {
         break;
     }
   }
+  // LENS TAG's own messages (the host owns the tag: who's IT, the scores, the end), handed to the round
+  tagMessage(m) {
+    if (m.t === 'tag' || m.t === 'tagsc' || m.t === 'tagend') {
+      this.app.race?.tag?.onNet(m);
+      return true;
+    }
+    return false;
+  }
   hostLeave(id) {
     const p = this.players.find((x) => x.id === id);
     if (!p) return;
@@ -177,6 +190,11 @@ export class Online {
     this.course = id;
     this.changed();
   }
+  setMode(mode) {
+    if (!this.isHost) return;
+    this.mode = mode === 'tag' ? 'tag' : 'race';
+    this.changed();
+  }
   setCar(car, livery) {
     const me = this.me();
     if (me) {
@@ -195,13 +213,17 @@ export class Online {
     const slots = this.players.map((p) => ({ slot: p.slot, human: true, name: p.name, car: p.car, livery: p.livery }));
     const taken = new Set(slots.map((s) => s.car));
     const pool = CARS.filter((c) => !c.secret && !taken.has(c.id));
-    for (let s = 0, k = 0; slots.length < MAX_PLAYERS; s++) {
+    const field = Math.max(slots.length, FIELD[this.mode] || 6);
+    for (let s = 0, k = 0; slots.length < field; s++) {
       if (slots.some((x) => x.slot === s)) continue;
-      slots.push({ slot: s, human: false, car: (pool[k++ % pool.length] || CARS[0]).id });
+      const n = k++;
+      const car = (pool[n % pool.length] || CARS[0]).id;
+      // (a second lap of the pool, in a big room: the same craft in another paint, so the two can be told apart)
+      slots.push({ slot: s, human: false, car, livery: n >= pool.length ? { paint: ALT_PAINT[n % ALT_PAINT.length] } : null });
     }
     // humans at the back of the grid, like the offline player
     slots.sort((a, b) => (a.human === b.human ? a.slot - b.slot : a.human ? 1 : -1));
-    const cfg = { course: this.course, slots, seed: Math.random() };
+    const cfg = { course: this.course, mode: this.mode, slots, seed: Math.random() };
     this.t.broadcast({ t: 'start', cfg });
     this.begin(cfg);
     this.goTimer = setTimeout(() => this.go(), 9000);
@@ -234,6 +256,7 @@ export class Online {
   // ------------------------------------------------------------------ client side
   clientMessage(m) {
     if (!m || typeof m !== 'object') return;
+    if (this.tagMessage(m)) return;
     switch (m.t) {
       case 'welcome':
         this.mySlot = m.slot;
@@ -246,6 +269,7 @@ export class Online {
       case 'lobby':
         this.players = m.players;
         this.course = m.course;
+        this.mode = m.mode || 'race';
         this.code = m.code;
         this.onChange();
         break;
@@ -340,10 +364,14 @@ export class Online {
       let dy = d[3] - a[3];
       if (dy > Math.PI) dy -= Math.PI * 2;
       if (dy < -Math.PI) dy += Math.PI * 2;
-      r.yaw = a[3] + dy * k;
+      const flags = d[9];
+      // a SWITCHBACK between the two updates: jump to the new facing and play the spin, rather than turn through it
+      if (flags & F.twist && Math.abs(dy) > 2) {
+        r.yaw = d[3];
+        if (!(r.twistT > 0)) r.switchback(true);
+      } else r.yaw = a[3] + dy * k;
       r.vel.set(d[4], d[5], d[6]);
       r.speed = d[7];
-      const flags = d[9];
       if (r.mode !== d[8]) r.shiftT = 0.35;
       r.mode = d[8];
       r.grounded = !!(flags & F.grounded);

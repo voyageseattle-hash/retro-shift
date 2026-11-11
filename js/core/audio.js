@@ -507,7 +507,7 @@ export class Audio extends Engine {
     const W = this.sfxWet;
     // The sounds a player can set off many times a second (shifting, grinding a rail, mashing a shift with no
     // energy) are rate-limited, so they read as one event and not a buzz.
-    const lim = { shift: 0.07, scrape: 0.22, wall: 0.25, denied: 0.35, smash: 0.08, phase: 0.12, shard: 0.04, chain: 0.08, perfect: 0.15 }[name];
+    const lim = { shift: 0.07, scrape: 0.22, wall: 0.25, denied: 0.35, smash: 0.08, clack: 0.045, phase: 0.12, shard: 0.04, chain: 0.08, perfect: 0.15 }[name];
     if (lim) {
       const last = this.throttle.get(`rs-${name}`) ?? -1;
       if (t - last < lim) return;
@@ -624,10 +624,31 @@ export class Audio extends Engine {
         this.tone('sawtooth', 180, t, 1.1, 0.12, W, { slideTo: 36, filter: 700 });
         this.thump(t + 0.05, 70, 26, 1.2, 0.7);
         break;
+      case 'clack': {
+        // a domino landing (TOPPLE RUN): a short woody knock, quieter the further off it is (arg 0..1)
+        const v = clamp(arg ?? 1, 0.05, 1);
+        const j = 0.88 + Math.random() * 0.26;
+        this.tone('triangle', 540 * j, t, 0.05, 0.085 * v, W, { slideTo: 250 * j, filter: 2600 });
+        this.thump(t, 150 * j, 62, 0.06, 0.2 * v);
+        break;
+      }
+      case 'toybell':
+        // the bell on the toy cars' ramp (TOPPLE RUN): one is about to go (arg: how near, 0..1)
+        this.arp(t, [91, 96, 91, 96], 0.085, 0.07 * clamp(arg ?? 1, 0.1, 1), 'bell');
+        break;
       case 'smash':
         super.play('crunch');
         super.play('spark');
         this.arp(t, [93, 88, 96], 0.03, 0.05, 'bell');
+        break;
+      case 'rattle':
+        // a sliding tile about to go (SLIDE FIFTEEN): plastic chattering in its tray
+        for (let k = 0; k < 9; k++) this.noiseHit(t + k * 0.16 + Math.random() * 0.03, 0.035, 0.07, this.sfxDry, 'bandpass', 1700 + Math.random() * 900, 4);
+        break;
+      case 'clack':
+        // and landing in its slot
+        this.noiseHit(t, 0.07, 0.22, this.sfxDry, 'bandpass', 900, 2, 300);
+        this.thump(t, 90, 40, 0.5, 0.18);
         break;
       case 'beep':
         super.play(arg ? 'go' : 'beep');

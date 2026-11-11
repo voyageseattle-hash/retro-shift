@@ -1,13 +1,41 @@
-// Game modes beyond a single race: the two Grand Prix cups, Time Trial and Mono Run medals, staff ghosts, and the
+// Game modes beyond a single race: the four Grand Prix cups and the two bonus courses, Time Trial and Mono Run medals, staff ghosts, and the
 // save file that remembers trophies, medals and what they unlock.
 
 import { storage } from '../core/util.js';
 import { M } from '../world/shift.js';
+import { TRACKS } from '../world/tracks.js';
 
 export const CUPS = [
-  { id: 'signal', name: 'SIGNAL CUP', color: '#ff4fd8', tracks: ['core', 'layered', 'tunnels', 'orbital', 'city'] },
-  { id: 'static', name: 'STATIC CUP', color: '#1e8cff', tracks: ['void', 'helix', 'fractal', 'lattice', 'ruins'] },
+  { id: 'signal', name: 'SIGNAL CUP', color: '#ff4fd8', from: 1, tracks: ['core', 'layered', 'tunnels', 'orbital', 'city'] },
+  { id: 'static', name: 'STATIC CUP', color: '#1e8cff', from: 6, tracks: ['void', 'helix', 'fractal', 'lattice', 'ruins'] },
+  // The third cup: five toys in a kid's bedroom after lights-out (world/toybox.js), easiest first. It opens with a
+  // trophy in both cups above. A course slots in by adding a track with one of these ids to tracks.js; until all
+  // five are there the cup shows COMING SOON. `from` is the course number of its first course, for the ones not built.
+  { id: 'toybox', name: 'TOYBOX CUP', color: '#ffd23a', from: 17, tracks: ['pinball', 'domino', 'popup', 'tiles', 'marblerun'], unlock: 'cup:toybox' },
+  // The finale: the five impossible courses, easiest first. It opens with a trophy in the TOYBOX CUP (or, while that
+  // cup isn't built yet, with a trophy in the first two).
+  { id: 'paradox', name: 'PARADOX CUP', color: '#b04cff', from: 11, tracks: ['mobius', 'mirror', 'dream', 'relativity', 'dyson'], unlock: 'cup:paradox' },
 ];
+// The bonus courses, outside the cups: HYPERCUBE opens with a trophy in the PARADOX CUP, and the secret course
+// QUARTER TURN (a twisting cube) with a trophy in all four cups.
+export const BONUS = { track: 'tesseract', unlock: 'course:tesseract' };
+export const SECRET = { track: 'twistcube', unlock: 'course:twistcube' };
+export const BONUSES = [BONUS, SECRET];
+export const isBonus = (trackId) => BONUSES.some((b) => b.track === trackId);
+
+const hasTrack = (id) => TRACKS.some((t) => t.id === id);
+export const cupById = (id) => CUPS.find((c) => c.id === id);
+// Every course of the cup has been built.
+export const cupReady = (cup) => cup.tracks.every(hasTrack);
+// The unlock a course sits behind (its cup's, or the bonus course's own), or null for a course that's always open.
+export function courseLock(trackId) {
+  const bonus = BONUSES.find((b) => b.track === trackId);
+  if (bonus) return bonus.unlock;
+  return CUPS.find((c) => c.tracks.includes(trackId))?.unlock || null;
+}
+export const courseOpen = (trackId) => isUnlocked(courseLock(trackId));
+// Courses you can pick right now, in order.
+export const openTracks = () => TRACKS.filter((t) => courseOpen(t.id));
 export const POINTS = [10, 7, 5, 3, 2, 1];
 export const TROPHY = ['', 'GOLD', 'SILVER', 'BRONZE'];
 
@@ -101,7 +129,17 @@ const medalCount = (p) => Object.values(p.trial).filter(Boolean).length + Object
 const golds = (t) => Object.values(t).filter((m) => m >= 3).length;
 const cupTop = (p, id, place) => p.cups[id] && p.cups[id] <= place;
 
+const baseCups = (p) => cupTop(p, 'signal', 3) && cupTop(p, 'static', 3);
+// The cup before the finale: the TOYBOX CUP once it's built, so nobody is held back by a cup they can't play yet.
+const beforeFinale = (p) => baseCups(p) && (!cupReady(cupById('toybox')) || cupTop(p, 'toybox', 3));
+const allCups = (p) => CUPS.every((c) => cupTop(p, c.id, 3));
+
 export const UNLOCKS = [
+  // Neither opens until its courses are in the game, so the banner never announces something you can't play yet.
+  { id: 'cup:toybox', name: 'TOYBOX CUP', hint: 'Take a trophy in the SIGNAL CUP and the STATIC CUP', test: (p) => cupReady(cupById('toybox')) && baseCups(p) },
+  { id: 'cup:paradox', name: 'PARADOX CUP', hint: 'Take a trophy in the TOYBOX CUP', test: (p) => cupReady(cupById('paradox')) && beforeFinale(p) },
+  { id: 'course:tesseract', name: 'BONUS COURSE', hint: 'Take a trophy in the PARADOX CUP', test: (p) => hasTrack(BONUS.track) && beforeFinale(p) && cupTop(p, 'paradox', 3) },
+  { id: 'course:twistcube', name: 'SECRET COURSE', hint: 'Take a trophy in all four cups', test: (p) => hasTrack(SECRET.track) && CUPS.every(cupReady) && allCups(p) },
   { id: 'car:chroma', name: 'CHROMA', hint: 'Take a trophy in the SIGNAL CUP, or earn 15 stars on SHIFT TOUR', test: (p) => cupTop(p, 'signal', 3) || tourStars(p) >= 15 },
   { id: 'car:raster', name: 'RASTER', hint: 'Take a trophy in the STATIC CUP, or earn 35 stars on SHIFT TOUR', test: (p) => cupTop(p, 'static', 3) || tourStars(p) >= 35 },
   { id: 'car:glitch', name: 'GLITCH', hint: 'Earn 5 medals in Time Trial or Mono Run', test: (p) => medalCount(p) >= 5 },

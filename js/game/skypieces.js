@@ -4,6 +4,7 @@
 // Core, Layered, City, Helix and Tunnels keep the striped retro sun (env.js).
 
 import * as THREE from '../../vendor/three.js';
+import { HyperSky } from '../world/tesseract.js';
 
 export const SKY_PIECE = {
   core: 'sun',
@@ -148,12 +149,48 @@ export class SkyPiece {
       chunk.position.set(470, 160, 120);
       G.add(chunk);
       this.spin.push([chunk, 0.2]);
+    } else if (kind === 'penrose') {
+      // the impossible triangle: three square bars along x, then y, then z. Seen straight down the cube's diagonal,
+      // which is how it always hangs (it's at infinity, and turns only about that line), the last bar's end lands on
+      // the first bar's start and the three close into a triangle that can't be built.
+      const L = 380;
+      const w = 64;
+      const tri = new THREE.Group();
+      const fill = new THREE.MeshBasicMaterial({ color: 0x020006, fog: false });
+      const P = [[0, 0, 0], [L, 0, 0], [L, L, 0], [L, L, L]];
+      for (let k = 0; k < 3; k++) {
+        const a = P[k];
+        const b = P[k + 1];
+        const ax = k; // the axis this bar runs along
+        const size = [w, w, w];
+        size[ax] = L + w;
+        const geo = new THREE.BoxGeometry(...size);
+        const box = new THREE.Group();
+        box.add(new THREE.Mesh(geo, fill), new THREE.LineSegments(new THREE.EdgesGeometry(geo), k % 2 ? this.matB : this.matA));
+        // a second, inset outline down each bar, so the faces read
+        const inner = new THREE.BoxGeometry(...size.map((v, q) => (q === ax ? v : v * 0.55)));
+        box.add(new THREE.LineSegments(new THREE.EdgesGeometry(inner), k % 2 ? this.matA : this.matB));
+        box.position.set((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+        tri.add(box);
+      }
+      tri.position.set(-L * 0.5, -L * 0.5, -L * 0.5);
+      const pivot = new THREE.Group();
+      pivot.add(tri);
+      const diag = new THREE.Vector3(1, 1, 1).normalize();
+      // the cube's diagonal points back at the viewer
+      pivot.quaternion.setFromUnitVectors(diag, this.dir.clone().negate());
+      G.add(pivot);
+      this.turn = { pivot, diag, base: pivot.quaternion.clone(), q: new THREE.Quaternion() };
     } else if (kind === 'solid') {
       const outer = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(360, 1)), this.matA);
       const inner = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.DodecahedronGeometry(200, 0)), this.matB);
       const core = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.OctahedronGeometry(90, 0)), this.matA);
       G.add(outer, inner, core);
       this.spin.push([outer, 0.03], [inner, -0.05], [core, 0.11]);
+    } else if (kind === 'tesseract') {
+      // a hypercube turning in the fourth dimension (world/tesseract.js)
+      this.hyper = new HyperSky(this.matA, this.matB);
+      G.add(this.hyper.group);
     }
     G.scale.setScalar(1.6);
     G.renderOrder = -2;
@@ -168,6 +205,7 @@ export class SkyPiece {
     G.position.copy(camPos).addScaledVector(this.dir, 2000);
     G.position.y = centerY + 2000 * this.dir.y + 160;
     for (const [o, w, ax] of this.spin) o.rotation[ax || 'y'] += w * dt;
+    if (this.turn) this.turn.pivot.quaternion.copy(this.turn.base).multiply(this.turn.q.setFromAxisAngle(this.turn.diag, t * 0.04));
     this.matA.color.copy(tint.grid).multiplyScalar(0.9 + pulse);
     this.matB.color.copy(tint.gridB).multiplyScalar(0.9 + pulse);
     if (this.hole) {
@@ -176,5 +214,6 @@ export class SkyPiece {
       this.glow.lookAt(camPos);
     }
     if (this.billboards) for (const b of this.billboards) b.lookAt(camPos);
+    this.hyper?.update(dt, tint);
   }
 }

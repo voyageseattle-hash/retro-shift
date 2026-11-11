@@ -4,17 +4,26 @@
 // from Absurd Combat Racing's TrackWorld; the multi-path, per-lens ground query is new.
 
 import { buildShapeCues } from './shapes.js';
+import { buildGrain } from './grain.js';
 import * as THREE from '../../vendor/three.js';
 import { clamp, lerp, wrapAngle, mulberry32, smoothstep } from '../core/util.js';
 import { M, BOTH, RED, BLUE, solidIn, colorForMask, COLORS } from './shift.js';
 import { Layers } from './layers.js';
 import { buildDecor } from './decor.js';
-import { buildSigns } from './signs.js';
+import { buildSigns, addSign } from './signs.js';
+import { Room } from './rooms.js';
 import { buildCovers } from './covers.js';
 import { layStorms } from './storms-def.js';
 import { layFormRoutes, addSlit, routeMask, layRouteBoosts } from './formroutes.js';
 import { layWarps, buildWarps, PIPE } from './warp.js';
+import { layFold, runFold } from './fold.js';
+import { layMirrors, buildMirrors } from './mirrors.js';
+import { layCurved, spot, drawnAt } from './curved.js';
+import { layDropTower } from './marblerun.js';
+import { layPinball, buildPinball } from './pinball.js';
 import { FORMS } from '../vehicles/forms.js';
+import { Mobius } from './mobius.js';
+import { buildPhosphor } from './phosphor.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -204,6 +213,8 @@ export class Path {
   // The road as it's drawn: point(), bent where a pipe curls it up or a corkscrew rolls it (warp.js). Off those it
   // is point() exactly.
   wpoint(i, lat, h = 0, out = new THREE.Vector3()) {
+    // a curved course (curved.js): the flat point, moved by this sample's frame into the drawn world
+    if (this.frames) return drawnAt(this, Math.round(i), this.point(i, lat, h, out), out);
     const j = this.wrap(Math.round(i));
     if (!this.warpK?.[j] && !this.warpK?.[this.wrap(j + 1)]) return this.point(i, lat, h, out);
     return this.bend(i, lat, h, out);
@@ -426,24 +437,52 @@ export class TrackWorld {
     this.shards = [];
     this.buildMain();
     this.buildBranches();
+    this.paths.extra = def.mapLines; // lines the map draws under the roads (ui/minimap.js)
+    layPinball(this); // FLIPPER ALLEY's own roads (pinball.js)
     this.applyGaps();
     layFormRoutes(this);
     layWarps(this);
+    // the Möbius strip: a flat two-lobe loop to the engine, drawn turned over (mobius.js)
+    if (def.mobius) {
+      this.mob = new Mobius(this, def.mobius);
+      this.layers.bend = (a) => this.mob.mapArray(a);
+    }
+    layFold(this, !!opts.preview);
+    layMirrors(this);
+    layCurved(this);
+    layDropTower(this);
     this.minY = Math.min(...this.paths.map((p) => p.minY));
     this.maxY = Math.max(...this.paths.map((p) => p.maxY));
     this.floorY = this.minY - (def.floorDrop ?? 26);
+    def.lay?.(this); // a course's own groundwork (TOPPLE RUN: dominoes.js)
     if (opts.preview) return;
+    // the Escher room (rooms.js): each stair drawn on its own wall, portals between them
+    if (def.room) this.room = new Room(this);
+    // moving platforms (platforms.js): the course's rig, made before the roads are drawn so it can open their rails
+    this.rig = def.rig ? def.rig(this) : null;
     this.buildRoads();
     buildWarps(this);
     this.buildFeatures();
     this.buildWater();
     this.buildStart();
+    if (this.mob) this.buildStart(this.main.N >> 1);
     buildDecor(this);
     this.storms = layStorms(this);
     buildSigns(this);
+    this.room?.build(addSign);
+    this.rig?.build();
     buildCovers(this);
+    // (a board's place, for the shift wave, is where it's drawn)
+    if (this.mob) for (const S of this.layers.signs) if (S.at) S.at = this.mob.map(S.at, new THREE.Vector3());
     buildShapeCues(this); // accessibility: a shape per world (shapes.js), shown from settings
+    buildMirrors(this); // glass that shows the course back (mirrors.js)
+    buildGrain(this); // Static Cup road finish
+    buildPhosphor(this); // Signal Cup road finish
+    buildPinball(this); // FLIPPER ALLEY's table (pinball.js)
     this.group.add(this.layers.build());
+    this.fold?.uncull(this.group);
+    this.rig?.finish();
+    this.dominoes = def.dominoes?.(this); // TOPPLE RUN's dominoes, def.dominoes; def.live is QUARTER TURN's, race.js (dominoes.js); race.js and ai.js ask after them
     this._f = {};
     this._g = { y: -1e4, nx: 0, ny: 1, nz: 0, lat: 0, path: null, i: 0, f: 0, rx: 1, rz: 0, mask: 0, onRoad: false };
   }
@@ -489,9 +528,13 @@ export class TrackWorld {
       const E = B.clone().addScaledVector(tB, -lead).addScaledVector(RB, out - off);
       const midA = A.clone().addScaledVector(tA, lead * 0.5).addScaledVector(RA, (out - off) * 0.35);
       const midB = B.clone().addScaledVector(tB, -lead * 0.5).addScaledVector(RB, (out - off) * 0.35);
-      S.y = A.y;
-      E.y = B.y;
-      const pts = [A.clone().addScaledVector(tA, -4), A, midA, S];
+      // (grade: true keeps the peel on the road's own slope, for a fork off a climb or a fall)
+      if (!b.grade) {
+        S.y = A.y;
+        E.y = B.y;
+      }
+      // (a catch road, drop: true, starts in mid-air at its first via point: nothing leads onto it, you land on it)
+      const pts = b.drop ? [] : [A.clone().addScaledVector(tA, -4), A, midA, S];
       const lift = b.lift ?? 0;
       const inner = [];
       if (b.via) {
@@ -518,12 +561,15 @@ export class TrackWorld {
       const tE = E.clone().sub(midB).setY(0).normalize();
       const first = inner[0] || E;
       const last = inner[inner.length - 1] || S;
-      pts.push(...bendToward(S, tS, first), ...inner, ...bendToward(E, tE, last).reverse());
+      pts.push(...(b.drop ? [] : bendToward(S, tS, first)), ...inner, ...bendToward(E, tE, last).reverse());
       pts.push(E, midB, B, B.clone().addScaledVector(tB, 4));
+      // (or the course says exactly where it runs: a road laid flush along the main one and straight on where it bends)
+      if (b.pts) pts.splice(0, pts.length, ...b.pts.map(([x, z]) => new THREE.Vector3(x, A.y, z)));
       const path = new Path(`b${k}`, pts, false, hw, { bankFactor: 3, mainFrom: b.from, mainTo: b.to, profile: b.profile });
       path.mask.fill(b.mask ?? M.ALL);
       path.def = b;
       path.side = side;
+      if (b.drop) path.noFork = true;
       // No rails where it overlaps the main road (where it leaves and rejoins it); rails everywhere else.
       const fr = {};
       const fr2 = {};
@@ -560,7 +606,7 @@ export class TrackWorld {
       }
       // And no main rail on that side at the junctions.
       const w = Math.ceil((lead * 1.3) / main.ds);
-      for (const i0 of [iA, iB]) {
+      for (const i0 of b.drop ? [iB] : [iA, iB]) {
         for (let k2 = -4; k2 <= w; k2++) {
           const i = main.wrap(i0 === iA ? i0 + k2 : i0 - k2);
           // the gap in the rail is only open in the worlds the branch is in: anyone else still bounces off it
@@ -650,20 +696,26 @@ export class TrackWorld {
   }
 
   buildRoads() {
+    if (this.def.noRoads) return; // (a course that draws its own road: QUARTER TURN's is printed on its cube)
     const L = this.layers;
     const v = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
     for (const path of this.paths) {
+      // (a piece that moves is drawn by whoever moves it: marblerun.js)
+      if (path.skipDraw) continue;
       const hw = path.halfW;
       const last = path.closed ? path.N : path.N - 1;
       for (let i = 0; i < last; i++) {
         const j = path.wrap(i + 1);
         const mask = path.mask[i];
-        if (!mask) continue; // a glide gap: nothing there in any world
+        if (this.room) L.region = this.room.regionOf(path, i);
+        if (!mask || path.hide?.[i]) continue; // a glide gap: nothing there in any world
         const neutral = mask === M.ALL;
-        const lc = neutral ? COLORS.red : colorForMask(mask);
-        const rc = neutral ? COLORS.blue : colorForMask(mask);
+        // (the Möbius strip's road is one colour a side: red along the top, blue along the underside)
+        const face = neutral && this.mob && path.closed ? (i < path.N / 2 ? COLORS.red : COLORS.blue) : null;
+        const lc = face ?? (neutral ? COLORS.red : colorForMask(mask));
+        const rc = face ?? (neutral ? COLORS.blue : colorForMask(mask));
         // neutral road: red lines on the left half, blue on the right, the two worlds printed over each other
-        const mid = neutral ? null : colorForMask(mask);
+        const mid = face ?? (neutral ? null : colorForMask(mask));
         const ml = mid ?? COLORS.red;
         const mr = mid ?? COLORS.blue;
         // fill
@@ -715,18 +767,20 @@ export class TrackWorld {
         for (const f of [-2 / 3, 0, 2 / 3]) if (i % 3 !== 2 && f !== 0) L.line(mask, path.wpoint(i, f * hw, 0.03, _a), path.wpoint(j, f * hw, 0.03, _b), f < 0 ? ml : mr);
         // underside and supports for raised road
         const bent = path.warpK?.[i] > 0;
-        if (i % 2 === 0 && !bent) {
+        if (i % 2 === 0 && !bent && !this.mob) {
           L.line(mask, path.wpoint(i, -hw, -0.6, _a), path.wpoint(j, -hw, -0.6, _b), lc);
           L.line(mask, path.wpoint(i, hw, -0.6, _a), path.wpoint(j, hw, -0.6, _b), rc);
         }
         const p = path.wpoint(i, 0, 0, _c);
-        if (i % 18 === 0 && p.y - this.floorY > 6 && !this.def.noPylons && !bent) {
+        // (a stair flying across the Escher room has nothing under it to stand on)
+        if (i % 18 === 0 && p.y - this.floorY > 6 && !this.def.noPylons && !bent && (!this.room || this.room.cellAt(p.x, p.z).def.up)) {
           const pc = (i / 18) % 2 ? 0x6a1020 : 0x0c3a6a;
           L.lineXYZ(M.ALL, p.x, p.y - 0.6, p.z, p.x, this.floorY, p.z, pc);
           L.lineXYZ(M.ALL, p.x - 1.5, this.floorY, p.z, p.x + 1.5, this.floorY, p.z, pc);
         }
       }
     }
+    L.region = -1;
   }
 
   // A tunnel mouth that is shut in one world: a hexagonal iris filling the whole bore. It collides like a wall
@@ -787,7 +841,7 @@ export class TrackWorld {
     const p = path.point(i, 0, cy);
     root.position.copy(p);
     root.rotation.y = Math.atan2(path.thx[i], path.thz[i]);
-    this.group.add(root);
+    spot(this, path, i).add(root);
     const h = 4.2;
     const ob = { path, i, f: path.frac(i), lat: 0, w, len, h, mask, type: 'wall', door: true, root, sweep: 0, phase: 0, baseLat: 0 };
     this.obstacles.push(ob);
@@ -870,7 +924,7 @@ export class TrackWorld {
       // (a slit's two wall pieces give their own width and offset, in metres)
       w = o.w ?? hw + 0.5;
       len = 1.2;
-      h = 4.2;
+      h = o.h ?? 4.2;
       lat = o.latM ?? 0;
     } else if (type === 'gate') {
       // half the road blocked, side by sign of lat
@@ -912,7 +966,7 @@ export class TrackWorld {
     const p = path.point(i, lat, h / 2);
     root.position.copy(p);
     root.rotation.y = Math.atan2(path.thx[i], path.thz[i]);
-    this.group.add(root);
+    spot(this, path, i).add(root);
     const ob = { path, i, f: path.frac(i), lat, w, len, h, mask, type, root, sweep: o.sweep || 0, phase: o.phase || 0, baseLat: lat };
     this.obstacles.push(ob);
     if (ob.sweep || root.userData.spin) this.animated.push((t) => {
@@ -956,35 +1010,52 @@ export class TrackWorld {
     const col = colorForMask(mask);
     const L = this.layers;
     const w = path.halfW - 1.5;
+    const pt = (i2, la, h, out) => (path.frames ? path.wpoint(i2, la, h, out) : path.point(i2, la, h, out));
     // the ramp: chevrons climbing toward the lip
     const n = 6;
     for (let k = 0; k < n; k++) {
       const i0 = path.wrap(i + k);
       const y0 = 0.06 + (k / n) * 0.9;
       const y1 = 0.06 + ((k + 1) / n) * 0.9;
-      const tip = path.point(i0 + 1, lat, y1, new THREE.Vector3());
-      const l0 = path.point(i0, lat - w, y0, new THREE.Vector3());
-      const r0 = path.point(i0, lat + w, y0, new THREE.Vector3());
-      const c0 = path.point(i0, lat, y0 + 0.02, new THREE.Vector3());
-      L.quad(mask, l0, c0, tip, path.point(i0 + 1, lat - w, y1, new THREE.Vector3()), col, 0.5 + k * 0.12);
-      L.quad(mask, r0, c0, tip, path.point(i0 + 1, lat + w, y1, new THREE.Vector3()), col, 0.5 + k * 0.12);
+      const tip = pt(i0 + 1, lat, y1, new THREE.Vector3());
+      const l0 = pt(i0, lat - w, y0, new THREE.Vector3());
+      const r0 = pt(i0, lat + w, y0, new THREE.Vector3());
+      const c0 = pt(i0, lat, y0 + 0.02, new THREE.Vector3());
+      L.quad(mask, l0, c0, tip, pt(i0 + 1, lat - w, y1, new THREE.Vector3()), col, 0.5 + k * 0.12);
+      L.quad(mask, r0, c0, tip, pt(i0 + 1, lat + w, y1, new THREE.Vector3()), col, 0.5 + k * 0.12);
       L.line(mask, l0, tip, col);
       L.line(mask, r0, tip, col);
     }
     // the arch over the lip, and an up arrow in it
-    const top = path.point(path.wrap(i + n), lat, 0, new THREE.Vector3());
-    const right = new THREE.Vector3(path.rightX(path.wrap(i + n)), 0, path.rightZ(path.wrap(i + n)));
-    let prev = null;
-    for (let k = 0; k <= 12; k++) {
-      const a = (k / 12) * Math.PI;
-      const p = top.clone().addScaledVector(right, -Math.cos(a) * (w + 0.6)).setY(top.y + Math.sin(a) * 5.5);
-      if (prev) L.line(mask, prev, p, col);
-      prev = p;
+    const iT = path.wrap(i + n);
+    if (path.frames) {
+      // (a curved course: the arch stands on the road's own up)
+      let prev = null;
+      for (let k = 0; k <= 12; k++) {
+        const a = (k / 12) * Math.PI;
+        const p = path.wpoint(iT, lat - Math.cos(a) * (w + 0.6), Math.sin(a) * 5.5, new THREE.Vector3());
+        if (prev) L.line(mask, prev, p, col);
+        prev = p;
+      }
+      const up = (dx, dy, ex, ey) => L.line(mask, path.wpoint(iT, lat + dx, dy, new THREE.Vector3()), path.wpoint(iT, lat + ex, ey, new THREE.Vector3()), col);
+      up(0, 1.4, 0, 4.2);
+      up(-1, 3.2, 0, 4.2);
+      up(1, 3.2, 0, 4.2);
+    } else {
+      const top = pt(path.wrap(i + n), lat, 0, new THREE.Vector3());
+      const right = new THREE.Vector3(path.rightX(path.wrap(i + n)), 0, path.rightZ(path.wrap(i + n)));
+      let prev = null;
+      for (let k = 0; k <= 12; k++) {
+        const a = (k / 12) * Math.PI;
+        const p = top.clone().addScaledVector(right, -Math.cos(a) * (w + 0.6)).setY(top.y + Math.sin(a) * 5.5);
+        if (prev) L.line(mask, prev, p, col);
+        prev = p;
+      }
+      const up = (dx, dy, ex, ey) => L.line(mask, top.clone().addScaledVector(right, dx).setY(top.y + dy), top.clone().addScaledVector(right, ex).setY(top.y + ey), col);
+      up(0, 1.4, 0, 4.2);
+      up(-1, 3.2, 0, 4.2);
+      up(1, 3.2, 0, 4.2);
     }
-    const up = (dx, dy, ex, ey) => L.line(mask, top.clone().addScaledVector(right, dx).setY(top.y + dy), top.clone().addScaledVector(right, ex).setY(top.y + ey), col);
-    up(0, 1.4, 0, 4.2);
-    up(-1, 3.2, 0, 4.2);
-    up(1, 3.2, 0, 4.2);
     this.launchers.push({ path, i, f: path.frac(i), lat, w, len: path.ds * n, mask, over: l.over ?? 50 });
   }
 
@@ -999,8 +1070,14 @@ export class TrackWorld {
     root.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), mats.wire));
     const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.45), mats.solid);
     root.add(core);
-    path.wpoint(i, lat, 1.4, root.position);
-    this.group.add(root);
+    if (path.frames) {
+      // (a curved course: it bobs and spins in the flat world, carried into the drawn one by its holder)
+      path.point(i, lat, 1.4, root.position);
+      spot(this, path, i).add(root);
+    } else {
+      path.wpoint(i, lat, 1.4, root.position);
+      this.group.add(root);
+    }
     // `at`: where it's picked up, on the flat strip the physics drives (the same place unless the road is bent there)
     const sh = { path, i, f: path.frac(i), lat, mask, root, taken: 0, y0: root.position.y, at: path.point(i, lat, 1.4, new THREE.Vector3()) };
     this.shards.push(sh);
@@ -1014,7 +1091,8 @@ export class TrackWorld {
     });
   }
 
-  buildStart() {
+  // (at: the sample the line is on. The Möbius strip has two, one a side.)
+  buildStart(at = 0) {
     const m = this.main;
     const L = this.layers;
     const hw = this.halfWidth;
@@ -1024,17 +1102,26 @@ export class TrackWorld {
         if ((k + r) % 2) continue;
         const l0 = -hw + (k * 2 * hw) / 10;
         const l1 = -hw + ((k + 1) * 2 * hw) / 10;
-        const a = m.point(r, l0, 0.05, new THREE.Vector3());
-        const b = m.point(r + 1, l0, 0.05, new THREE.Vector3());
-        const c = m.point(r + 1, l1, 0.05, new THREE.Vector3());
-        const d = m.point(r, l1, 0.05, new THREE.Vector3());
+        const a = m.wpoint(at + r, l0, 0.05, new THREE.Vector3());
+        const b = m.wpoint(at + r + 1, l0, 0.05, new THREE.Vector3());
+        const c = m.wpoint(at + r + 1, l1, 0.05, new THREE.Vector3());
+        const d = m.wpoint(at + r, l1, 0.05, new THREE.Vector3());
         L.quad(M.ALL, a, b, c, d, 0xffffff, 0.3);
       }
     }
     // gantry
-    const p = m.point(0, 0, 0, new THREE.Vector3());
-    const yaw = Math.atan2(m.thx[0], m.thz[0]);
-    const right = new THREE.Vector3(m.rightX(0), 0, m.rightZ(0));
+    if (m.frames) {
+      // (a curved course: posts and a beam on the road's own up)
+      for (const s of [-1, 1]) {
+        for (const o of [-0.5, 0.5]) L.line(M.ALL, m.wpoint(at, s * (hw + 1.5 + o), 0, new THREE.Vector3()), m.wpoint(at, s * (hw + 1.5 + o), 10, new THREE.Vector3()), s < 0 ? COLORS.red : COLORS.blue);
+      }
+      for (const y of [9.7, 11.3]) L.line(M.ALL, m.wpoint(at, -hw - 2, y, new THREE.Vector3()), m.wpoint(at, hw + 2, y, new THREE.Vector3()), COLORS.white);
+      L.quad(M.ALL, m.wpoint(at, -hw - 2, 9.7, new THREE.Vector3()), m.wpoint(at, hw + 2, 9.7, new THREE.Vector3()), m.wpoint(at, hw + 2, 11.3, new THREE.Vector3()), m.wpoint(at, -hw - 2, 11.3, new THREE.Vector3()), COLORS.white, 0.25);
+      return;
+    }
+    const p = m.point(at, 0, 0, new THREE.Vector3());
+    const yaw = Math.atan2(m.thx[at], m.thz[at]);
+    const right = new THREE.Vector3(m.rightX(at), 0, m.rightZ(at));
     for (const s of [-1, 1]) {
       const q = p.clone().addScaledVector(right, s * (hw + 1.5));
       L.box(M.ALL, q.x, q.y + 5, q.z, 1, 10, 1, yaw, s < 0 ? COLORS.red : COLORS.blue, true);
@@ -1057,8 +1144,10 @@ export class TrackWorld {
     // edge (onto a fork), it ends, or a ramp rises out of it under you. Otherwise a fork that starts level with the
     // road would grab you.
     const cur = hints._cur;
-    for (const path of this.paths) {
+    // (a rig's roads count too: platforms.js)
+    for (const path of this.rig ? this.rig.surfaces : this.paths) {
       if (path === exclude) continue;
+      if (path.box && (x < path.box[0] || x > path.box[1] || z < path.box[2] || z > path.box[3])) continue;
       // cheap bounds reject
       if (y < path.minY - 8 || y > path.maxY + 60) {
         if (!(path.id in hints)) continue;
@@ -1079,7 +1168,7 @@ export class TrackWorld {
       if (f.y > y + 1.6 || f.y < y - 7) continue;
       // a strip climbing out of the road beneath you (a ramp laid over it) takes you up
       const j = Math.min(path.N - 1, f.i + 3);
-      const ramp = !path.closed && path.id !== cur && path.py[j] - path.py[f.i] > 0.25 && f.y > y - 0.6 && Math.abs(f.lat) < path.halfW - 0.5;
+      const ramp = !path.closed && !path.extra && path.id !== cur && path.py[j] - path.py[f.i] > 0.25 && f.y > y - 0.6 && Math.abs(f.lat) < path.halfW - 0.5;
       const score = f.y + (path.id === cur ? 2.5 : 0) + (ramp ? 3 : 0);
       if (score > bestY) {
         bestY = score;
@@ -1297,6 +1386,7 @@ export class TrackWorld {
 
   update(dt, t, mode) {
     for (const fn of this.animated) fn(t, dt);
+    runFold(this, dt, t, mode);
     this.layers.update(dt, mode, t);
   }
 }

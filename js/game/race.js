@@ -4,6 +4,7 @@
 import * as THREE from '../../vendor/three.js';
 import { TrackWorld } from '../world/track.js';
 import { Racer, CARS } from '../vehicles/racer.js';
+import { SKIM } from '../vehicles/forms.js';
 import { RaceAI } from '../vehicles/ai.js';
 import { ChaseCamera } from './camera.js';
 import { Environment } from './env.js';
@@ -13,6 +14,7 @@ import { GhostRecorder, GhostCar, loadGhost, saveGhost } from './ghost.js';
 import { monoDef, medalFor, recordMedal } from './modes.js';
 import { driverOf, pick } from './story.js';
 import { Debris } from './wreck.js';
+import { setRef, curveObject } from '../world/curved.js';
 import { SpeedLines } from './speedlines.js';
 import { Feel } from './feel.js';
 import { Storms } from './storms.js';
@@ -22,9 +24,15 @@ import { Items, ITEMS } from './items.js';
 import { Reflection } from './reflect.js';
 import { Construction } from './construction.js';
 import { Quake } from './quake.js';
+import { Fold } from './fold.js';
+import { PopupBook, offPage } from './popup.js';
+import { DropTower } from './droptower.js';
+import { Pinball } from './pinball.js';
 import { chainMove, chainTick, chainEnd, shiftTiming, perfectFx, newChain, newTally } from './chain.js';
 import { PIPE } from '../world/warp.js';
+import { buildRoomFrame } from '../world/paradox.js';
 import { disposeTree } from '../core/renderer.js';
+import { PHOSPHOR } from '../world/phosphor.js';
 
 const _v = new THREE.Vector3();
 const _a = new THREE.Vector3();
@@ -42,6 +50,8 @@ const HORNS = { vector: 'honk1', scanline: 'honk2', polygon: 'honk3', chroma: 'h
 const G_AIR_RACE = 27; // racer.js G_AIR
 // recharge time of each form's move (seconds)
 const FORM_CD = { lift: 5, lance: 6, brace: 8 };
+// how many LANCEs this session have shown the SWITCHBACK hint
+let sbHints = 0;
 const NO_INPUT = { throttle: 0, brake: 0, steer: 0, drift: false, item: false, special: false, jump: false, reset: false, look: false };
 
 export class Race {
@@ -61,8 +71,18 @@ export class Race {
     this.world = new TrackWorld(def);
     this.env = new Environment(this.world);
     this.scene.add(this.env.group, this.world.group);
+    // the Möbius strip is drawn turned over (world/mobius.js): the scene is bent before each frame and put back after
+    this.mob = this.world.mob || null;
+    // a lap can be a part of the loop the engine drives (the Möbius strip's two sides are one loop)
+    this.lapSplit = def.lapSplit || 1;
     this.scene.fog = this.env.fog;
     this.scene.background = this.env.bg;
+    // the Escher room (world/rooms.js): its walls, and the passes that draw each stair on its own wall
+    if (this.world.room) {
+      this.roomFrame = buildRoomFrame(this.world);
+      this.scene.add(this.roomFrame);
+      this.world.room.attach(this.scene, this.env, this.roomFrame);
+    }
     this.cam = new ChaseCamera();
     this.cam.camera.far = 6000;
     this.cam.camera.updateProjectionMatrix();
@@ -85,6 +105,7 @@ export class Race {
     this.scene.add(this.debris.mesh);
     this.speedLines = new SpeedLines();
     this.scene.add(this.speedLines.mesh);
+    if (this.mob) for (const o of [this.env.group, this.world.layers.group, this.speedLines.mesh]) this.mob.skip.add(o);
     this.feel = new Feel(this); // drift stages, surface rumble, pass-bys (feel.js)
     this.storms = new Storms(this);
     this.traffic = new Traffic(this);
@@ -95,7 +116,19 @@ export class Race {
     this.works = new Construction(this);
     this.quake = new Quake(this);
     this.scene.add(this.works.group, this.quake.group);
+    this.fold = new Fold(this); // a course that changes pose lap by lap (HYPERCUBE)
+    // the pop-up book (PAGE TURNER): a spread per lap
+    this.book = new PopupBook(this);
+    this.scene.add(this.book.group);
+    // DROP TOWER's moving pieces and marbles, on the race clock
+    this.tower = this.world.tower ? new DropTower(this) : null;
+    if (this.tower) this.scene.add(this.tower.group);
+    // FLIPPER ALLEY's flippers, bumpers and steel balls (game/pinball.js)
+    this.pinball = this.world.pinball ? new Pinball(this) : null;
+    // a course's own moving machinery (QUARTER TURN's cube): def.live(race) -> { update(dt, p) }
+    this.live = this.world.def.live?.(this) || null;
     this.slowT = 0;
+    this.slowLen = 0.9; // (so a slow-motion beat never divides by nothing)
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
     // browser simulates only its own racers (the host also runs the AI); everyone else is a puppet fed by the network.
     this.online = opts.online || null;
@@ -147,7 +180,7 @@ export class Race {
       // best time through each third of the lap, for the results screen. The first lap's clock starts at GO, so its
       // first sector does too (the grid counts as sector 1), and a lap's three sectors add up to the lap.
       r.sectors = [Infinity, Infinity, Infinity];
-      r.sec = Math.max(0, Math.floor(r.prog * 3));
+      r.sec = Math.max(0, Math.floor(r.prog * this.lapSplit * 3));
       r.secStart = 0;
       r.secFull = true;
       if (!isPlayer && !r.puppet) {
@@ -162,7 +195,8 @@ export class Race {
         // headless staff runs: the AI drives the player's car flat out
         if (opts.autopilot) r.ai = new RaceAI(r, this.world, 1);
       }
-      this.scene.add(r.root, r.trail.mesh);
+      // (on a curved course racers and trails are drawn in the drawn world, which is moved under the viewer: curved.js)
+      (this.world.curved ? this.world.group : this.scene).add(r.root, r.trail.mesh);
       this.racers.push(r);
     }
     this.cams = [this.cam];
@@ -172,11 +206,14 @@ export class Race {
       c2.camera.updateProjectionMatrix();
       this.cams.push(c2);
     }
+    if (this.mob) for (const c of this.cams) c.mob = this.mob;
+    // a fold course (world/fold.js) carries each camera through its fold
+    for (const c of this.cams) c.fold = this.world.fold;
     this.players.forEach((p, k) => this.cams[k].snap(p));
     this.items = new Items(this);
     this.scene.add(this.items.group);
     // the lens-shift wave starts from the player's car (split-screen fades each view instead)
-    this.world.layers.waveAt = this.split ? null : this.player.pos;
+    this.world.layers.waveAt = this.split ? null : this.mob ? (this.wavePos = this.mob.map(this.player.pos, new THREE.Vector3())) : this.player.pos;
     this.events = [];
     this.lastMode = BOTH;
     // ghosts: your best run and the staff run
@@ -199,7 +236,7 @@ export class Race {
     const g = new GhostCar(data, color, label);
     if (!g.ok) return;
     g.update(0, this.player.mode);
-    this.scene.add(g.root);
+    (this.world.curved ? this.world.group : this.scene).add(g.root);
     this.ghosts.push(g);
   }
 
@@ -220,30 +257,68 @@ export class Race {
     return msg;
   }
 
-  // Each form's own move (Y / △, Z): the Skimmer LIFTs off the road and floats over whatever's there, the Blade
-  // LANCEs forward and runs straight through whoever's in front, the pair BRACEs behind a shield that sends a hit
-  // back at whoever threw it. One move, then a few seconds to recharge.
+  // Each form's own move (Y / △, Z): the Skimmer LIFTs (one tap HOVERs over the road, a quick second tap JUMPs high
+  // over a wall or a block), the Blade LANCEs forward and runs straight through whoever's in front, the pair BRACEs
+  // behind a shield that sends a hit back at whoever threw it. One move, then a few seconds to recharge.
   formMove(r) {
-    if (this.state !== 'race' || r.finished || r.respawnT > 0 || (r.formCd || 0) > 0 || r.empT > 0) return false;
+    if (this.state !== 'race' || r.finished || r.respawnT > 0 || r.empT > 0) return false;
     const near = this.near(r);
+    // the second tap of a LIFT, while its hover is still young: JUMP (the hover's recharge already running)
+    if (r.mode === BLUE && r.hoverT > 0 && !r.hopT && this.t - (r.hoverAt ?? -9) < SKIM.doubleTap) {
+      const base = r.gnd.onRoad ? r.gnd.y : (r.hoverBase ?? r.pos.y);
+      const g = 27 * SKIM.hopG;
+      r.vel.y = Math.sqrt(2 * g * Math.max(0.5, SKIM.hopH - Math.max(0, r.pos.y - base)));
+      r.hoverT = 0;
+      r.hopT = 1.6;
+      if (near) this.debris.sparks(r.pos, _a.set(0, -1, 0), 34, 0x9ad8ff, 16, base);
+      if (r.isPlayer) {
+        this.emitP(r, 'popup', { text: 'JUMP', color: '#4ab0ff', small: true });
+        this.app.audio.play('turbo', 2);
+        this.camOf(r).fovPunch(6);
+      }
+      return true;
+    }
+    // the second tap of a LANCE, while it's still young: SWITCHBACK. The Blade turns end for end round its wheel (the
+    // cab spins one way, the wheel the other), the LANCE cancelled, and goes back the way it came at the same speed
+    // (not round a pipe wall or through a corkscrew, where the road's own frame holds the Blade's facing)
+    if (r.mode === RED && r.lanceT > 0 && this.t - (r.lanceAt ?? -9) < SKIM.doubleTap && !r.vis?.on) {
+      r.lanceT = 0;
+      r.boostTime = 0;
+      r.switchback();
+      if (near) this.debris.sparks(_v.copy(r.pos).setY(r.pos.y + 0.3), _a.set(0, 1, 0), 30, 0xff4a6a, 14, r.gnd.y);
+      if (r.isPlayer) {
+        this.emitP(r, 'popup', { text: 'SWITCHBACK', color: '#ff4a6a', small: true });
+        this.app.audio.play('phase');
+        this.camOf(r).fovPunch(5);
+      }
+      return true;
+    }
+    if ((r.formCd || 0) > 0) return false;
     if (r.mode === BLUE) {
-      if (!r.grounded) return false;
-      r.vel.addScaledVector(_v.set(r.gnd.nx, r.gnd.ny, r.gnd.nz), 12);
+      // (a moment off a crest still counts as on the road)
+      if (!r.grounded && r.airTime > 0.25) return false;
+      r.vel.addScaledVector(_v.set(r.gnd.nx, r.gnd.ny, r.gnd.nz), 5);
       r.grounded = false;
       r.airTime = 0.01;
-      r.liftT = 1.6;
+      r.hoverT = SKIM.hoverT;
+      r.hoverAt = this.t;
+      r.hoverBase = r.gnd.onRoad ? r.gnd.y : r.pos.y;
+      r.hopT = 0;
       r.formCd = FORM_CD.lift;
       if (near) this.debris.sparks(r.pos, _a.set(0, -1, 0), 26, 0x4ab0ff, 12, r.gnd.y);
       if (r.isPlayer) {
-        this.emitP(r, 'popup', { text: 'LIFT', color: '#4ab0ff', small: true });
+        this.emitP(r, 'popup', { text: 'HOVER', color: '#4ab0ff', small: true });
         this.app.audio.play('boost');
       }
     } else if (r.mode === RED) {
       r.lanceT = 0.7;
+      r.lanceAt = this.t;
       r.giveBoost(0.7, 1.45);
       r.formCd = FORM_CD.lance;
       if (r.isPlayer) {
         this.emitP(r, 'popup', { text: 'LANCE', color: '#ff4a6a', small: true });
+        // the first few LANCEs of a session say what a second tap does
+        if (sbHints++ < 3) this.emitP(r, 'popup', { text: 'TAP AGAIN: SWITCHBACK', color: '#ff9aae', small: true });
         this.app.audio.play('turbo', 2);
         this.camOf(r).fovPunch(10);
       }
@@ -288,7 +363,6 @@ export class Race {
   // the form moves ticking, and how they look
   formTick(r, dt) {
     if (r.formCd > 0) r.formCd -= dt;
-    if (r.liftT > 0) r.liftT -= dt;
     if (r.lanceT > 0) {
       r.lanceT -= dt;
       if (this.near(r) && Math.random() < 0.7) this.debris.sparks(_v.copy(r.pos).setY(r.pos.y + 0.5), _a.set(Math.sin(r.yaw), 0, Math.cos(r.yaw)), 3, 0xff4a6a, 30, r.gnd.y);
@@ -311,6 +385,16 @@ export class Race {
 
   // Rivals use their form's move by a few simple rules.
   formAI(r) {
+    // a LIFT's second tap, a beat after the first: the rival JUMPs the block it saw
+    if (r.aiHopAt && this.t >= r.aiHopAt) {
+      r.aiHopAt = 0;
+      this.formMove(r);
+    }
+    // a LANCE's second tap: the rival SWITCHBACKs
+    if (r.aiFlipAt && this.t >= r.aiFlipAt) {
+      r.aiFlipAt = 0;
+      this.formMove(r);
+    }
     if ((r.formCd || 0) > 0 || this.state !== 'race' || r.finished) return;
     r.formThink = (r.formThink || 0) - 1;
     if (r.formThink > 0) return;
@@ -325,16 +409,23 @@ export class Race {
     };
     if (r.mode === BLUE && r.grounded && r.speed > 30) {
       for (const o of this.world.obstacles) {
-        if (o.path !== P || o.broken || !solidIn(o.mask, BLUE) || o.type === 'wall' || o.door) continue;
+        if (o.path !== P || o.broken || !solidIn(o.mask, BLUE) || o.type === 'wall' || o.door || offPage(o, r)) continue;
         let di = o.i - tr.i;
         if (P.closed) di = ((di % P.N) + P.N + P.N / 2) % P.N - P.N / 2;
         const d = di * P.ds;
         if (d > 10 && d < 10 + r.speed * 0.45 && Math.abs(o.lat - tr.lat) < o.w + 1.5) {
-          this.formMove(r);
+          // a low block: a hover clears it; a tall one wants the jump
+          if (this.formMove(r) && o.h + 1 > SKIM.hoverH) r.aiHopAt = this.t + 0.15;
           return;
         }
       }
     } else if (r.mode === RED) {
+      // knocked round and running back down the road at speed: tap, tap, SWITCHBACK, and carry the speed the right way
+      const along = r.vel.x * P.thx[tr.i] + r.vel.z * P.thz[tr.i];
+      if (r.grounded && along < -12 && (r.wrongWay || 0) > 0.4) {
+        if (this.formMove(r)) r.aiFlipAt = this.t + 0.12;
+        return;
+      }
       if (this.racers.some((o) => o !== r && o.respawnT <= 0 && (({ d, s }) => d > 3 && d < 16 && s < 2.5)(ahead(o)))) this.formMove(r);
     } else if (r.mode === BOTH) {
       if (this.racers.some((o) => o !== r && o.respawnT <= 0 && o.pos.distanceToSquared(r.pos) < 9 * 9) && (r.hp < 75 || Math.random() < 0.3)) this.formMove(r);
@@ -519,6 +610,7 @@ export class Race {
     if (r.respawnT > 0) return;
     chainEnd(this, r);
     r.falls = (r.falls || 0) + 1;
+    r.loopFalls = this.raceTime - (r.backAt ?? -99) < 8 ? (r.loopFalls || 0) + 1 : 0;
     r.respawnT = 1.1;
     r.root.visible = false;
     if (r.isPlayer) {
@@ -678,7 +770,22 @@ export class Race {
     if (into > 8) this.debris.burst(r.root, _a.copy(dir).multiplyScalar(into * 0.4).add(r.vel), 6, r.gnd.y, Math.min(0.18, into * 0.008), 1.6);
   }
 
+  // A rival put back a little way further round the lap (lap progress moves with it, so nothing is skipped or
+  // counted twice): for one that keeps sticking or falling at the same spot.
+  nudgeOn(r, k = 0.015) {
+    r.lastU = (r.lastU + k) % 1;
+    r.prog += k;
+    r.headway = r.prog;
+  }
+
   respawn(r) {
+    // a rival that falls again straight after it's put back (a respawn spot that's no road for it right now: a page
+    // that isn't there yet, a piece that's moved) goes a little further on the third time, so it never loops
+    if (r.ai && !r.isPlayer && r.loopFalls >= 2) {
+      r.loopFalls = 0;
+      this.nudgeOn(r);
+    }
+    r.backAt = this.raceTime;
     const u = r.lastU;
     const sp = this.world.respawnPoint(u, r.mono ? r.mode : BOTH);
     r.reset(sp.pos, sp.yaw);
@@ -687,6 +794,9 @@ export class Race {
     // be a loop above or below, and you'd fall straight back out
     r.hints[this.world.main.id] = sp.i;
     r.hints._cur = this.world.main.id;
+    // and the road record itself: until the first step on the ground it still says where the car fell from, and a
+    // rival reading the road from there can shift to a lens that has no road at the respawn point (a fall loop)
+    r.track = { path: this.world.main, i: sp.i, f: 0, lat: sp.lat };
     if (r.mono) r.energy = Math.max(r.energy, SHIFT.monoCost);
     else {
       r.mode = BOTH;
@@ -700,7 +810,8 @@ export class Race {
     // traffic and the police convoy pass through you while you blink back in
     r.respawnGrace = 1.5;
     r.vel.set(Math.sin(sp.yaw), 0, Math.cos(sp.yaw)).multiplyScalar(12);
-    if (r.ai) Object.assign(r.ai, { path: this.world.main, _branch: null, turn: 0, pinned: 0, planT: 0 });
+    // (the lens it wanted where it fell is forgotten too: it reads the road again from here before it shifts)
+    if (r.ai) Object.assign(r.ai, { path: this.world.main, _branch: null, turn: 0, pinned: 0, planT: 0, wantMode: r.mode, think: 0, modeHold: 0 });
     // the car draws itself back in, line by line, with a flash where it lands
     r.drawIn = 0;
     if (this.near(r)) this.debris.sparks(r.pos, _v.set(0, 0, 0), 28, 0xffffff, 12, r.pos.y - 0.3);
@@ -719,6 +830,9 @@ export class Race {
     if (!tr || !r.grounded || drift || r.drift.active || r.speed < 8) return steer;
     const P = tr.path;
     if (P.warpK?.[tr.i] > 0) return steer;
+    // (a rig's roads open and shut: where a way off the edge is open to this craft and it's steering for it, that's
+    // meant, and the assist doesn't fight it: platforms.js)
+    if (this.world.rig?.assistOff(r, tr, steer)) return steer;
     const j = P.wrap(tr.i + Math.round((6 + r.speed * 0.25) / P.ds));
     let err = r.yaw - Math.atan2(P.thx[j], P.thz[j]);
     err = Math.atan2(Math.sin(err), Math.cos(err));
@@ -751,6 +865,7 @@ export class Race {
   // ------------------------------------------------------------ per frame
   update(dt) {
     this.t += dt;
+    this.mob?.undo();
     if (this.radioLater && this.t >= this.radioLater.t) {
       const q = this.radioLater;
       this.radioLater = null;
@@ -842,27 +957,44 @@ export class Race {
       }
       this.lastPlace = place;
     }
-    for (const g of this.ghosts) g.update(this.raceTime, p.mode);
+    for (const g of this.ghosts) {
+      g.update(this.raceTime, p.mode);
+      if (this.world.curved) curveObject(this.world, g.root, g);
+    }
     this.debris.update(sim);
     this.storms.update(sim, p);
     this.works.update(sim);
     this.quake.update(sim, p);
+    this.fold.update(sim);
+    this.book.update(sim);
+    this.tower?.update(sim, p);
+    this.live?.update(sim, p);
+    this.world.dominoes?.update(this, sim);
     this.traffic.update(sim, p);
     this.police.update(sim, p);
+    this.world.mirrors?.update(this);
+    this.pinball?.update(sim);
     this.items.update(sim);
 
     // visuals
     this.app.net?.applyPuppets(this);
     for (const r of this.racers) if (r.puppet ? r.root.visible : r.respawnT <= 0) r.syncVisual(dt);
     for (const r of this.racers) if (r.drawIn !== undefined && r.respawnT <= 0) this.drawIn(r, dt);
+    this.world.fold?.follow(this, dt);
+    if (this.world.curved) setRef(this.world, p);
     if (this.split) {
       // the obstacles move once; each view then fades the worlds for its own player's lens (see views())
       for (const fn of this.world.animated) fn(this.t, dt);
       this.players.forEach((pl, k) => {
+        this.world.fold?.useView(k, pl);
+        this.world.fold?.update(dt, this.t, pl.mode);
         this.world.layers.useView(k);
         this.world.layers.update(dt, pl.mode, this.t);
       });
-    } else this.world.update(dt, this.t, p.mode);
+    } else {
+      if (this.wavePos) this.mob.map(p.pos, this.wavePos);
+      this.world.update(dt, this.t, p.mode);
+    }
     this.players.forEach((pl, k) => {
       const cam = this.cams[k];
       if (this.state === 'intro') {
@@ -899,9 +1031,14 @@ export class Race {
     cam.getWorldDirection(_v);
     const fl = Math.hypot(_v.x, _v.z) || 1;
     this._listener ||= { pos: new THREE.Vector3(), fwd: { x: 0, z: 1 }, vel: p.vel };
-    this._listener.pos.copy(cam.position);
+    this._listener.pos.copy(this.mob ? this.cam.pos : cam.userData.flat || cam.position);
     this._listener.fwd.x = _v.x / fl;
     this._listener.fwd.z = _v.z / fl;
+    if (this.mob) {
+      // (heard in the flat course, where the cars are)
+      this._listener.fwd.x = Math.sin(this.cam.heading);
+      this._listener.fwd.z = Math.cos(this.cam.heading);
+    }
     this._listener.vel = p.vel;
     // player 2 is heard like a rival, from player 1's camera
     A.rivalEngines(this._listener, this.racers, this.split ? p : null);
@@ -1021,10 +1158,15 @@ export class Race {
   // Before each frame is drawn: the wet-road reflection (one view, high quality only).
   beforeRender(renderer) {
     const gl = renderer.renderer;
-    const on = !this.split && renderer.quality === 'high';
+    const on = !this.split && renderer.quality === 'high' && !this.world.room;
+    PHOSPHOR.uDetail.value = renderer.quality === 'low' ? 0 : 1;
     const size = gl.getDrawingBufferSize(_s);
     const p = this.player;
-    this.reflection.render(gl, this.scene, this.cam.camera, p.gnd?.y ?? p.pos.y, on ? 0.2 : 0, size.x, size.y, this.t);
+    // (no wet-road mirror on a road that's drawn turned over or folded)
+    this.reflection.render(gl, this.scene, this.cam.camera, p.gnd?.y ?? p.pos.y, on && !this.mob && !this.world.fold ? 0.2 : 0, size.x, size.y, this.t);
+    this.mob?.apply(this.scene);
+    // the mirrors (world/mirrors.js): one view here; split-screen draws them per view (views())
+    if (!this.split) this.world.mirrors?.render(gl, this.scene, this.cam.camera, p.mode, { quality: renderer.quality, t: this.t });
   }
 
   // What to draw: one full-screen view, or two stacked views (player 1 on top), each prepared for its own lens.
@@ -1037,12 +1179,16 @@ export class Race {
       w: 1,
       h: 0.5,
       before: () => {
+        this.world.fold?.useView(k, pl);
+        if (this.world.curved) setRef(this.world, pl);
         this.world.layers.useView(k);
         this.world.layers.update(0, pl.mode, this.t);
         this.env.useView(k);
         this.env.update(this.dtLast || 0, this.t, this.cams[k].camera);
         this.traffic.render(pl.mode, pl);
         this.police.render(pl.mode, pl);
+        this.world.mirrors?.render(this.app.renderer.renderer, this.scene, this.cams[k].camera, pl.mode, { quality: this.app.renderer.quality, t: this.t, instant: true, split: true });
+        this.book.render(k, pl);
       },
     }));
   }
@@ -1052,6 +1198,8 @@ export class Race {
 
   step(dt) {
     const w = this.world;
+    // moving platforms slide on the race clock and carry whoever's on them (world/platforms.js)
+    w.rig?.step(dt, this);
     for (const r of this.racers) {
       if (r.puppet) continue;
       if (r.respawnT > 0) {
@@ -1064,7 +1212,7 @@ export class Race {
         if (r.finished) {
           r.ai.update(dt);
           r.ctl.throttle *= 0.6;
-        } else if (this.state === 'race') r.ai.update(dt);
+        } else if (this.state === 'race' || this.state === 'finished') r.ai.update(dt); // (rivals race on to the line behind your results)
       }
       if (r.finished && r.isPlayer && !r.ai) {
         // autopilot after the flag
@@ -1074,12 +1222,14 @@ export class Race {
       }
       r.update(dt, w, this);
       if (r.respawnT > 0) continue;
+      w.rig?.hold(r, this);
       this.hull(r, dt);
       if (r.launch) this.flyLaunch(r, dt);
       this.formTick(r, dt);
       if (r.ai) this.formAI(r);
       // wedged against something: put rivals back on the road (the player has RESET)
-      if (this.state === 'race' && !r.finished && Math.abs(r.speed) < 3) {
+      // (not a craft waiting on a platform for its road to line up)
+      if ((this.state === 'race' || this.state === 'finished') && !r.finished && Math.abs(r.speed) < 3 && !w.rig?.parked(r)) {
         r.stuckT = (r.stuckT || 0) + dt;
         if (r.stuckT > (r.isPlayer ? 6 : 2.5)) {
           r.stuckT = 0;
@@ -1087,7 +1237,27 @@ export class Race {
           continue;
         }
       } else r.stuckT = 0;
+      // a rival that's made no headway round the lap for 12 s (pinned against a moving piece or a rail while still
+      // reading as moving, so the check above never fires; or put back each time on the spot it sticks on) is put
+      // back on the road a little further round, so it always finishes
+      if (r.ai && !r.isPlayer && (this.state === 'race' || this.state === 'finished') && !r.finished && !w.rig?.parked(r) && !r.offLoop) {
+        if (r.prog > (r.headway ?? -Infinity) + 0.004) {
+          r.headway = r.prog;
+          r.headwayT = 0;
+          r.headwayHits = 0;
+        } else if ((r.headwayT = (r.headwayT || 0) + dt) > 12) {
+          // (the first time, back on the road where it is; stuck there again, a little further on)
+          r.headwayT = 0;
+          if (r.headwayHits++ > 0) this.nudgeOn(r);
+          this.onFell(r);
+          continue;
+        }
+      }
+      this.tower?.step(r, dt);
+      if (r.respawnT > 0) continue;
       this.features(r, dt);
+      this.world.dominoes?.racer(this, r, dt);
+      if (r.respawnT > 0) continue;
       this.moves(r, dt);
       this.progress(r, dt);
     }
@@ -1101,7 +1271,7 @@ export class Race {
     if (!tr) return;
     const P = tr.path;
     for (const o of w.obstacles) {
-      if (o.path !== P || o.broken || r.beamT > 0) continue;
+      if (o.path !== P || o.broken || r.beamT > 0 || offPage(o, r)) continue;
       let di = tr.i - o.i;
       if (P.closed) {
         if (di > P.N / 2) di -= P.N;
@@ -1121,7 +1291,15 @@ export class Race {
       }
       const dlat = tr.lat - o.lat;
       if (Math.abs(dlat) > o.w + r.halfW) continue;
-      if (r.pos.y - P.py[o.i] > o.h + 1) continue;
+      if (r.pos.y - P.py[o.i] > o.h + 1) {
+        // the Skimmer LIFTed clean over something solid in its lens: HOP OVER, a link in the SHIFT CHAIN
+        if ((r.hopT > 0 || r.hoverT > 0) && r.hopOver !== o && solidIn(o.mask, r.mode)) {
+          r.hopOver = o;
+          this.onMove(r, 'hop', { type: o.type });
+          if (r.isPlayer) this.app.audio.play('phase');
+        }
+        continue;
+      }
       if (!solidIn(o.mask, r.mode)) {
         // phased straight through it
         if (r.inside !== o) {
@@ -1298,6 +1476,8 @@ export class Race {
         const d = _v.length();
         const min = A.radius + B.radius;
         if (d > min || d < 1e-4) continue;
+        // LENS TAG: a touch can pass the tag, and IT phases through a hunter who's only seeing its shimmer
+        if (this.tag?.contact(A, B)) continue;
         _v.multiplyScalar(1 / d);
         // heavier cars shove lighter ones (GREAT WEDGE weighs as much as two wedges)
         if (A.puppet && B.puppet) continue;
@@ -1352,25 +1532,38 @@ export class Race {
     const P = tr.path;
     const along = r.vel.x * P.thx[tr.i] + r.vel.z * P.thz[tr.i];
     const facing = Math.sin(r.yaw) * P.thx[tr.i] + Math.cos(r.yaw) * P.thz[tr.i];
-    if (along < -2 || (along <= 2 && facing < -0.3)) r.wrongWay = Math.min(2, (r.wrongWay || 0) + dt);
+    // (a platform's road is driven either way)
+    if (P.twoWay) r.wrongWay = Math.max(0, (r.wrongWay || 0) - dt * 3);
+    else if (along < -2 || (along <= 2 && facing < -0.3)) r.wrongWay = Math.min(2, (r.wrongWay || 0) + dt);
     else if (along > 2) r.wrongWay = Math.max(0, (r.wrongWay || 0) - dt * 3);
     if (tr.path !== r.lastPath) {
       if (!tr.path.closed) r.branchUses = (r.branchUses || 0) + 1;
       r.lastPath = tr.path;
     }
+    // A rig's roads (world/platforms.js) move, and lead anywhere: progress waits where you left the loop, and is
+    // settled where you rejoin it. Coming out up to 0.62 of a lap further round is a shortcut that far forward
+    // (whichever way round the middle of the course you went); anything else put you out behind where you went in.
+    if (P.extra) {
+      r.offLoop = true;
+      return;
+    }
     const u = tr.path.mainU(tr.i);
     let du = u - r.lastU;
     if (du > 0.5) du -= 1;
     if (du < -0.5) du += 1;
-    // a branch maps linearly onto the main loop; reject teleport-sized jumps (falls onto a lower strip)
-    if (Math.abs(du) > 0.15) {
+    if (r.offLoop) {
+      r.offLoop = false;
+      const fwd = (((u - r.lastU) % 1) + 1) % 1;
+      du = fwd <= 0.62 ? fwd : fwd - 1;
+    } else if (Math.abs(du) > 0.15) {
+      // a branch maps linearly onto the main loop; reject teleport-sized jumps (falls onto a lower strip)
       r.lastU = u;
       return;
     }
     r.prog += du;
     r.lastU = u;
     // sectors: a third of the lap driven whole, start to end, counts toward its best
-    const sec = Math.max(0, Math.floor(r.prog * 3));
+    const sec = Math.max(0, Math.floor(r.prog * this.lapSplit * 3));
     if (sec !== r.sec && !r.finished) {
       if (sec === r.sec + 1 && r.secFull) {
         const k = ((r.sec % 3) + 3) % 3;
@@ -1380,7 +1573,7 @@ export class Race {
       r.sec = sec;
       r.secStart = this.raceTime;
     }
-    const lap = Math.floor(r.prog);
+    const lap = Math.floor(r.prog * this.lapSplit);
     if (lap > r.lap && !r.finished) {
       const lt = this.raceTime - r.lapStart;
       r.bestLap = Math.min(r.bestLap, lt);
@@ -1471,6 +1664,7 @@ export class Race {
   dispose() {
     disposeTree(this.scene);
     this.reflection.dispose();
+    this.world.mirrors?.dispose();
   }
 }
 

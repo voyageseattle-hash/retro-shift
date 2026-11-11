@@ -20,6 +20,12 @@ export const FORMS = {
   // wide and light: a real glide off anything it leaves at speed, and no drag on water
   [BLUE]: { halfW: 1.4, cling: 0, glide: 1, water: 0 },
 };
+// The Skimmer's LIFT (race.js formMove). One tap HOVERs: it rises to `hoverH` over the road and holds there for
+// `hoverT` seconds, level over a hole, steering like a glide; high enough to clear traffic and the low blocks.
+// A second tap within `doubleTap` seconds JUMPs: a short, heavy hop (`hopG` x gravity, no glide on the way down)
+// to `hopH`, high enough to clear a lens wall (4.2 m, +1 grace) or any block, if you time it. Pillars and the
+// slit stand taller than that, so the Blade's route stays the Blade's.
+export const SKIM = { hoverH: 3.4, hoverT: 1.5, doubleTap: 0.4, hopH: 7, hopG: 1.25 };
 
 // Each craft's pair: deck plan (nose width, tail width, length), deck height, fans, wheel size and spokes, fin,
 // rear wing (low: a low wing on tall endplates; high: a high wing on pylons; pylon: a mid wing on twin pylons).
@@ -34,6 +40,15 @@ const VARIANT = {
   dash: { nose: 0.3, tail: 0.8, len: 4.4, h: 0.3, fans: 1, r: 0.6, spokes: 6, fin: 'swept', wing: 'low', kit: 'pencil' },
   greatwedge: { nose: 1.0, tail: 1.45, len: 4.6, h: 0.55, fans: 2, r: 0.7, spokes: 10, fin: 'tall', wing: 'high', kit: 'shark' },
 };
+
+// the Blade's SWITCHBACK: how long the model takes to twist round to its new facing (the physics turns at once)
+export const SWITCHBACK_TIME = 0.38;
+// how the SWITCHBACK looks (the user picked 'spin'; the others are kept in case that changes):
+//   'spin'   no roll: the cab spins flat half a turn one way while the wheel spins the other
+//   'twist'  a Möbius half twist: the whole Blade swings round while rolling once over, with a small hop
+//   'upright' the 'twist' roll for the cab, while the wheel stays upright in its lane
+export const SWITCHBACK_STYLE = 'spin';
+const _q = new THREE.Quaternion();
 
 const SLOT = 0.42; // the channel's half width
 const DECK_Y = 0.12; // the skirt's height
@@ -750,7 +765,8 @@ export function addForms(model, carId, paint, alpha = 1) {
 
 // Per frame: each half eases toward being there (1) or not (0) for the current lens, and moves as it goes:
 // the deck halves slide apart and drop away, the Blade folds down into the channel and the cover slides over.
-export function updateForms(model, mode, dt, speed, bob, body) {
+// `sb` (the Blade SWITCHBACKing): k from 0 to 1 through the turn, dir the way the cab spins.
+export function updateForms(model, mode, dt, speed, bob, body, sb = null) {
   const P = model.pair;
   if (!P) return;
   const want = { red: mode !== BLUE ? 1 : 0, blue: mode !== RED ? 1 : 0 };
@@ -788,11 +804,42 @@ export function updateForms(model, mode, dt, speed, bob, body) {
   // the Blade folds down into the channel, squashing flat, as it leaves; alone, it leans into turns like a bike
   const B = P.blade.g;
   B.visible = kr > 0.01;
-  B.position.y = -(1 - kr) * 0.5;
+  B.position.set(0, -(1 - kr) * 0.5, 0);
   B.scale.set(1, Math.max(0.05, kr), 1);
+  B.rotation.order = 'YZX';
+  B.rotation.y = 0;
   B.rotation.z = body.rotation.z * 2.4 * (1 - kb);
+  const ease = sb ? (sb.k < 0.5 ? 2 * sb.k * sb.k : 1 - 2 * (1 - sb.k) * (1 - sb.k)) : 0;
+  if (sb) {
+    // the cab swings half a turn to its new facing (the model starts at the old facing, half a turn back from the
+    // new one), round the wheel's hub
+    B.rotation.y = -Math.PI * (1 - ease) * sb.dir;
+    if (SWITCHBACK_STYLE !== 'spin') {
+      // rolling once over like a band twisting, and hopping clear of the road at the middle so the roll never
+      // sinks into it
+      B.rotation.z += TAU * ease * sb.dir;
+      B.position.y += Math.sin(Math.PI * sb.k) * 0.5;
+    }
+    const hub = P.blade.wheel.position;
+    _e1.copy(hub).applyEuler(B.rotation);
+    B.position.x += hub.x - _e1.x;
+    B.position.y += hub.y - _e1.y;
+    B.position.z += hub.z - _e1.z;
+  }
+  // the wheel: it rolls with the road, and through a SWITCHBACK its roll slams from the old way into the new
+  let rate = speed / P.blade.r;
+  if (sb) rate *= sb.k < 0.3 ? -1 + sb.k : sb.k > 0.55 ? 1 : -0.7 + (1.7 * (sb.k - 0.3)) / 0.25;
+  P.blade.spin = ((P.blade.spin || 0) + rate * dt) % TAU;
+  const W = P.blade.wheel;
+  W.quaternion.setFromAxisAngle(_e2.set(1, 0, 0), P.blade.spin);
+  if (sb && SWITCHBACK_STYLE === 'spin') {
+    // spinning the other way to the cab: a full turn against it, so the two cross like halves of a twisting band
+    W.quaternion.premultiply(_q.setFromAxisAngle(_e1.set(0, 1, 0), -TAU * ease * sb.dir));
+  } else if (sb && SWITCHBACK_STYLE === 'upright') {
+    // undo the cab's turn and roll: the wheel stays upright in its lane while the cab twists round it
+    W.quaternion.premultiply(_q.setFromEuler(B.rotation).invert());
+  }
   P.blade.H.setOpacity(kr);
   P.blade.tyreMat.opacity = 0.9 * kr * P.blade.H.alpha;
-  P.blade.wheel.rotation.x += (speed / P.blade.r) * dt;
   for (const f of P.deck.fans) f.rotation.z += (6 + Math.abs(speed) * 0.4) * dt;
 }

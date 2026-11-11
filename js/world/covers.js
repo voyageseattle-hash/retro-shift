@@ -1,7 +1,8 @@
 // Covers for the lens-only routes. A blue-only shortcut is hidden in the red world: in BOTH and RED a billboard
 // stands across its mouth and a row of red buildings fills the ground it runs over, so all you see is skyline.
 // Shift to BLUE and the red world goes, taking the cover with it, and the road is there. A red-only route gets
-// blue cover the same way. (Grid City's rooftops and the Shift Tunnels hatch have their own.)
+// blue cover the same way. (Grid City's rooftops and the Shift Tunnels hatch have their own, and a route with
+// `cover: false` hides itself: the Hypercube's are beams of the tesseract until you look through their lens.)
 
 import * as THREE from '../../vendor/three.js';
 import { M, RED, BLUE, colorForMask } from './shift.js';
@@ -25,12 +26,14 @@ function offRoads(world, skip, x, z, y, r) {
 }
 
 export function buildCovers(world) {
+  // (a curved course hides its own lens routes: these covers stand on a flat floor)
+  if (world.curved) return;
   const main = world.main;
   const L = world.layers;
   let n = 0;
   for (const b of world.paths) {
     const d = b.def;
-    if (b === main || !d || d.hatch || d.facade || (d.mask !== M.RO && d.mask !== M.BO)) continue;
+    if (b === main || !d || d.hatch || d.facade || d.cover === false || (d.mask !== M.RO && d.mask !== M.BO)) continue;
     const cover = d.mask === M.BO ? M.R : M.B; // the other world's colour, there in BOTH and that lens
     const lens = d.mask === M.BO ? BLUE : RED; // the lens that takes it away
     const fr = {};
@@ -61,7 +64,9 @@ export function buildCovers(world) {
     L.box(cover, c.x, c.y + 1.2 + H / 2, c.z, W, H, 0.6, yaw, null, true);
     const ux = Math.cos(yaw);
     const uz = -Math.sin(yaw);
-    for (const s of [-1, 1]) {
+    // (a strip with another world under it, mobius.js, has no floor to stand posts and buildings on)
+    const floats = !!world.mob;
+    for (const s of floats ? [] : [-1, 1]) {
       const px = c.x + ux * s * (W / 2 - 0.4);
       const pz = c.z + uz * s * (W / 2 - 0.4);
       L.tower(cover, px, world.floorY, pz, 0.8, c.y + 1.2 - world.floorY, 0.8, yaw);
@@ -69,7 +74,7 @@ export function buildCovers(world) {
 
     // buildings over the ground it runs across: their roofs carry the road in its own lens
     const step = 4;
-    for (let j = j0 + 6; j <= j1 - 2; j += step) {
+    for (let j = j0 + 6; j <= j1 - 2 && !floats; j += step) {
       const p = b.point(j, 0, 0, new THREE.Vector3());
       const h = p.y - world.floorY - 0.4;
       if (h < 4) continue;

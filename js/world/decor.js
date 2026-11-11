@@ -3,13 +3,22 @@
 
 import * as THREE from '../../vendor/three.js';
 import { M, COLORS, RED, solidIn } from './shift.js';
+import { mobiusDecor } from './mobius.js';
+import { buildDreamCity } from './dreamcity.js';
+import { tesseractDecor } from './tesseract.js';
+import { decorParadox } from './paradox.js';
+import { buildBook } from './popupbook.js';
+import { buildDropTower } from './marblerun.js';
+import { dominoDecor } from './dominoes.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const UP = V(0, 1, 0);
 
 export function buildDecor(world) {
   const kind = world.def.decor || 'core';
-  const fn = DECOR[kind] || DECOR.core;
+  if (kind === 'mobius') return mobiusDecor(world);
+  // (a course can bring its own scenery: decor as a function)
+  const fn = typeof kind === 'function' ? kind : world.def.decorFn || DECOR[kind] || DECOR.core;
   fn(world, world.layers, world.main, world.rng);
 }
 
@@ -36,6 +45,19 @@ function clear(world, p, r) {
   return true;
 }
 
+// Would a tower `h` tall at p reach up into a road above it? clear() only looks within 40 m of the base, so a
+// raised shortcut higher than that could have a skyscraper growing through it.
+function roadOver(world, p, r, h) {
+  for (const path of world.paths) {
+    for (let i = 0; i < path.N; i += 3) {
+      const dx = path.px[i] - p.x;
+      const dz = path.pz[i] - p.z;
+      if (dx * dx + dz * dz < (path.halfW + r) ** 2 && path.py[i] > p.y && path.py[i] < p.y + h + 4) return true;
+    }
+  }
+  return false;
+}
+
 const alt = (i, s) => ((i + (s > 0 ? 1 : 0)) % 2 ? M.R : M.B);
 
 // Arches spanning the road at sample i.
@@ -46,6 +68,17 @@ function arch(L, main, i, mask, r, width = 2.2, color = null, arc = Math.PI, a0 
 }
 
 const DECOR = {
+  // 13 DREAM FOLD: a street-level city in districts that move between laps (dreamcity.js)
+  dream: buildDreamCity,
+  // 16 HYPERCUBE: the tesseract's own frame (tesseract.js)
+  tesseract: tesseractDecor,
+  // 14 RELATIVITY ROOM: stair stringers, spiral columns and arches (paradox.js)
+  paradox: (world, L) => decorParadox(world, L),
+  // 21 DROP TOWER: the marble run and its moving pieces (marblerun.js)
+  marblerun: buildDropTower,
+
+  // 18 TOPPLE RUN: the rows that stand still (dominoes.js)
+  domino: dominoDecor,
   // 01 CORE CIRCUIT: big red and blue arches, a skyline at the edges.
   core(world, L, main, rng) {
     for (let i = 20; i < main.N; i += 70) {
@@ -58,7 +91,10 @@ const DECOR = {
       q.y = world.floorY;
       if (!clear(world, q, 10)) return;
       const h = 20 + rng() * 70;
-      L.tower(alt(i, s), q.x, q.y, q.z, 8 + rng() * 8, h, 8 + rng() * 8, rng() * 3);
+      const w = 8 + rng() * 8;
+      const d = 8 + rng() * 8;
+      const yaw = rng() * 3;
+      if (!roadOver(world, q, 10, h)) L.tower(alt(i, s), q.x, q.y, q.z, w, h, d, yaw);
     });
   },
 
@@ -79,7 +115,8 @@ const DECOR = {
     beside(main, 11, 30, (p, i, s) => {
       p.y = world.floorY;
       if (!clear(world, p, 14)) return;
-      L.tower(alt(i, s), p.x, p.y, p.z, 10, 30 + rng() * 60, 10, 0);
+      const h = 30 + rng() * 60;
+      if (!roadOver(world, p, 14, h)) L.tower(alt(i, s), p.x, p.y, p.z, 10, h, 10, 0);
     });
   },
 
@@ -194,12 +231,16 @@ const DECOR = {
       q.y = world.floorY;
       if (!clear(world, q, 6)) return;
       const h = p.y - world.floorY + 12 + rng() * 80;
-      L.tower(alt(i, s), q.x, q.y, q.z, 6 + rng() * 6, h, 6 + rng() * 6, Math.atan2(main.thx[i], main.thz[i]));
+      const w = 6 + rng() * 6;
+      const d = 6 + rng() * 6;
+      if (!roadOver(world, q, 6, h)) L.tower(alt(i, s), q.x, q.y, q.z, w, h, d, Math.atan2(main.thx[i], main.thz[i]));
     });
     beside(main, 7, 40, (p, i, s) => {
       p.y = world.floorY;
       if (!clear(world, p, 18)) return;
-      L.tower(alt(i + 1, s), p.x, p.y, p.z, 14, 60 + rng() * 120, 14, rng());
+      const h = 60 + rng() * 120;
+      const yaw = rng();
+      if (!roadOver(world, p, 18, h)) L.tower(alt(i + 1, s), p.x, p.y, p.z, 14, h, 14, yaw);
     });
     for (let i = 15; i < main.N; i += 55) {
       const a = main.point(i, -(main.halfW + 9), 22);
@@ -296,7 +337,12 @@ const DECOR = {
     L.hoop(M.B, c, V(1, 0, 0), UP, 90, 10, 64, null, Math.PI * 1.4, -0.2);
     L.hoop(M.R, c, V(1, 0, 0), UP, 60, 6, 48, null, Math.PI * 1.2, 0.3);
   },
+  // a course that brings all its own scenery
+  none() {},
 };
+
+// 19 PAGE TURNER: the open book (popupbook.js); what stands on it is game/popup.js
+DECOR.popup = (world) => buildBook(world);
 
 export const DECOR_KINDS = Object.keys(DECOR);
 void COLORS;

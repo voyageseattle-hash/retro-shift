@@ -1,0 +1,1554 @@
+// 22 QUARTER TURN: the secret course. A giant 3 by 3 twisting cube on the bedroom shelf (the TOYBOX CUP's room,
+// toybox.js), and the road is printed on it: every face has a roundabout and a pair of lanes off it over each edge,
+// and each piece of that road belongs to the cubie it's on and goes where the cubie goes. The race runs round four
+// of the faces (top, front, underneath, back), out along one side of the chain and home along the other.
+//
+// Every few seconds, on the race clock and in the same order every race, a ratchet clicks four times, chevrons run
+// along a seam, and that layer of the cube turns a quarter turn, road and all:
+//
+//   the face you're on turns     its roundabout is a turntable: you're carried round with it, on or back
+//   a layer under you swings off  the road goes with it and the next pieces bring theirs: bare track for a moment
+//   the pieces line up           a FAST LINE opens straight across a face (yellow), and shuts when they part
+//
+// A fast line is made of three pieces: the hub on a face's centre and a spoke on the edge sticker either side of it.
+// Only some edge stickers carry a spoke, and the turns deal them round the cube, so which faces have a fast line
+// changes all race: the front and the underneath have one each way, the back has one across.
+//
+// The stickers are coloured glass over the road, and they're the lens rule:
+//
+//   white, yellow, green   there in every lens
+//   red                    the red world: gone through the BLUE lens
+//   blue                   the blue world: gone through the RED lens
+//   violet                 the overlap: there in BOTH only
+//
+// On glass that isn't there for you, you're down on the bare track under it and slow (nobody falls off this toy). A
+// red or blue sticker lights a boost for its own lens.
+//
+// The physics drives a flat road like every other course. The cube you see is that road wrapped round four faces
+// (curved.js): the chain of faces rolls out flat with nothing stretched, so a bend on the flat road is the same bend
+// on the cube, and a turning face is a plain turn about its middle in both. The rails are the physics's own and stay
+// put; the road's surface and markings are the cube's and move.
+
+import * as THREE from '../../vendor/three.js';
+import { M, BOTH, RED, BLUE, solidIn, COLORS } from './shift.js';
+import { newFrames, putFrame } from './curved.js';
+import { toyboxEnv, TOY_YELLOW } from './toybox.js';
+
+// ------------------------------------------------------------------ the cube's measures
+const S = 96; // one sticker
+const H = S * 1.5; // half the cube
+const RHO = 16; // the rounding of the four edges the road goes over
+const A = H - RHO; // half the flat of a face, along the road
+const ARC = (Math.PI / 2) * RHO; // the way round one edge
+const DC = 2 * A + ARC; // from the middle of one face to the middle of the next, along the road
+const R = 84; // the roundabouts
+const D = 22; // each lane of the link between two faces, off the middle
+// the bend from a roundabout into a lane: its radius is whatever leaves LINK metres of straight over the edge
+const LINK = 18;
+const ZQ = DC / 2 - LINK / 2;
+const RF = (ZQ * ZQ - R * R + D * D) / (2 * (R - D));
+const TH = Math.atan2(ZQ, D + RF); // where the bend leaves the roundabout, as an angle up from the face's side
+const HALF_W = 11;
+const TURN = 2.6; // seconds a layer takes
+const WARN = 2.4; // the ratchet before it
+const STAND = 70;
+
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const AX = { x: V(1, 0, 0), y: V(0, 1, 0), z: V(0, 0, 1) };
+
+// The four faces the road crosses, in the order the flat road meets them: where the face's middle is, which way the
+// road's long axis runs on it, and its outward side.
+const FACES = [
+  { name: 'U', n: V(0, 1, 0), t: V(0, 0, 1) },
+  { name: 'F', n: V(0, 0, 1), t: V(0, -1, 0) },
+  { name: 'D', n: V(0, -1, 0), t: V(0, 0, -1) },
+  { name: 'B', n: V(0, 0, -1), t: V(0, 1, 0) },
+];
+
+// Flat (x, z) to the cube: the place on its skin, the way the flat z axis runs there, and out. Flat x is the cube's x.
+const _bp = new THREE.Vector3();
+const _bt = new THREE.Vector3();
+const _bn = new THREE.Vector3();
+function band(z) {
+  let s = z + A;
+  const k = Math.floor(s / DC);
+  const l = s - k * DC;
+  const f = FACES[((k % 4) + 4) % 4];
+  if (l <= 2 * A) {
+    _bp.copy(f.n).multiplyScalar(H).addScaledVector(f.t, l - A);
+    _bt.copy(f.t);
+    _bn.copy(f.n);
+    return (((k % 4) + 4) % 4);
+  }
+  const a = (l - 2 * A) / RHO;
+  const c = Math.cos(a);
+  const sn = Math.sin(a);
+  _bn.copy(f.n).multiplyScalar(c).addScaledVector(f.t, sn);
+  _bt.copy(f.t).multiplyScalar(c).addScaledVector(f.n, -sn);
+  _bp.copy(f.n).multiplyScalar(A).addScaledVector(f.t, A).addScaledVector(_bn, RHO);
+  return -1; // over an edge
+}
+
+// ------------------------------------------------------------------ the flat road
+// Round each roundabout the same way (angle up from +x toward +z), out along the +x side, home along the -x side.
+function layout() {
+  const pts = [];
+  const marks = {};
+  let len = 0;
+  const push = (x, z) => {
+    const n = pts.length;
+    if (n) {
+      const d = Math.hypot(x - pts[n - 1][0], z - pts[n - 1][1]);
+      if (d < 0.5) return;
+      len += d;
+    }
+    pts.push([x, z, 0]);
+  };
+  const mark = (name) => (marks[name] = len);
+  const arc = (cx, cz, r, a0, a1, step = 13) => {
+    const n = Math.max(2, Math.ceil((Math.abs(a1 - a0) * r) / step));
+    for (let i = 0; i <= n; i++) {
+      const a = a0 + ((a1 - a0) * i) / n;
+      push(cx + Math.cos(a) * r, cz + Math.sin(a) * r);
+    }
+  };
+  const line = (x, z0, z1, step = 9) => {
+    const n = Math.max(1, Math.round(Math.abs(z1 - z0) / step));
+    for (let i = 1; i < n; i++) push(x, z0 + ((z1 - z0) * i) / n);
+  };
+  const START = -Math.PI * 0.42; // the line: on top of the cube, just out of the secret road's far end
+  // the top face, from the line round to the way out
+  mark('U0');
+  arc(0, 0, R, START, TH);
+  for (let k = 0; k < 3; k++) {
+    const c0 = k * DC;
+    const c1 = (k + 1) * DC;
+    mark(`out${k}`);
+    arc(D + RF, c0 + ZQ, RF, TH + Math.PI, Math.PI); // off the roundabout
+    line(D, c0 + ZQ, c1 - ZQ); // over the edge
+    mark(`eo${k + 1}`);
+    arc(D + RF, c1 - ZQ, RF, Math.PI, Math.PI - TH); // onto the next
+    mark(`${FACES[k + 1].name}0`);
+    if (k < 2) arc(0, c1, R, -TH, TH);
+    else arc(0, c1, R, -TH, Math.PI + TH); // the far end: all the way round
+  }
+  for (let k = 3; k > 0; k--) {
+    const c0 = k * DC;
+    const c1 = (k - 1) * DC;
+    mark(`in${k}`);
+    arc(-D - RF, c0 - ZQ, RF, TH, 0);
+    line(-D, c0 - ZQ, c1 + ZQ);
+    mark(`eh${k - 1}`);
+    arc(-D - RF, c1 + ZQ, RF, 0, -TH);
+    mark(`${FACES[k - 1].name}1`);
+    if (k > 1) arc(0, c1, R, Math.PI - TH, Math.PI + TH);
+    else arc(0, c1, R, Math.PI - TH, Math.PI * 2 + START - 0.12);
+  }
+  mark('end');
+  // close the loop's length
+  len += Math.hypot(pts[0][0] - pts[pts.length - 1][0], pts[0][1] - pts[pts.length - 1][1]);
+  return { pts, marks, len, START };
+}
+const LAY = layout();
+const lapAt = (m, metres = 0) => (((LAY.marks[m] + metres) / LAY.len) % 1 + 1) % 1;
+// the lap fraction at an angle round one of the roundabouts, on the pass that starts at mark `m` from angle a0
+const U = (m, metres = 0) => (((LAY.marks[m] + metres) / LAY.len) % 1 + 1) % 1;
+const onU = (deg) => {
+  // the top face: the first pass runs from START to TH, the second from PI - TH to 2 PI + START
+  const a = (deg * Math.PI) / 180;
+  if (a >= LAY.START && a <= TH) return U('U0', (a - LAY.START) * R);
+  return U('U1', (a - (Math.PI - TH)) * R);
+};
+const onB = (deg) => U('B0', ((deg * Math.PI) / 180 + TH) * R);
+const onMid = (name, deg) => (name.endsWith('0') ? U(name, ((deg * Math.PI) / 180 + TH) * R) : U(name, ((deg * Math.PI) / 180 - (Math.PI - TH)) * R));
+
+// ------------------------------------------------------------------ the fast lines
+// Straight across a face where the road goes round: two on the front and two underneath (out and home), and one
+// across the back. Each is a real road, there all the time for the physics, but shut (its mouth railed off, and not
+// drawn) unless the cube's pieces line up to make it: see SPOKES.
+const straight = (x, z0, z1) => {
+  const pts = [];
+  const n = Math.round(Math.abs(z1 - z0) / 18);
+  for (let i = 0; i <= n; i++) pts.push([x, z0 + ((z1 - z0) * i) / n]);
+  return pts;
+};
+const EXPRESS = [
+  ...[1, 2].map((f) => ({ face: f, axis: 'v', shut: 'u+', def: { from: lapAt(`eo${f}`), to: lapAt(`out${f}`, RF * TH), side: 1, lead: 50, halfWidth: 8, pts: straight(D, f * DC - ZQ - 4, f * DC + ZQ + 4) } })),
+  { face: 3, axis: 'u', shut: 'v+', def: { from: onB(14), to: onB(166), side: 1, lead: 30, halfWidth: 8 } },
+  ...[2, 1].map((f) => ({ face: f, axis: 'v', shut: 'u-', def: { from: lapAt(`eh${f}`), to: lapAt(`in${f}`, RF * TH), side: 1, lead: 50, halfWidth: 8, pts: straight(-D, f * DC + ZQ + 4, f * DC - ZQ - 4) } })),
+];
+
+// ------------------------------------------------------------------ the stickers
+// Each face's colour when the cube is solved, and the lenses a sticker of that colour is there in.
+const GREEN = 0x3dffb0;
+const STICKERS = [
+  { n: V(0, 1, 0), color: COLORS.white, mask: M.ALL }, // top
+  { n: V(0, 0, 1), color: COLORS.red, mask: M.R }, // front
+  { n: V(0, -1, 0), color: COLORS.violet, mask: M.X }, // underneath
+  { n: V(0, 0, -1), color: COLORS.blue, mask: M.B }, // back
+  { n: V(-1, 0, 0), color: TOY_YELLOW, mask: M.ALL },
+  { n: V(1, 0, 0), color: GREEN, mask: M.ALL },
+];
+
+// All six faces, in the stickers' order, each with its own two directions across it (for the four the road is on, v is
+// the way the flat road's z runs).
+const SIDES = [
+  { n: V(0, 1, 0), eu: V(1, 0, 0), ev: V(0, 0, 1) },
+  { n: V(0, 0, 1), eu: V(1, 0, 0), ev: V(0, -1, 0) },
+  { n: V(0, -1, 0), eu: V(1, 0, 0), ev: V(0, 0, -1) },
+  { n: V(0, 0, -1), eu: V(1, 0, 0), ev: V(0, 1, 0) },
+  { n: V(-1, 0, 0), eu: V(0, 0, -1), ev: V(0, 1, 0) },
+  { n: V(1, 0, 0), eu: V(0, 0, 1), ev: V(0, 1, 0) },
+];
+// A place on a face, h above it: flat in the middle, and round the cube's edge past A (to the middle of the edge at
+// DC / 2, where the next face's own half of the bend takes over).
+function faceP(F, u, v, h, out) {
+  const au = Math.abs(u);
+  const av = Math.abs(v);
+  if (av > A || au > A) {
+    const overV = av > A;
+    const e = overV ? F.ev : F.eu;
+    const sg = Math.sign(overV ? v : u);
+    const a = ((overV ? av : au) - A) / RHO;
+    out.copy(F.n).multiplyScalar(A + Math.cos(a) * (RHO + h)).addScaledVector(e, sg * (A + Math.sin(a) * (RHO + h)));
+    return out.addScaledVector(overV ? F.eu : F.ev, overV ? u : v);
+  }
+  return out.copy(F.n).multiplyScalar(H + h).addScaledVector(F.eu, u).addScaledVector(F.ev, v);
+}
+// The fast lines' spokes: which of each face's four edge stickers carry one when the cube is solved (by the way out
+// from the middle of the face). A fast line is open when the two edge stickers it crosses both have a spoke.
+// The gaps: three edge stickers (by the face they start on, and where on it) have no road round the roundabout across
+// them. Where a turn leaves one on a stretch of the lap that a fast line goes past, that stretch is shut (bare plastic:
+// a crawl) and the fast line is open whatever its spokes say. Where it lands on a stretch with no way past, a plank
+// bridge is laid over it. They start where the lap doesn't go; the song first brings one onto it with its fourth turn.
+const GAPS = [[5, 'v+'], [2, 'v-'], [1, 'v-']];
+const PLANKS = [[0, 'u+'], [0, 'u-'], [0, 'v-'], [3, 'u+'], [3, 'u-']];
+const CELL = { 'u+': [1, 0], 'u-': [-1, 0], 'v+': [0, 1], 'v-': [0, -1] };
+const posName = (cu, cv) => ((!cu) !== (!cv) ? (cu ? (cu > 0 ? 'u+' : 'u-') : cv > 0 ? 'v+' : 'v-') : null);
+const HOLE = 0.45; // how fast a shut stretch lets you go, of your top speed
+const SPOKES = [['v+', 'u+'], ['v+', 'v-', 'u-'], ['v-', 'u+', 'u-'], ['u+', 'u-', 'v+'], ['u+', 'v-', 'v+'], ['u-', 'v+', 'v-']];
+
+// The turns, as a cube player writes them: a face's letter is a quarter turn clockwise seen from outside, with a '
+// for the other way. The song is the same every race; it starts SONG_AT seconds in and plays a turn every SONG_EVERY.
+// A clockwise turn of a face the road is on carries you on round its roundabout; a ' turn carries you back.
+const SONG = ['U', 'R', 'F', "L'", 'D', 'B', "R'", 'U', "F'", 'L', 'D', "U'", 'B', 'R', 'F', "D'", 'L', 'U', "B'", "R'", 'D', 'F', 'U', "L'"];
+const SONG_AT = 9;
+const SONG_EVERY = 10;
+// (and it picks up: after QUICK turns, about when the leaders start their last lap, they come every SONG_QUICK seconds)
+const QUICK = 7;
+const SONG_QUICK = 7;
+const dueOf = (k) => SONG_AT + Math.min(k, QUICK) * SONG_EVERY + Math.max(0, k - QUICK) * SONG_QUICK;
+const LAYER = { U: ['y', 1], D: ['y', -1], F: ['z', 1], B: ['z', -1], R: ['x', 1], L: ['x', -1] };
+
+const ease = (u) => u * u * (3 - 2 * u);
+const _q = new THREE.Quaternion();
+const _v = new THREE.Vector3();
+const _w = new THREE.Vector3();
+
+class TwistCube {
+  constructor(world) {
+    this.world = world;
+    this.root = new THREE.Group();
+    world.group.add(this.root);
+    this.cubies = [];
+    this.move = null; // the layer turning now
+    this.done = 0; // turns of the song played
+    this.mono = false;
+    this.buildCubies();
+    this.buildPads();
+    this.findZones();
+    this.buildFrame();
+    for (const e of this.express) this.setExpress(e, this.expressOpen(e));
+    this.refresh();
+  }
+
+  // ---------------------------------------------------------------- the frame: rails, and the fast lines
+  // The rails don't turn with the cube: they're where the physics has them, always. So are the fast lines' own roads
+  // (drawn only while they're open) and the gates across their mouths (drawn only while they're shut).
+  buildFrame() {
+    const w = this.world;
+    const main = w.main;
+    const L = w.layers;
+    const col = new THREE.Color();
+    const kit = () => ({ rp: [], rc: [], lp: [], lc: [], gp: [] });
+    const quad = (K, a, b, c, d, color, k = 1) => {
+      K.rp.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
+      col.set(color).multiplyScalar(k);
+      for (let i = 0; i < 6; i++) K.rc.push(col.r, col.g, col.b);
+    };
+    const line = (K, a, b, color) => {
+      K.lp.push(a.x, a.y, a.z, b.x, b.y, b.z);
+      col.set(color);
+      K.lc.push(col.r, col.g, col.b, col.r, col.g, col.b);
+    };
+    const P = (path, i, lat, y) => path.wpoint(i, lat, y, V(0, 0, 0));
+    const rail = (K, path, i, side, color) => {
+      const j = path.wrap(i + 1);
+      const hw = path.halfW;
+      let p0 = P(path, i, side * (hw - 0.5), 0.3);
+      let p1 = P(path, j, side * (hw - 0.5), 0.3);
+      for (let s = 1; s <= 3; s++) {
+        const a = (s / 3) * Math.PI * 0.5;
+        const lat = hw - 0.5 + (1 - Math.cos(a)) * 0.7;
+        const y = 0.3 + Math.sin(a) * 0.75;
+        const q0 = P(path, i, side * lat, y);
+        const q1 = P(path, j, side * lat, y);
+        quad(K, p0, p1, q1, q0, color, 0.16 + s * 0.1);
+        p0 = q0;
+        p1 = q1;
+      }
+      quad(K, P(path, i, side * (hw + 0.2), 1.25), P(path, j, side * (hw + 0.2), 1.25), P(path, j, side * (hw + 0.2), 0.9), P(path, i, side * (hw + 0.2), 0.9), color, 0.8);
+      if (i % 4 === 0) line(K, P(path, i, side * (hw + 0.2), 0.1), P(path, i, side * (hw + 0.2), 1.25), color);
+    };
+    const mesh = (K, parent) => {
+      const m = L.materials(M.ALL);
+      const add = (arr, colors, mat, order, lines) => {
+        if (!arr.length) return;
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
+        if (colors) {
+          g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+          this.neutralGeo.push({ g, colors });
+        }
+        const o = lines ? new THREE.LineSegments(g, mat) : new THREE.Mesh(g, mat);
+        o.renderOrder = order;
+        o.frustumCulled = false;
+        parent.add(o);
+      };
+      add(K.gp, null, m.road, 1);
+      add(K.rp, K.rc, m.ribbon, 3);
+      add(K.lp, K.lc, m.line, 2, true);
+      return parent;
+    };
+
+    // the fast lines, and the stretches of the main road's rail that are their mouths
+    this.express = [];
+    const mouthOf = new Map();
+    for (const [k, E] of EXPRESS.entries()) {
+      const path = w.paths[k + 1];
+      const e = { ...E, path, mouth: [], open: false, gate: new THREE.Group(), road: new THREE.Group(), sign: new THREE.Group(), glow: 0 };
+      const span = Math.ceil(((E.def.lead ?? 30) * 1.3) / main.ds);
+      const iA = main.index(E.def.from);
+      const iB = main.index(E.def.to);
+      for (let k2 = -4; k2 <= span; k2++) for (const i of [main.wrap(iA + k2), main.wrap(iB - k2)]) {
+        if (mouthOf.has(i)) continue;
+        mouthOf.set(i, e);
+        e.mouth.push(i);
+      }
+      this.express.push(e);
+    }
+    const frame = kit();
+    for (let i = 0; i < main.N; i++) {
+      for (const side of [-1, 1]) {
+        const e = side > 0 ? mouthOf.get(i) : null;
+        if (!(side < 0 ? main.railL[i] : main.railR[i]) && !e) continue;
+        if (e) rail((e.gateK ||= kit()), main, i, side, TOY_YELLOW);
+        else rail(frame, main, i, side, side < 0 ? COLORS.red : COLORS.blue);
+      }
+    }
+    w.group.add(mesh(frame, new THREE.Group()));
+    for (const e of this.express) {
+      const p = e.path;
+      const K = kit();
+      const hw = p.halfW;
+      for (let i = 0; i < p.N - 1; i++) {
+        const j = i + 1;
+        const a = P(p, i, -hw, 0.34), b = P(p, j, -hw, 0.34), c = P(p, j, hw, 0.34), d = P(p, i, hw, 0.34);
+        K.gp.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
+        for (const side of [-1, 1]) {
+          quad(K, P(p, i, side * hw, 0.42), P(p, j, side * hw, 0.42), P(p, j, side * (hw - 0.6), 0.42), P(p, i, side * (hw - 0.6), 0.42), TOY_YELLOW, 0.7);
+          if (side < 0 ? p.railL[i] : p.railR[i]) rail(K, p, i, side, TOY_YELLOW);
+        }
+        // chevrons down the middle, the way it runs
+        if (i % 8 === 0 && i < p.N - 2) for (const side of [-1, 1]) quad(K, P(p, i, side * 3.2, 0.42), P(p, j, 0, 0.42), P(p, j + 1, 0, 0.42), P(p, j, side * 3.2, 0.42), TOY_YELLOW, 0.3);
+      }
+      w.group.add(mesh(K, e.road));
+      w.group.add(mesh(e.gateK || kit(), e.gate));
+      delete e.gateK;
+      // the sign that the road ahead is shut: a gantry over the main road where the fast line's mouth begins, a cross
+      // over each lane of it, and arrows on the fast line's side
+      {
+        const S2 = kit();
+        const i0 = main.wrap(main.index(e.def.from) + 4);
+        const mh = main.halfW;
+        const TOP = 10;
+        for (const lat of [-mh - 1.2, mh + 1.2]) {
+          for (const d of [-0.5, 0.5]) line(S2, P(main, i0, lat + d, 0.3), P(main, i0, lat + d, TOP), TOY_YELLOW);
+        }
+        quad(S2, P(main, i0, -mh - 1.2, TOP), P(main, i0, mh + 1.2, TOP), P(main, i0, mh + 1.2, TOP - 0.7), P(main, i0, -mh - 1.2, TOP - 0.7), TOY_YELLOW, 0.8);
+        for (const c of [-mh / 2, mh / 2]) {
+          for (const sg of [-1, 1]) quad(S2, P(main, i0, c - 3.4, TOP - 4.6 + sg * 3.1 + 0.5), P(main, i0, c - 3.4, TOP - 4.6 + sg * 3.1 - 0.5), P(main, i0, c + 3.4, TOP - 4.6 - sg * 3.1 - 0.5), P(main, i0, c + 3.4, TOP - 4.6 - sg * 3.1 + 0.5), COLORS.red, 1);
+        }
+        // (the fast line leaves by the road's +lat side: three arrows that way, on the gantry's post)
+        for (let a = 0; a < 3; a++) {
+          const l0 = mh + 2.6 + a * 3.4;
+          for (const sg of [-1, 1]) quad(S2, P(main, i0, l0, TOP - 2 + sg * 1.9), P(main, i0, l0 + 1.3, TOP - 2 + sg * 1.9), P(main, i0, l0 + 3, TOP - 2), P(main, i0, l0 + 1.7, TOP - 2), TOY_YELLOW, 0.9);
+        }
+        w.group.add(mesh(S2, e.sign));
+      }
+    }
+    // the plank bridges: one for each stretch of the lap a gap can land on that has no way past
+    this.planks = [];
+    for (const [face, pn] of PLANKS) {
+      const K = kit();
+      const [cu, cv] = CELL[pn];
+      const pw = main.halfW - 1.4;
+      let n = 0;
+      for (let i = 0; i < main.N; i++) {
+        if (this.zone[i] !== face || this.zone[main.wrap(i + 1)] !== face) continue;
+        const inCell = (j) => {
+          const x = main.px[j];
+          const al = main.pz[j] - face * DC;
+          return (Math.abs(x) > S / 2 ? Math.sign(x) : 0) === cu && (Math.abs(al) > S / 2 ? Math.sign(al) : 0) === cv;
+        };
+        if (!inCell(i) || !inCell(main.wrap(i + 1))) continue;
+        const j = main.wrap(i + 1);
+        const a = P(main, i, -pw, 0.4), b = P(main, j, -pw, 0.4), c = P(main, j, pw, 0.4), d = P(main, i, pw, 0.4);
+        K.gp.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
+        for (const side of [-1, 1]) quad(K, P(main, i, side * pw, 0.48), P(main, j, side * pw, 0.48), P(main, j, side * (pw - 0.5), 0.48), P(main, i, side * (pw - 0.5), 0.48), TOY_YELLOW, 0.7);
+        // the planks' joins
+        if (n++ % 2 === 0) line(K, P(main, i, -pw, 0.5), P(main, i, pw, 0.5), TOY_YELLOW);
+      }
+      const group = mesh(K, new THREE.Group());
+      group.visible = false;
+      w.group.add(group);
+      this.planks.push({ face, pn, group });
+    }
+  }
+
+  // Is a fast line made just now: do the two edge stickers it crosses both carry a spoke?
+  expressOpen(e) {
+    const F = SIDES[e.face];
+    // (shut road past it: it's the way round, spokes or no spokes)
+    e.forced = !!this.stickerOn(e.face, e.shut)?.gap;
+    if (e.forced) return true;
+    const dir = e.axis === 'v' ? F.ev : F.eu;
+    for (const s of [-1, 1]) {
+      const st = this.stickerAt(_w.copy(F.n).addScaledVector(dir, s).round(), F.n);
+      if (!st?.spoke) return false;
+    }
+    return true;
+  }
+  setExpress(e, open) {
+    e.open = open;
+    for (const i of e.mouth) this.world.main.railR[i] = open ? 0 : 1;
+    e.path.def.closed = !open;
+    e.path.def.must = open && !!e.forced; // (vehicles/ai.js: nobody chooses the shut road)
+    e.gate.visible = !open;
+    e.road.visible = open;
+    e.sign.visible = open && !!e.forced;
+  }
+  // The sticker now at a place on one of the road's four faces.
+  stickerOn(face, pn) {
+    const F = SIDES[face];
+    const [cu, cv] = CELL[pn];
+    return this.stickerAt(_w.copy(F.n).addScaledVector(F.eu, cu).addScaledVector(F.ev, cv).round(), F.n);
+  }
+
+  // ---------------------------------------------------------------- what's drawn
+  // A cubie is its plates: black plastic under the road, and a pane of coloured glass over it on each outside face.
+  buildCubies() {
+    const L = this.world.layers;
+    const cell = (c) => (c < 0 ? [-H, -S / 2] : c > 0 ? [S / 2, H] : [-S / 2, S / 2]);
+    const cellOf = (a) => (a < -S / 2 ? -1 : a > S / 2 ? 1 : 0);
+    const col = new THREE.Color();
+    const bySlot = new Map();
+    const key = (x, y, z) => `${x},${y},${z}`;
+    // one cubie's pieces, sorted by the lenses they're there in
+    const kit = () => {
+      const B = new Map(); // mask -> { rp, rc, lp, lc, fp, gp }
+      const b = (mask) => {
+        let o = B.get(mask);
+        if (!o) B.set(mask, (o = { rp: [], rc: [], lp: [], lc: [], fp: [], gp: [] }));
+        return o;
+      };
+      const tri = (arr, a, b2, c, d) => arr.push(a.x, a.y, a.z, b2.x, b2.y, b2.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
+      return {
+        B,
+        // a glowing quad; k1 (if given) is the strength along the c-d side, for a fade
+        quad(mask, a, b2, c, d, color, k = 1, k1 = k) {
+          const o = b(mask);
+          tri(o.rp, a, b2, c, d);
+          col.set(color).multiplyScalar(k);
+          const r0 = col.r, g0 = col.g, b0 = col.b;
+          col.set(color).multiplyScalar(k1);
+          // a b c a c d
+          o.rc.push(r0, g0, b0, r0, g0, b0, col.r, col.g, col.b, r0, g0, b0, col.r, col.g, col.b, col.r, col.g, col.b);
+        },
+        line(mask, a, b2, color, k = 1) {
+          const o = b(mask);
+          o.lp.push(a.x, a.y, a.z, b2.x, b2.y, b2.z);
+          col.set(color).multiplyScalar(k);
+          o.lc.push(col.r, col.g, col.b, col.r, col.g, col.b);
+        },
+        fill: (a, b2, c, d) => tri(b(M.ALL).fp, a, b2, c, d),
+        road: (a, b2, c, d) => tri(b(M.ALL).gp, a, b2, c, d),
+      };
+    };
+    for (let cx = -1; cx <= 1; cx++) for (let cy = -1; cy <= 1; cy++) for (let cz = -1; cz <= 1; cz++) {
+      if (!cx && !cy && !cz) continue;
+      const K = kit();
+      const cubie = { slot: V(cx, cy, cz), q: new THREE.Quaternion(), group: new THREE.Group(), stickers: [], K };
+      bySlot.set(key(cx, cy, cz), cubie);
+      const cc = { x: cx, y: cy, z: cz };
+      for (const [fi, st] of STICKERS.entries()) {
+        const F = SIDES[fi];
+        const cu = Math.round(V(cx, cy, cz).dot(F.eu));
+        const cv = Math.round(V(cx, cy, cz).dot(F.ev));
+        if (Math.round(V(cx, cy, cz).dot(F.n)) !== 1) continue;
+        // (an edge sticker may carry a spoke of the fast line: see SPOKES)
+        const pn = posName(cu, cv);
+        const spoke = !!pn && SPOKES[fi].includes(pn);
+        const gap = !!pn && GAPS.some(([f, q]) => f === fi && q === pn);
+        cubie.stickers.push({ n0: st.n.clone(), mask: st.mask, color: st.color, spoke, gap, hub: !cu && !cv });
+        const P = (u, v, h) => faceP(F, u, v, h, V(0, 0, 0));
+        const [u0, u1] = cell(cu);
+        const [v0, v1] = cell(cv);
+        // (every edge of the cube is rounded: a plate stops short of it, and a curved strip joins it to the next)
+        const lim = (a) => Math.max(-A, Math.min(A, a));
+        const pu0 = lim(u0), pu1 = lim(u1), pv0 = lim(v0), pv1 = lim(v1);
+        K.fill(P(pu0, pv0, -0.35), P(pu1, pv0, -0.35), P(pu1, pv1, -0.35), P(pu0, pv1, -0.35));
+        // the seams between cubies: a dim line round the cell
+        const seam = 0x3a2a55;
+        K.line(M.ALL, P(pu0, pv0, 0.02), P(pu1, pv0, 0.02), seam);
+        K.line(M.ALL, P(pu1, pv0, 0.02), P(pu1, pv1, 0.02), seam);
+        K.line(M.ALL, P(pu1, pv1, 0.02), P(pu0, pv1, 0.02), seam);
+        K.line(M.ALL, P(pu0, pv1, 0.02), P(pu0, pv0, 0.02), seam);
+        // the sticker: glass with a bright rim, a little in from the cell's edge
+        const IN = 5;
+        const su0 = pu0 + IN, su1 = pu1 - IN, sv0 = pv0 + IN, sv1 = pv1 - IN;
+        const h = 0.22;
+        const m = st.mask;
+        // (pale glass glows harder than deep glass at the same strength: keep the white, yellow and green panes down)
+        const pale = st.mask === M.ALL;
+        const RIM = pale ? 0.32 : 0.8;
+        K.quad(m, P(su0, sv0, h), P(su1, sv0, h), P(su1, sv1, h), P(su0, sv1, h), st.color, pale ? 0.025 : 0.14);
+        const W = 1.6;
+        K.quad(m, P(su0, sv0, h), P(su1, sv0, h), P(su1, sv0 + W, h), P(su0, sv0 + W, h), st.color, RIM);
+        K.quad(m, P(su0, sv1 - W, h), P(su1, sv1 - W, h), P(su1, sv1, h), P(su0, sv1, h), st.color, RIM);
+        K.quad(m, P(su0, sv0, h), P(su0 + W, sv0, h), P(su0 + W, sv1, h), P(su0, sv1, h), st.color, RIM);
+        K.quad(m, P(su1 - W, sv0, h), P(su1, sv0, h), P(su1, sv1, h), P(su1 - W, sv1, h), st.color, RIM);
+        // a second rim inside it, like a peeling toy sticker
+        const J = 7;
+        K.line(m, P(su0 + J, sv0 + J, h), P(su1 - J, sv0 + J, h), st.color, 0.6);
+        K.line(m, P(su1 - J, sv0 + J, h), P(su1 - J, sv1 - J, h), st.color, 0.6);
+        K.line(m, P(su1 - J, sv1 - J, h), P(su0 + J, sv1 - J, h), st.color, 0.6);
+        K.line(m, P(su0 + J, sv1 - J, h), P(su0 + J, sv0 + J, h), st.color, 0.6);
+        // the fast line's pieces: two lanes from the middle of the cube's face out to its edge (a spoke), or the
+        // crossing they meet at (the hub, on every centre)
+        const lane = (a0, a1, off, alongU, sign) => {
+          const Q = (a, l, hh) => (alongU ? P(a * sign, l, hh) : P(l, a * sign, hh));
+          const w = 8;
+          K.road(Q(a0, off - w, 0.06), Q(a1, off - w, 0.06), Q(a1, off + w, 0.06), Q(a0, off + w, 0.06));
+          for (const e of [-1, 1]) {
+            K.quad(M.ALL, Q(a0, off + e * w, 0.26), Q(a1, off + e * w, 0.26), Q(a1, off + e * (w - 0.7), 0.26), Q(a0, off + e * (w - 0.7), 0.26), TOY_YELLOW, 0.55);
+          }
+          // a dashed middle line
+          for (let a = a0 + 4; a < a1 - 6; a += 12) K.quad(M.ALL, Q(a, off - 0.35, 0.27), Q(a + 6, off - 0.35, 0.27), Q(a + 6, off + 0.35, 0.27), Q(a, off + 0.35, 0.27), TOY_YELLOW, 0.3);
+        };
+        if (spoke) for (const off of [-D, D]) lane(S / 2, ZQ, off, !!cu, cu || cv);
+        if (!cu && !cv) for (const off of [-D, D]) for (const alongU of [true, false]) lane(-S / 2, S / 2, off, alongU, 1);
+      }
+      // the rounded edge between two of its plates
+      for (const [a, b2, c] of [['x', 'y', 'z'], ['y', 'z', 'x'], ['z', 'x', 'y']]) {
+        if (!cc[a] || !cc[b2]) continue;
+        const [c0, c1] = cell(cc[c]).map((x) => Math.max(-A, Math.min(A, x)));
+        let prev = null;
+        for (let s = 0; s <= 4; s++) {
+          const an = (s / 4) * (Math.PI / 2);
+          const mk = (cv) => {
+            const p = V(0, 0, 0);
+            p[a] = cc[a] * (A + Math.cos(an) * (RHO - 0.35));
+            p[b2] = cc[b2] * (A + Math.sin(an) * (RHO - 0.35));
+            p[c] = cv;
+            return p;
+          };
+          const p = [mk(c0), mk(c1)];
+          if (prev) K.fill(prev[0], prev[1], p[1], p[0]);
+          prev = p;
+        }
+      }
+      this.cubies.push(cubie);
+    }
+
+    // The road, printed on the cube: the same on every face (a roundabout, and a pair of lanes off it over each
+    // edge), so whatever way the cube is turned the pieces that arrive carry on the road the last ones left. Each
+    // piece of it belongs to the cubie it lies on, and goes where that cubie goes.
+    const curves = [];
+    {
+      const ring = [];
+      const n = 96;
+      for (let i = 0; i <= n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        ring.push([Math.cos(a) * R, Math.sin(a) * R]);
+      }
+      curves.push({ pts: ring, ring: true });
+      for (let k = 0; k < 4; k++) for (const s of [-1, 1]) {
+        const pts = [];
+        const na = 13;
+        for (let i = 0; i <= na; i++) {
+          const a = Math.PI + TH - (TH * i) / na;
+          pts.push([D + RF + Math.cos(a) * RF, ZQ + Math.sin(a) * RF]);
+        }
+        const nl = 2;
+        for (let i = 1; i <= nl; i++) pts.push([D, ZQ + ((DC / 2 - ZQ) * i) / nl]);
+        const c = Math.cos((k * Math.PI) / 2);
+        const sn = Math.sin((k * Math.PI) / 2);
+        curves.push({ pts: pts.map(([x, z]) => [s * x * c - z * sn, s * x * sn + z * c]), flip: s < 0 });
+      }
+    }
+    const HW = HALF_W;
+    const distTo = (C, x, z) => {
+      if (C.ring) return Math.abs(Math.hypot(x, z) - R);
+      let best = 1e9;
+      for (let i = 0; i < C.pts.length - 1; i++) {
+        const [ax, az] = C.pts[i];
+        const [bx, bz] = C.pts[i + 1];
+        const dx = bx - ax, dz = bz - az;
+        const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)));
+        best = Math.min(best, Math.hypot(x - ax - dx * t, z - az - dz * t));
+      }
+      return best;
+    };
+    const covered = (C, x, z) => curves.some((o) => o !== C && distTo(o, x, z) < HW - 0.9);
+    const prims = []; // { kind, pts: [[u, v, h]...], color, k, k1 }
+    for (const C of curves) {
+      const P = C.pts;
+      const sec = P.map(([x, z], i) => {
+        const a = P[Math.max(0, i - 1)];
+        const b = P[Math.min(P.length - 1, i + 1)];
+        let tx = b[0] - a[0], tz = b[1] - a[1];
+        if (C.ring) {
+          tx = -z;
+          tz = x;
+        }
+        const l = Math.hypot(tx, tz) || 1;
+        // (the side the red line goes: the left of the way the road runs)
+        const f = C.flip ? -1 : 1;
+        return { x, z, lx: (-tz / l) * f, lz: (tx / l) * f };
+      });
+      const at = (s, lat, h) => [s.x + s.lx * lat, s.z + s.lz * lat, h];
+      for (let i = 0; i < sec.length - 1; i++) {
+        const s0 = sec[i];
+        const s1 = sec[i + 1];
+        const lats = [-HW, -HW / 2, 0, HW / 2, HW];
+        for (let q = 0; q < 4; q++) prims.push({ kind: 'road', pts: [at(s0, lats[q], 0.08), at(s1, lats[q], 0.08), at(s1, lats[q + 1], 0.08), at(s0, lats[q + 1], 0.08)] });
+        for (const [side, color] of [[1, COLORS.red], [-1, COLORS.blue]]) {
+          const mx = (s0.x + s1.x) / 2 + ((s0.lx + s1.lx) / 2) * side * HW;
+          const mz = (s0.z + s1.z) / 2 + ((s0.lz + s1.lz) / 2) * side * HW;
+          if (covered(C, mx, mz)) continue;
+          const e = (s, lat, h) => at(s, side * lat, h);
+          prims.push({ kind: 'quad', pts: [e(s0, HW, 0.3), e(s1, HW, 0.3), e(s1, HW - 0.45, 0.3), e(s0, HW - 0.45, 0.3)], color, k: 1 });
+          prims.push({ kind: 'quad', pts: [e(s0, HW - 0.45, 0.29), e(s1, HW - 0.45, 0.29), e(s1, HW - 3.2, 0.29), e(s0, HW - 3.2, 0.29)], color, k: 0.07, k1: 0 });
+        }
+        // lane lines and ribs
+        for (const [f, color] of [[0.5, COLORS.red], [-0.5, COLORS.blue]]) prims.push({ kind: 'line', pts: [at(s0, f * HW, 0.28), at(s1, f * HW, 0.28)], color });
+        if (i % 2 === 0) prims.push({ kind: 'line', pts: [at(s0, -HW, 0.28), at(s0, HW, 0.28)], color: (i >> 1) % 2 ? COLORS.red : COLORS.blue });
+      }
+    }
+    // ---- the toys that stand on the cube: the same on every face, each on the cubie under it, so they ride the
+    // turns with the road. The red world's are red and the blue world's blue (each gone through the other lens);
+    // what belongs to both is toy yellow, the cup's lamp colour, and goes whatever colour the lens is.
+    const GOLD = TOY_YELLOW;
+    const ln = (anchor, mask, a, b, color) => prims.push({ kind: 'line', at: anchor, mask, pts: [a, b], color });
+    const qd = (anchor, mask, a, b, c, d, color, k = 1, k1 = k) => prims.push({ kind: 'quad', at: anchor, mask, pts: [a, b, c, d], color, k, k1 });
+    // a flat ring of `n` sides about (u, v) at height h
+    const hoop = (anchor, mask, u, v, h, r, n, color, rot = 0) => {
+      for (let i = 0; i < n; i++) {
+        const a0 = rot + (i / n) * Math.PI * 2;
+        const a1 = rot + ((i + 1) / n) * Math.PI * 2;
+        ln(anchor, mask, [u + Math.cos(a0) * r, v + Math.sin(a0) * r, h], [u + Math.cos(a1) * r, v + Math.sin(a1) * r, h], color);
+      }
+    };
+    // a lantern: a small diamond with a lit band round its middle
+    const lantern = (anchor, u, v, h, r = 1.5) => {
+      for (let i = 0; i < 4; i++) {
+        const a0 = (i / 4) * Math.PI * 2;
+        const a1 = ((i + 1) / 4) * Math.PI * 2;
+        const p0 = [u + Math.cos(a0) * r, v + Math.sin(a0) * r, h];
+        const p1 = [u + Math.cos(a1) * r, v + Math.sin(a1) * r, h];
+        ln(anchor, M.ALL, p0, [u, v, h + r * 1.5], GOLD);
+        ln(anchor, M.ALL, p0, [u, v, h - r * 1.5], GOLD);
+        qd(anchor, M.ALL, p0, p1, [u, v, h + r * 1.5], [u, v, h + r * 1.5], GOLD, 0.5);
+        qd(anchor, M.ALL, p0, p1, [u, v, h - r * 1.5], [u, v, h - r * 1.5], GOLD, 0.3);
+      }
+    };
+    const worldOf = (k) => (k % 2 ? [M.B, COLORS.blue] : [M.R, COLORS.red]);
+
+    // the road's finish: it's tiled with little stickers, in the cube's six colours
+    const PALETTE = STICKERS.map((s) => s.color);
+    {
+      let t = 0;
+      for (const C of curves) {
+        const P = C.pts;
+        for (let i = 0; i < P.length - 1; i++) {
+          const mid = (j) => {
+            const [x, z] = P[j];
+            const a = P[Math.max(0, j - 1)];
+            const b = P[Math.min(P.length - 1, j + 1)];
+            let tx = b[0] - a[0], tz = b[1] - a[1];
+            if (C.ring) {
+              tx = -z;
+              tz = x;
+            }
+            const l = Math.hypot(tx, tz) || 1;
+            return { x, z, tx: tx / l, tz: tz / l, lx: -tz / l, lz: tx / l };
+          };
+          const s0 = mid(i);
+          const s1 = mid(i + 1);
+          for (let q = 0; q < 4; q++) {
+            t++;
+            if ((i + q) % 2) continue; // a checker of them: every other tile is bare road
+            const l0 = -HW + 1.2 + q * ((HW * 2 - 2.4) / 4) + 0.35;
+            const l1 = l0 + (HW * 2 - 2.4) / 4 - 0.7;
+            const g = 0.45; // the gap along the road
+            const pt = (s, lat, back) => [s.x + s.lx * lat + s.tx * back, s.z + s.lz * lat + s.tz * back, 0.2];
+            const mx = (s0.x + s1.x) / 2 + s0.lx * (l0 + l1) / 2;
+            const mz = (s0.z + s1.z) / 2 + s0.lz * (l0 + l1) / 2;
+            if (covered(C, mx, mz)) continue;
+            prims.push({ kind: 'quad', mask: M.ALL, pts: [pt(s0, l0, g), pt(s1, l0, -g), pt(s1, l1, -g), pt(s0, l1, g)], color: PALETTE[(i * 5 + q * 3 + t) % 6], k: 0.055 });
+          }
+        }
+      }
+    }
+
+    // one toy on each corner sticker, out beyond the roundabout
+    for (let k = 0; k < 4; k++) {
+      const su = k === 0 || k === 3 ? 1 : -1;
+      const sv = k < 2 ? 1 : -1;
+      const u = su * 103;
+      const v = sv * 103;
+      const A0 = [u, v];
+      const [mask, color] = worldOf(k);
+      hoop(A0, mask, u, v, 0.4, 19, 8, color, Math.PI / 8);
+      if (k === 0) {
+        // a ring stacker: a peg, and rings getting smaller up it
+        ln(A0, mask, [u, v, 0.4], [u, v, 33], color);
+        [[16, 4], [13.5, 9.5], [11, 15], [8.5, 20.5], [6, 26]].forEach(([r, h], i) => {
+          const c = i % 2 ? GOLD : color;
+          const m = i % 2 ? M.ALL : mask;
+          hoop(A0, m, u, v, h - 1.6, r, 10, c);
+          hoop(A0, m, u, v, h + 1.6, r, 10, c);
+          for (let j = 0; j < 10; j++) {
+            const a0 = (j / 10) * Math.PI * 2;
+            const a1 = ((j + 1) / 10) * Math.PI * 2;
+            qd(A0, m, [u + Math.cos(a0) * r, v + Math.sin(a0) * r, h - 1.6], [u + Math.cos(a1) * r, v + Math.sin(a1) * r, h - 1.6], [u + Math.cos(a1) * r, v + Math.sin(a1) * r, h + 1.6], [u + Math.cos(a0) * r, v + Math.sin(a0) * r, h + 1.6], c, 0.16);
+          }
+        });
+        lantern(A0, u, v, 35, 2.2);
+      } else if (k === 1) {
+        // building blocks, each turned a little on the one under it
+        let h = 0.4;
+        [[20, 0], [15, 0.4], [10.5, 0.8], [6.5, 0.2]].forEach(([w, rot], i) => {
+          const c = i % 2 ? GOLD : color;
+          const m = i % 2 ? M.ALL : mask;
+          const cs = [0, 1, 2, 3].map((j) => [u + Math.cos(rot + Math.PI / 4 + (j * Math.PI) / 2) * w * 0.707, v + Math.sin(rot + Math.PI / 4 + (j * Math.PI) / 2) * w * 0.707]);
+          for (let j = 0; j < 4; j++) {
+            const a = cs[j];
+            const b = cs[(j + 1) % 4];
+            ln(A0, m, [a[0], a[1], h], [b[0], b[1], h], c);
+            ln(A0, m, [a[0], a[1], h + w * 0.8], [b[0], b[1], h + w * 0.8], c);
+            ln(A0, m, [a[0], a[1], h], [a[0], a[1], h + w * 0.8], c);
+            qd(A0, m, [a[0], a[1], h], [b[0], b[1], h], [b[0], b[1], h + w * 0.8], [a[0], a[1], h + w * 0.8], c, 0.2, 0.04);
+          }
+          h += w * 0.8;
+        });
+        lantern(A0, u, v, h + 3.5, 2);
+      } else if (k === 2) {
+        // a spinning top's worth of pennants: a pole and a string of flags down to the sticker's corners
+        ln(A0, mask, [u, v, 0.4], [u, v, 36], color);
+        lantern(A0, u, v, 38, 2.2);
+        for (let j = 0; j < 4; j++) {
+          const a = Math.PI / 4 + (j * Math.PI) / 2;
+          const ex = u + Math.cos(a) * 24, ez = v + Math.sin(a) * 24;
+          ln(A0, M.ALL, [u, v, 34], [ex, ez, 1], GOLD);
+          for (let f = 1; f <= 5; f++) {
+            const t0 = f / 6.5, t1 = t0 + 0.085;
+            const p = (t) => [u + (ex - u) * t, v + (ez - v) * t, 34 - 33 * t];
+            const p0 = p(t0), p1 = p(t1), pm = p((t0 + t1) / 2);
+            const [m2, c2] = f % 2 ? [mask, color] : [M.ALL, GOLD];
+            qd(A0, m2, p0, p1, [pm[0], pm[1], pm[2] - 3.4], [pm[0], pm[1], pm[2] - 3.4], c2, 0.7);
+          }
+        }
+      } else {
+        // a spring, standing on end
+        let prev = null;
+        for (let j = 0; j <= 84; j++) {
+          const a = (j / 12) * Math.PI * 2;
+          const p = [u + Math.cos(a) * 11, v + Math.sin(a) * 11, 0.6 + j * 0.38];
+          if (prev) ln(A0, j % 24 < 12 ? mask : M.ALL, prev, p, j % 24 < 12 ? color : GOLD);
+          prev = p;
+        }
+        hoop(A0, mask, u, v, 0.6 + 84 * 0.38, 11, 12, color);
+        lantern(A0, u, v, 37, 2);
+      }
+    }
+
+    // an arch over the two lanes at every edge, a lantern hung over each lane
+    for (let k = 0; k < 4; k++) {
+      const c = Math.cos((k * Math.PI) / 2);
+      const sn = Math.sin((k * Math.PI) / 2);
+      const T = (lat, rad, h) => [lat * c - rad * sn, lat * sn + rad * c, h];
+      const A0 = [T(0, 100, 0)[0], T(0, 100, 0)[1]];
+      const [mask, color] = worldOf(k);
+      const RAD = 121;
+      const TOP = 13;
+      for (const lat of [-38, 0, 38]) {
+        for (const [dl, dr] of [[-0.7, -0.7], [0.7, -0.7], [0.7, 0.7], [-0.7, 0.7]]) ln(A0, mask, T(lat + dl, RAD + dr, 0.3), T(lat + dl, RAD + dr, TOP), color);
+        hoop(A0, mask, T(lat, RAD, 0)[0], T(lat, RAD, 0)[1], 0.5, 2.2, 6, color);
+        hoop(A0, M.ALL, T(lat, RAD, 0)[0], T(lat, RAD, 0)[1], TOP + 0.3, 1.6, 6, GOLD);
+      }
+      // the beam: a lit band, with a row of the cube's colours along it like a toy's printed strip
+      qd(A0, mask, T(-38, RAD, TOP), T(38, RAD, TOP), T(38, RAD, TOP - 1.6), T(-38, RAD, TOP - 1.6), color, 0.5);
+      ln(A0, mask, T(-38, RAD, TOP), T(38, RAD, TOP), color);
+      ln(A0, mask, T(-38, RAD, TOP - 1.6), T(38, RAD, TOP - 1.6), color);
+      for (let j = 0; j < 12; j++) {
+        const l0 = -36 + j * 6 + 0.8;
+        qd(A0, M.ALL, T(l0, RAD - 0.05, TOP + 0.4), T(l0 + 4.4, RAD - 0.05, TOP + 0.4), T(l0 + 4.4, RAD - 0.05, TOP + 2.4), T(l0, RAD - 0.05, TOP + 2.4), PALETTE[j % 6], 0.55);
+      }
+      for (const lat of [-D, D]) {
+        ln(A0, M.ALL, T(lat, RAD, TOP - 1.6), T(lat, RAD, 10.6), GOLD);
+        const p = T(lat, RAD, 9);
+        lantern(A0, p[0], p[1], 9, 1.3);
+      }
+    }
+
+    // arrow boards round the roundabout: the red world's on the outside of the bend, the blue world's on the inside
+    for (const [rad, mask, color, n, sign] of [[R + HW + 2.8, M.R, COLORS.red, 32, 1], [R - HW - 2.8, M.B, COLORS.blue, 24, -1]]) {
+      for (let j = 0; j < n; j++) {
+        const a = ((j + 0.5) / n) * Math.PI * 2;
+        const u = Math.cos(a) * rad;
+        const v = Math.sin(a) * rad;
+        if (curves.some((o) => !o.ring && distTo(o, u, v) < HW + 2.4)) continue;
+        // (and clear of the fast lines' lanes inside the roundabout)
+        if (sign < 0 && [u, v].some((w) => Math.abs(Math.abs(w) - D) < 10.5)) continue;
+        const A0 = [u, v];
+        const tx = -Math.sin(a), tz = Math.cos(a);
+        const B = (along, h) => [u + tx * along, v + tz * along, h];
+        ln(A0, mask, B(0, 0.3), B(0, 3.2), color);
+        // a chevron pointing the way round
+        for (const e of [-1, 1]) qd(A0, mask, B(-1.9, 4.9 + e * 1.7), B(-0.5, 4.9 + e * 1.7), B(1.9, 4.9), B(0.5, 4.9), color, 0.85);
+        ln(A0, mask, B(-2.4, 3.2), B(2.4, 3.2), color);
+        ln(A0, mask, B(-2.4, 6.6), B(2.4, 6.6), color);
+        ln(A0, mask, B(-2.4, 3.2), B(-2.4, 6.6), color);
+        ln(A0, mask, B(2.4, 3.2), B(2.4, 6.6), color);
+      }
+    }
+
+    // the hub: a spindle in the very middle of every face, between the fast lines' lanes
+    {
+      const A0 = [0, 0];
+      [[10.5, 1.2, COLORS.violet], [7.5, 4.2, GOLD], [4.5, 7.2, COLORS.violet]].forEach(([r, h, color]) => {
+        hoop(A0, M.ALL, 0, 0, h, r, 12, color);
+        hoop(A0, M.ALL, 0, 0, h + 1.4, r, 12, color);
+        for (let j = 0; j < 12; j++) {
+          const a0 = (j / 12) * Math.PI * 2;
+          const a1 = ((j + 1) / 12) * Math.PI * 2;
+          qd(A0, M.ALL, [Math.cos(a0) * r, Math.sin(a0) * r, h], [Math.cos(a1) * r, Math.sin(a1) * r, h], [Math.cos(a1) * r, Math.sin(a1) * r, h + 1.4], [Math.cos(a0) * r, Math.sin(a0) * r, h + 1.4], color, j % 2 ? 0.3 : 0.12);
+        }
+      });
+      ln(A0, M.ALL, [0, 0, 8.6], [0, 0, 13], GOLD);
+      lantern(A0, 0, 0, 15.5, 2.4);
+    }
+
+    const _p = [V(0, 0, 0), V(0, 0, 0), V(0, 0, 0), V(0, 0, 0)];
+    const gapOn = (F, cu, cv) => {
+      const pn = posName(cu, cv);
+      return !!pn && GAPS.some(([f, q]) => SIDES[f] === F && q === pn);
+    };
+    // what a gap sticker has where its road would be: the bed's outline, dashed, and hazard stripes at each end
+    for (const [fi, pn] of GAPS) {
+      const F = SIDES[fi];
+      const [cu, cv] = CELL[pn];
+      const slot = _v.copy(F.n).addScaledVector(F.eu, cu).addScaledVector(F.ev, cv).round();
+      const K = bySlot.get(key(slot.x, slot.y, slot.z)).K;
+      const a0 = Math.atan2(cv, cu);
+      const SPAN = Math.asin(S / 2 / R) - 0.012;
+      const Q = (a, rad, h) => faceP(F, Math.cos(a) * rad, Math.sin(a) * rad, h, V(0, 0, 0));
+      const n = 24;
+      for (let i = 0; i < n; i++) {
+        const b0 = a0 - SPAN + ((2 * SPAN) * i) / n;
+        const b1 = a0 - SPAN + ((2 * SPAN) * (i + 0.55)) / n;
+        for (const rad of [R - HW, R + HW]) K.quad(M.ALL, Q(b0, rad - 0.3, 0.26), Q(b1, rad - 0.3, 0.26), Q(b1, rad + 0.3, 0.26), Q(b0, rad + 0.3, 0.26), TOY_YELLOW, 0.45);
+        if (i % 4 === 1) {
+          // a cross on the bare bed
+          const bm = (b0 + b1) / 2;
+          const d = 3.2 / R;
+          for (const e of [-1, 1]) K.quad(M.ALL, Q(bm - d, R - e * 3.2 - 0.3, 0.24), Q(bm - d, R - e * 3.2 + 0.3, 0.24), Q(bm + d, R + e * 3.2 + 0.3, 0.24), Q(bm + d, R + e * 3.2 - 0.3, 0.24), TOY_YELLOW, 0.6);
+        }
+      }
+      for (const end of [-1, 1]) {
+        const b = a0 + end * SPAN;
+        const w = 2.2 / R;
+        for (let j = 0; j < 8; j++) {
+          if (j % 2) continue;
+          const r0 = R - HW + (j * 2 * HW) / 8;
+          const r1 = r0 + (2 * HW) / 8;
+          K.quad(M.ALL, Q(b, r0, 0.3), Q(b, r1, 0.3), Q(b - end * w, r1, 0.3), Q(b - end * w, r0, 0.3), TOY_YELLOW, 0.9);
+        }
+      }
+    }
+    for (const F of SIDES) {
+      for (const pr of prims) {
+        let u = 0, v = 0;
+        if (pr.at) [u, v] = pr.at;
+        else {
+          for (const p of pr.pts) {
+            u += p[0];
+            v += p[1];
+          }
+          u /= pr.pts.length;
+          v /= pr.pts.length;
+        }
+        // (a gap sticker has no roundabout across it)
+        if (!pr.at && gapOn(F, cellOf(u), cellOf(v)) && pr.pts.every((q) => Math.abs(Math.hypot(q[0], q[1]) - R) < HW + 0.8)) continue;
+        const slot = _v.copy(F.n).addScaledVector(F.eu, cellOf(u)).addScaledVector(F.ev, cellOf(v)).round();
+        const K = bySlot.get(key(slot.x, slot.y, slot.z)).K;
+        const q = pr.pts.map((p, i) => faceP(F, p[0], p[1], p[2], _p[i]));
+        const mask = pr.mask ?? M.ALL;
+        if (pr.kind === 'road') K.road(q[0], q[1], q[2], q[3]);
+        else if (pr.kind === 'quad') K.quad(mask, q[0], q[1], q[2], q[3], pr.color, pr.k, pr.k1 ?? pr.k);
+        else K.line(mask, q[0], q[1], pr.color);
+      }
+    }
+
+    // each cubie's pieces, drawn with the course's own materials (so the lenses and the shift wave treat them like
+    // everything else)
+    this.neutralGeo = [];
+    for (const cubie of this.cubies) {
+      for (const [mask, o] of cubie.K.B) {
+        const m = L.materials(mask);
+        const add = (arr, colors, mat, order, lines) => {
+          if (!arr.length) return;
+          const g = new THREE.BufferGeometry();
+          g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
+          if (colors) {
+            g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            if (mask === M.ALL) this.neutralGeo.push({ g, colors });
+          }
+          const mesh = lines ? new THREE.LineSegments(g, mat) : new THREE.Mesh(g, mat);
+          mesh.renderOrder = order;
+          mesh.frustumCulled = false;
+          cubie.group.add(mesh);
+        };
+        add(o.fp, null, m.fill, 1);
+        add(o.gp, null, m.road, 1);
+        add(o.rp, o.rc, m.ribbon, 3);
+        add(o.lp, o.lc, m.line, 2, true);
+      }
+      delete cubie.K;
+      this.root.add(cubie.group);
+    }
+  }
+
+  // Lens boosts: chevrons on the road wherever it crosses the middle of a sticker's run, lit red on a red sticker
+  // and blue on a blue one, each for its own lens only.
+  buildPads() {
+    const w = this.world;
+    const m = w.main;
+    const L = w.layers;
+    this.sites = [];
+    const add = (at) => {
+      const i = m.index(at);
+      const pad = { path: m, i, f: m.frac(i), lat: 0, w: 2.6, len: m.ds * 3.5, mask: 0 };
+      w.pads.push(pad);
+      const meshes = {};
+      for (const [mask, color] of [[M.RO, COLORS.red], [M.BO, COLORS.blue]]) {
+        const pos = [];
+        const colr = [];
+        const c = new THREE.Color(color).multiplyScalar(1.2);
+        const q = (a, b, c2, d) => {
+          pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c2.x, c2.y, c2.z, a.x, a.y, a.z, c2.x, c2.y, c2.z, d.x, d.y, d.z);
+          for (let k = 0; k < 6; k++) colr.push(c.r, c.g, c.b);
+        };
+        for (let k = 0; k < 3; k++) {
+          const i0 = m.wrap(i + k * 2);
+          const P = (di, la) => m.wpoint(i0 + di, la, 0.24, V(0, 0, 0));
+          q(P(0, -pad.w), P(1, 0), P(2, 0), P(1, -pad.w));
+          q(P(0, pad.w), P(1, 0), P(2, 0), P(1, pad.w));
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        g.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
+        const mesh = new THREE.Mesh(g, L.materials(mask).ribbon);
+        mesh.renderOrder = 4;
+        mesh.frustumCulled = false;
+        mesh.visible = false;
+        w.group.add(mesh);
+        meshes[mask] = mesh;
+      }
+      this.sites.push({ pad, meshes, x: m.px[i], z: m.pz[i] });
+    };
+    // two on each pass of the middle faces, three round each end
+    for (const a of [-25, 25]) for (const f of ['F0', 'D0']) add(onMid(f, a));
+    for (const a of [155, 205]) for (const f of ['F1', 'D1']) add(onMid(f, a));
+    for (const a of [45, 95, 145]) add(onB(a));
+    for (const a of [-5, 170, 225]) add(onU(a));
+  }
+
+  // The stretches of the main road that lie on each roundabout: where a turning face carries you.
+  findZones() {
+    const m = this.world.main;
+    this.zone = new Int8Array(m.N).fill(-1);
+    for (let i = 0; i < m.N; i++) {
+      const k = Math.round(m.pz[i] / DC);
+      if (k < 0 || k > 3) continue;
+      if (Math.abs(Math.hypot(m.px[i], m.pz[i] - k * DC) - R) < 1.2) this.zone[i] = k;
+    }
+  }
+
+  // ---------------------------------------------------------------- the stickers under the road
+  // The sticker in a slot (which cubie sits there now, and which of its stickers faces out).
+  stickerAt(slot, n) {
+    for (const c of this.cubies) {
+      if (c.slot.x !== slot.x || c.slot.y !== slot.y || c.slot.z !== slot.z) continue;
+      for (const s of c.stickers) if (_v.copy(s.n0).applyQuaternion(c.q).dot(n) > 0.9) return s;
+    }
+    return null;
+  }
+
+  // The lenses the glass over flat (x, z) is there in. Over an edge there's none to be on or off (null); where a
+  // turning layer has carried it off round the corner it's there in no lens (0).
+  maskAt(x, z, riding) {
+    const st = this.stickerFlat(x, z, riding);
+    if (!st) return st;
+    return this.mono && st.mask === M.X ? M.ALL : st.mask;
+  }
+  // The sticker under flat (x, z): null over an edge, 0 where a turning layer has it off round the corner (unless
+  // you're `riding` that layer: then it's the one you're on).
+  stickerFlat(x, z, riding) {
+    const k = band(z);
+    if (k < 0) return null;
+    const f = FACES[k];
+    let along = z - Math.round(z / DC) * DC;
+    let lx = x;
+    const mv = this.move;
+    if (mv && mv.face === k) {
+      // on the turning face itself: the glass that was at this place before the turn began
+      const c = Math.cos(-mv.flat);
+      const s = Math.sin(-mv.flat);
+      [lx, along] = [x * c - along * s, x * s + along * c];
+    }
+    const cellOf = (a) => (a < -S / 2 ? -1 : a > S / 2 ? 1 : 0);
+    _w.copy(f.n).addScaledVector(f.t, cellOf(along));
+    _w.x += cellOf(lx);
+    _w.round();
+    if (mv && mv.face !== k && _w[mv.axis] === mv.side && !riding) return 0; // (its glass is off round the corner just now)
+    return this.stickerAt(_w, f.n) || null;
+  }
+  // Is the road shut under flat (x, z): a gap sticker's bare bed, on a stretch the open fast line goes past?
+  holeAt(x, z, i) {
+    const k = this.zone[i];
+    if (k < 0) return false;
+    const st = this.stickerFlat(x, z);
+    if (!st || !st.gap) return false;
+    const along = z - k * DC;
+    const pn = posName(Math.abs(x) > S / 2 ? Math.sign(x) : 0, Math.abs(along) > S / 2 ? Math.sign(along) : 0);
+    return this.express.some((e) => e.open && e.forced && e.face === k && e.shut === pn);
+  }
+
+  // After the cube changes: which boosts are lit.
+  refresh() {
+    for (const s of this.sites) {
+      const m = this.maskAt(s.x, s.z);
+      const lens = m === M.R ? M.RO : m === M.B ? M.BO : 0;
+      s.pad.mask = lens;
+      s.meshes[M.RO].visible = lens === M.RO;
+      s.meshes[M.BO].visible = lens === M.BO;
+    }
+    const mv = this.move;
+    for (const pl of this.planks || []) {
+      const F = SIDES[pl.face];
+      const [cu, cv] = CELL[pl.pn];
+      const slot = _w.copy(F.n).addScaledVector(F.eu, cu).addScaledVector(F.ev, cv).round();
+      // (not while that piece is on its way somewhere)
+      pl.group.visible = !(mv && slot[mv.axis] === mv.side) && !!this.stickerAt(slot, F.n)?.gap;
+    }
+  }
+
+  // ---------------------------------------------------------------- turning
+  begin(name) {
+    const prime = name.endsWith("'");
+    const [axis, side] = LAYER[name[0]];
+    const n = AX[axis].clone().multiplyScalar(side);
+    // clockwise seen from outside is a turn of -90 degrees about the way out
+    const total = (prime ? 1 : -1) * (Math.PI / 2);
+    const face = FACES.findIndex((f) => f.n.dot(n) > 0.9);
+    this.move = { name, axis, side, n, total, angle: 0, flat: 0, face, t: 0, cubies: this.cubies.filter((c) => c.slot[axis] === side).map((c) => ({ c, q0: c.q.clone() })) };
+    // a fast line with a piece in this layer comes apart
+    for (const e of this.express) {
+      const F = SIDES[e.face];
+      const dir = e.axis === 'v' ? F.ev : F.eu;
+      if (e.open && (Math.abs(F.n[axis]) > 0.5 || Math.abs(dir[axis]) > 0.5)) this.setExpress(e, false);
+    }
+    this.refresh();
+  }
+
+  // Turn the layer on to where it is `t` seconds into its turn; returns how far the flat road under it turned.
+  advance(t) {
+    const mv = this.move;
+    const a = mv.total * ease(Math.min(1, t / TURN));
+    const d = a - mv.angle;
+    mv.angle = a;
+    mv.t = t;
+    // seen in the flat road's own x and z, a turn about the way out runs the other way
+    mv.flat = -a;
+    _q.setFromAxisAngle(mv.n, a);
+    for (const { c, q0 } of mv.cubies) {
+      c.q.copy(_q).multiply(q0);
+      c.group.quaternion.copy(c.q);
+    }
+    if (t >= TURN) {
+      for (const { c } of mv.cubies) {
+        c.slot.applyQuaternion(_q.setFromAxisAngle(mv.n, mv.total)).round();
+        // (keep the turns exact: a quarter turn at a time, snapped)
+        const e = c.q.toArray().map((x) => Math.round(x * 2) / 2);
+        const l = Math.hypot(...e) || 1;
+        if (Math.abs(l - 1) < 0.01) c.q.fromArray(e);
+        c.q.normalize();
+        c.group.quaternion.copy(c.q);
+      }
+      this.move = null;
+      for (const e of this.express) this.setExpress(e, this.expressOpen(e));
+      this.refresh();
+    }
+    return -d;
+  }
+
+  // The chevrons that run along the seam of the layer about to turn, pointing the way it will go.
+  seamLights(name) {
+    const prime = name.endsWith("'");
+    const [axis, side] = LAYER[name[0]];
+    const n = AX[axis];
+    const sign = (prime ? 1 : -1) * side; // the turn's sense about +axis
+    const pos = [];
+    const [ua, va] = ['x', 'y', 'z'].filter((k) => k !== axis);
+    const at = (u, v, out, tip) => {
+      const p = V(0, 0, 0);
+      p[axis] = side * (S / 2) + tip;
+      p[ua] = u;
+      p[va] = v;
+      return p.addScaledVector(out, 0.6);
+    };
+    const quad = (a, b, c, d) => pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
+    // round the four faces the seam crosses
+    for (const [ou, ov] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
+      const out = V(0, 0, 0);
+      out[ua] = ou;
+      out[va] = ov;
+      for (let s = -A + 10; s <= A - 10; s += 20) {
+        const u = ou * H + (ou ? 0 : s);
+        const v = ov * H + (ov ? 0 : s);
+        const p = at(u, v, out, 0);
+        // which way this point of the layer moves
+        const dir = _v.crossVectors(n, p).multiplyScalar(sign).normalize().clone();
+        for (const w of [-1, 1]) {
+          const tip = p.clone().addScaledVector(dir, 4);
+          const back = p.clone().addScaledVector(dir, -3).addScaledVector(n, w * 5);
+          quad(back, tip, tip.clone().addScaledVector(dir, -2.6), back.clone().addScaledVector(dir, -2.6));
+        }
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    const mat = new THREE.MeshBasicMaterial({ color: TOY_YELLOW, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+    const mesh = new THREE.Mesh(g, mat);
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 5;
+    this.root.add(mesh);
+    return mesh;
+  }
+}
+
+// ------------------------------------------------------------------ the course in a race
+// race.js calls def.live(race) once and its update every frame: the song, the carry, and the grooves.
+function live(race) {
+  const world = race.world;
+  const cube = world.cube;
+  if (!cube) return null;
+  cube.mono = !!race.mono;
+  cube.refresh();
+  // the cube's own neutral pieces go grey through a lens with the rest of the course's (layers.js), so the lens tint
+  // colours them and nothing of the other world's colour is left
+  for (const N of cube.neutralGeo) {
+    const c = N.colors;
+    const out = new Float32Array(c.length);
+    for (let i = 0; i < c.length; i += 3) out[i] = out[i + 1] = out[i + 2] = Math.max(c[i], c[i + 1], c[i + 2]) * 0.85 + (0.15 * (c[i] + c[i + 1] + c[i + 2])) / 3;
+    (world.layers.neutral ||= []).push({ g: N.g, colour: N.g.getAttribute('color'), grey: new THREE.Float32BufferAttribute(out, 3) });
+  }
+  cube.neutralGeo = [];
+  const m = world.main;
+  const fr = {};
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  let lights = null;
+  let clicks = 0;
+  const audio = race.app?.audio;
+  const sound = (fn) => {
+    if (!audio?.ctx || audio.ctx.state !== 'running') return;
+    try {
+      fn(audio, audio.now());
+    } catch {
+      /* a sound is never worth a crash */
+    }
+  };
+  const click = (k) => sound((au, t) => {
+    au.tone('square', 1500 + k * 180, t, 0.035, 0.06, au.sfxDry, { filter: 5200 });
+    au.noiseHit(t, 0.04, 0.1, au.sfxDry, 'highpass', 3800);
+  });
+  const whirr = () => sound((au, t) => {
+    au.swell(t, TURN, 0.1, au.sfxDry, 'bandpass', 260, 900, 2.2);
+    au.tone('sawtooth', 62, t, TURN * 0.95, 0.045, au.sfxDry, { slideTo: 96, filter: 700 });
+  });
+  const clunk = () => sound((au, t) => {
+    au.thump(t, 120, 38, 0.2, 0.3);
+    au.noiseHit(t, 0.07, 0.14, au.sfxDry, 'bandpass', 900, 1.2, 300);
+  });
+
+  // A side layer (the one on the right of the road, or the one on the left) turns the way the road runs round the
+  // cube: whoever is on it when it goes is carried round the corner with it, to the same place on the next face. That
+  // is a face further round the lap or a face back (and between the top and the back, the two ends of the lap, most
+  // of a lap). In the flat world it's done at once, when the turn starts; the racer is drawn riding the layer round
+  // (pose, below) until the turn is over or they drive off it.
+  const X = new THREE.Vector3(1, 0, 0);
+  const qr = new THREE.Quaternion();
+  const board = (mv, T) => {
+    const about = mv.total * mv.side; // the turn, about +x
+    const step = Math.sign(about); // faces along the flat road
+    for (const r of race.racers) {
+      r._qtRide = null;
+      if (r.puppet || r.respawnT > 0 || !r.grounded || r.finished) continue;
+      const g = r.gnd;
+      if (!g.onRoad || g.path !== m) continue;
+      if (Math.sign(r.pos.x) !== mv.side || Math.abs(r.pos.x) <= S / 2) continue;
+      const k = Math.round(r.pos.z / DC);
+      if (k < 0 || k > 3 || band(r.pos.z) < 0) continue;
+      const k1 = (k + step + 4) % 4;
+      const shift = (k1 - k) * DC;
+      const x = r.pos.x;
+      const z = r.pos.z + shift;
+      let i = m.nearest(x, z, -1, r.pos.y);
+      let lat = 0;
+      let f = m.frac(i);
+      if (m.frame(x, z, i, fr, r.pos.y) && Math.abs(fr.lat) < m.halfW - 1.2) {
+        r.pos.x = x;
+        r.pos.z = z;
+        lat = fr.lat;
+        f = fr.f;
+        i = fr.i ?? i;
+      } else {
+        // (the road there isn't quite the road here, at the two ends of the lap: set down on the nearest of it,
+        // going its way)
+        m.pointF(f, 0, 0, a);
+        const sp = Math.hypot(r.vel.x, r.vel.z);
+        r.pos.x = a.x;
+        r.pos.z = a.z;
+        r.vel.x = m.thx[i] * sp;
+        r.vel.z = m.thz[i] * sp;
+        r.yaw = Math.atan2(m.thx[i], m.thz[i]);
+      }
+      // the lap: carried on, or carried back
+      const u0 = m.mainU(g.i);
+      const u1 = m.mainU(i);
+      r.prog += u1 - u0;
+      r.lastU = u1;
+      r.sec = Math.max(0, Math.floor(r.prog * 3));
+      r.secFull = false;
+      r.secStart = T;
+      g.i = i;
+      g.f = f;
+      g.lat = lat;
+      r.track = { path: m, i, f, lat };
+      if (r.hints) r.hints[m.id] = i;
+      if (r.ai) {
+        r.ai.path = m;
+        r.ai._branch = null;
+        r.ai.decided?.clear?.();
+      }
+      r._qtRide = { side: mv.side, about, shift, w: 1, left: false, gain: u1 - u0 };
+      if (r.isPlayer) {
+        const cam = race.camOf?.(r);
+        if (cam) {
+          const dx = r.pos.x - x;
+          const dz = r.pos.z - (z - shift);
+          for (const v of [cam.pos, cam.look, cam.anchor]) if (v) {
+            v.x += dx;
+            v.z += dz;
+          }
+          cam.addShake(0.45);
+          cam.fovPunch?.(8);
+        }
+        sound((au, t) => {
+          au.swell(t, TURN * 0.9, 0.16, au.sfxDry, 'bandpass', 500, u1 > u0 ? 2400 : 180, 1.4);
+        });
+      }
+    }
+  };
+
+  return {
+    cube,
+    // A racer riding a side layer round is drawn where the layer has them (vehicles/racer.js calls this once the
+    // racer is posed in the drawn world).
+    pose(r) {
+      const ride = r._qtRide;
+      const mv = cube.move;
+      if (!ride || !mv || ride.w <= 0 || !r.cv) return;
+      qr.setFromAxisAngle(X, ride.w * (mv.angle * mv.side - ride.about));
+      r.root.position.applyQuaternion(qr);
+      r.root.quaternion.premultiply(qr);
+      r.cv.pos.applyQuaternion(qr);
+      r.cv.quat.premultiply(qr);
+    },
+    // For the rivals (vehicles/ai.js): how much a lens is worth just here. A single lens over glass of its own colour
+    // is the fast way (and lights that colour's boosts); over glass that isn't there in it, it's the groove.
+    lensScore(r, mode) {
+      if (mode === BOTH || !r.gnd.onRoad || r.gnd.path !== m) return 0;
+      let s = 0;
+      for (const ahead of [0, 0.35, 0.8]) {
+        const i = m.wrap(r.gnd.i + Math.round((ahead * Math.max(20, r.speed)) / m.ds));
+        const mask = cube.maskAt(m.px[i], m.pz[i]);
+        if (mask == null || mask === M.ALL) continue;
+        if (!solidIn(mask, mode)) s += 4;
+        else if (ahead) s -= 2.6;
+      }
+      return s;
+    },
+    update(dt) {
+      const T = race.raceTime;
+      const due = dueOf(cube.done); // when the next turn starts
+      const name = SONG[cube.done % SONG.length];
+      let carried = 0;
+      if (race.state === 'race' || race.state === 'finished') {
+        if (!cube.move && T >= due - WARN && T < due) {
+          // the ratchet: four clicks, and the seam's chevrons running
+          if (!lights) {
+            lights = cube.seamLights(name);
+            clicks = 0;
+          }
+          const u = (T - (due - WARN)) / WARN;
+          const k = Math.floor(u * 4);
+          if (k >= clicks) {
+            click(clicks);
+            clicks = k + 1;
+          }
+          lights.material.opacity = 0.25 + 0.75 * (0.5 + 0.5 * Math.sin(u * Math.PI * 8 - Math.PI / 2));
+        }
+        if (!cube.move && T >= due) {
+          lights ||= cube.seamLights(name);
+          cube.begin(name);
+          whirr();
+          if (cube.move.axis === 'x') board(cube.move, T);
+        }
+        if (cube.move) {
+          const mv = cube.move;
+          const face = mv.face;
+          carried = cube.advance(T - due);
+          if (lights) lights.material.opacity = 1 - 0.6 * Math.min(1, (T - due) / TURN);
+          if (!cube.move) {
+            cube.done++;
+            world.songLamp?.(cube.done % SONG.length);
+            clunk();
+            for (const r of race.racers) r._qtRide = null;
+            if (lights) {
+              cube.root.remove(lights);
+              lights.geometry.dispose();
+              lights.material.dispose();
+              lights = null;
+            }
+            for (const pl of race.players || []) race.camOf?.(pl)?.addShake(0.25);
+          }
+          // the turntable: everyone on that face's roundabout, riding the glass, goes round with it
+          if (face >= 0 && carried) {
+            for (const r of race.racers) {
+              if (r.puppet || r.respawnT > 0 || !r.grounded) continue;
+              const g = r.gnd;
+              if (!g.onRoad || g.path !== m || cube.zone[g.i] !== face) continue;
+              const mask = cube.maskAt(r.pos.x, r.pos.z);
+              if (mask != null && !solidIn(mask, r.mode)) continue;
+              if (!m.frame(r.pos.x, r.pos.z, g.i, fr, r.pos.y)) continue;
+              const df = (carried * R) / m.length;
+              m.pointF(fr.f, fr.lat, 0, a);
+              m.pointF((fr.f + df + 1) % 1, fr.lat, 0, b);
+              r.pos.x += b.x - a.x;
+              r.pos.z += b.z - a.z;
+              // and it turns you, and the way you're going, by the same amount
+              const s = Math.sin(-carried);
+              const c = Math.cos(-carried);
+              r.yaw -= carried;
+              const vx = r.vel.x * c + r.vel.z * s;
+              r.vel.z = r.vel.z * c - r.vel.x * s;
+              r.vel.x = vx;
+            }
+          }
+        }
+      }
+      // the fast lines: a rival heading for one that has just shut thinks again, and a line's road stays drawn until
+      // the last car on it is off
+      for (const e of cube.express) {
+        if (e.open) continue;
+        let busy = false;
+        for (const r of race.racers) {
+          if (r.ai?._branch === e.path && r.ai.path === m) r.ai._branch = null;
+          if (r.gnd.path === e.path && r.gnd.onRoad) busy = true;
+        }
+        e.road.visible = busy;
+      }
+      // the grooves: off the glass you're on bare track, and slower
+      for (const r of race.racers) {
+        if (r.puppet) continue;
+        r._qtMul ??= r.speedMul;
+        const onMain = r.grounded && r.gnd.onRoad && r.gnd.path === m;
+        // (riding a side layer round: you're still on the sticker you were on, and it leaves you when you leave it)
+        const ride = cube.move ? r._qtRide : null;
+        if (ride) {
+          if (!onMain || Math.sign(r.pos.x) !== ride.side || Math.abs(r.pos.x) < S / 2 - 1) ride.left = true;
+          if (ride.left) ride.w = Math.max(0, ride.w - dt / 0.35);
+        }
+        const riding = ride && !ride.left;
+        const mask = onMain ? (riding ? cube.maskAt(r.pos.x, r.pos.z - ride.shift, true) : cube.maskAt(r.pos.x, r.pos.z)) : null;
+        const hole = onMain && !riding && cube.holeAt(r.pos.x, r.pos.z, r.gnd.i);
+        // (and on a turning face, anywhere but its roundabout, the road has swung out from under you)
+        const swung = onMain && cube.move && cube.move.face >= 0 && mask != null && cube.zone[r.gnd.i] !== cube.move.face && Math.round(r.pos.z / DC) === cube.move.face;
+        const off = hole || swung || (mask != null && !solidIn(mask, r.mode));
+        r.inGroove = off;
+        // (glass that's there but not in your lens costs more than glass a turn has taken for a moment; a shut road
+        // costs most of all)
+        r.speedMul = r._qtMul * (!off ? 1 : hole ? HOLE : swung || mask === 0 ? 0.86 : 0.72);
+        // (the tell: bare track under you rattles and throws sparks)
+        if (off && r.speed > 12 && (r._qtSpark = (r._qtSpark || 0) - dt) <= 0) {
+          r._qtSpark = 0.09;
+          a.copy(r.pos).setY(r.pos.y + 0.3);
+          b.set(-Math.sin(r.yaw), 0.5, -Math.cos(r.yaw));
+          race.debris?.sparks(a, b, 2, TOY_YELLOW, 14, r.gnd.y);
+          if (r.isPlayer) race.camOf?.(r)?.addShake(0.035);
+        }
+        if (off) {
+          const top = r.phys.topSpeed * r.speedMul;
+          if (r.speed > top) r.vel.multiplyScalar(1 - Math.min(0.9, (hole ? 3.2 : 1.6) * dt));
+        }
+      }
+    },
+  };
+}
+
+// ------------------------------------------------------------------ what stands still: the core, the stand, the caps
+function decor(world, L) {
+  // the core the layers turn on: seen between them while one is turning, lit from inside
+  const h = H - 26;
+  const core = 0x7a3cff;
+  L.box(M.ALL, 0, 0, 0, h * 2, h * 2, h * 2, 0, 0x2a1848, true);
+  for (const s of [-1, 1]) {
+    for (const [ax, u, v] of [['x', 'y', 'z'], ['y', 'x', 'z'], ['z', 'x', 'y']]) {
+      // the spindle each face turns on, and a ring of teeth round it
+      const c = V(0, 0, 0);
+      c[ax] = s * (h + 0.5);
+      const eu = V(0, 0, 0);
+      eu[u] = 1;
+      const ev = V(0, 0, 0);
+      ev[v] = 1;
+      L.ring(M.ALL, c, eu, ev, 30, 20, core);
+      L.ring(M.ALL, c, eu, ev, 62, 28, 0x4a2a8a);
+      for (let k = 0; k < 16; k++) {
+        const a = (k / 16) * Math.PI * 2;
+        const p0 = c.clone().addScaledVector(eu, Math.cos(a) * 62).addScaledVector(ev, Math.sin(a) * 62);
+        const p1 = c.clone().addScaledVector(eu, Math.cos(a) * 74).addScaledVector(ev, Math.sin(a) * 74);
+        L.line(M.ALL, p0, p1, k % 2 ? COLORS.red : COLORS.blue);
+      }
+    }
+  }
+  // the stand it sits on: a post under the bottom face's middle, and a foot on the shelf
+  const y0 = -H - STAND;
+  L.cylinder(M.ALL, 0, y0, 0, 22, STAND - 1, 12, 3, TOY_YELLOW);
+  for (const r of [60, 110, 118]) L.ring(M.ALL, V(0, y0 + 0.5, 0), AX.x, AX.z, r, 36, r === 110 ? COLORS.red : r === 118 ? COLORS.blue : TOY_YELLOW);
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2;
+    L.line(M.ALL, V(Math.cos(a) * 22, y0 + 20, Math.sin(a) * 22), V(Math.cos(a) * 110, y0 + 0.5, Math.sin(a) * 110), TOY_YELLOW);
+  }
+  // the song, written round the foot: a tick for each of its turns in that layer's colour (a long one for a turn the
+  // other way), and a lamp that stands at the turn that's next
+  const tint = { U: COLORS.white, F: COLORS.red, D: COLORS.violet, B: COLORS.blue, L: TOY_YELLOW, R: GREEN };
+  SONG.forEach((name, k) => {
+    const a = (k / SONG.length) * Math.PI * 2;
+    const r1 = name.endsWith("'") ? 150 : 140;
+    for (const da of [-0.035, 0, 0.035]) L.line(M.ALL, V(Math.cos(a + da) * 124, y0 + 0.5, Math.sin(a + da) * 124), V(Math.cos(a + da) * r1, y0 + 0.5, Math.sin(a + da) * r1), tint[name[0]]);
+  });
+  L.ring(M.ALL, V(0, y0 + 0.5, 0), AX.x, AX.z, 124, 48, TOY_YELLOW);
+  const lamp = new THREE.Mesh(new THREE.OctahedronGeometry(5), new THREE.MeshBasicMaterial({ color: TOY_YELLOW, fog: false }));
+  lamp.position.set(132, y0 + 7, 0);
+  world.group.add(lamp);
+  world.songLamp = (k) => {
+    const a = (k / SONG.length) * Math.PI * 2;
+    lamp.position.set(Math.cos(a) * 132, y0 + 7, Math.sin(a) * 132);
+  };
+  world.cube = new TwistCube(world);
+}
+
+// The bedroom (toybox.js) is built round a flat course. This one isn't flat, so the room is taken out of the flat
+// world and stood round the cube instead, the shelf under its stand.
+function dress(env, world) {
+  const before = new Set(env.group.children);
+  const tick = toyboxEnv('shelf')(env, world);
+  const room = env.group.children.find((o) => !before.has(o) && o.isGroup);
+  if (room) {
+    env.group.remove(room);
+    room.position.set(0, -H - STAND - world.floorY, 0);
+    // (the shelf is long the way the flat road is long: turn it to run along the wall behind the cube)
+    room.rotation.y = Math.PI / 2;
+    const holder = new THREE.Group();
+    // the room is laid out round the middle of the flat road
+    room.position.x = 0;
+    room.position.z = 0;
+    holder.add(room);
+    world.group.add(holder);
+  }
+  return tick;
+}
+
+export const TWISTCUBE = {
+  id: 'twistcube',
+  num: '22',
+  name: 'QUARTER TURN',
+  blurb: 'A twisting cube with the road printed on it. Every turn carries road and racers round, and deals out new fast lines.',
+  decor,
+  dressEnv: dress,
+  live,
+  seed: 2222,
+  laps: 3,
+  sun: 0,
+  skyPiece: 'none',
+  space: true,
+  fog: [900, 8000],
+  noPylons: true,
+  halfWidth: HALF_W,
+  bankFactor: 3,
+  points: LAY.pts,
+  curved: {
+    lay(world) {
+      const o = new THREE.Vector3();
+      const t = new THREE.Vector3();
+      for (const p of world.paths) {
+        p.frames = newFrames(p.N);
+        for (let i = 0; i < p.N; i++) {
+          band(p.pz[i]);
+          o.copy(_bp);
+          o.x += p.px[i];
+          t.copy(_bt).multiplyScalar(p.thz[i]);
+          t.x += p.thx[i];
+          putFrame(p.frames, i, o, t.normalize(), _bn);
+        }
+      }
+    },
+  },
+  branches: EXPRESS.map((e) => e.def),
+  noRoads: true, // (the road is printed on the cube's own pieces: see buildCubies)
+  noStorms: true, // (a toy on a shelf: no weather over its secret roads)
+  shards: [
+    { at: onMid('F0', -10), n: 3 }, { at: onMid('D0', -10), n: 3, lat: 0.4 }, { at: onB(60), n: 3, lat: -0.4 },
+    { at: onMid('D1', 170), n: 3 }, { at: onMid('F1', 170), n: 3, lat: 0.4 }, { at: onU(200), n: 3, lat: -0.4 },
+  ],
+  // for tools and tests
+  qt: { S, H, R, DC, SONG, dueOf, TURN, LAY, at: (x, z) => (band(z), _bp.clone().setX(x)) },
+};
+void RED;
+void BLUE;
+void BOTH;

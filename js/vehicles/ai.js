@@ -6,6 +6,7 @@
 import { clamp, wrapAngle, rand } from '../core/util.js';
 import { BOTH, RED, BLUE, MODES, solidIn, SHIFT } from '../world/shift.js';
 import { FORMS } from './forms.js';
+import { offPage } from '../game/popup.js';
 
 export class RaceAI {
   constructor(racer, world, skill = 0.8) {
@@ -35,6 +36,8 @@ export class RaceAI {
     const r = this.r;
     const w = this.world;
     const ctl = r.ctl;
+    // on a moving platform's road, or lined up for one: the rig drives (world/platforms.js)
+    if (w.rig?.pilot(this, dt)) return;
     const path = this.path;
     const i = this.where();
     const t = r.track;
@@ -44,7 +47,11 @@ export class RaceAI {
     // A branch that starts flush with the main road reads as "main" under the wheels until it climbs away; we are
     // still on it as long as we sit inside its strip at its height.
     if (t && t.path !== path && !path.closed && path.frame(r.pos.x, r.pos.z, i, _f) && Math.abs(_f.lat) < path.halfW + 1 && Math.abs(_f.y - r.pos.y) < 2.5) this.planT = 0;
-    if (t && t.path !== path && this.planT > 1.5) {
+    // (a lens-only road under the wheels is adopted at once: read as the road we meant to be on, it looked solid in
+    // every lens, and a rival that had drifted up BLUE ROOFTOPS shifted back to BOTH and dropped through it)
+    // (read from the strip we're over, not the wheels: off a roof edge for a moment, the wheels have nothing under them)
+    const lensOnly = t && t.path.mask[t.i] && !solidIn(t.path.mask[t.i], BOTH);
+    if (t && t.path !== path && (this.planT > 1.5 || (lensOnly && this.planT > 0.2))) {
       this.path = t.path;
       this._branch = null;
       this.planT = 0;
@@ -58,7 +65,9 @@ export class RaceAI {
     // ---- forks: decide once per approach
     if (this.path === w.main) {
       for (const b of w.paths) {
-        if (b.closed) continue;
+        // (noFork: a strip nothing leads onto, DROP TOWER's catch chute and seesaw plank)
+        // (noFork: a road you don't drive onto from this one, like FLIPPER ALLEY's centre ramp)
+        if (b.closed || b.noFork) continue;
         const iFrom = w.main.index(b.mainFrom);
         let d = iFrom - i;
         if (d < -w.main.N / 2) d += w.main.N;
@@ -106,7 +115,8 @@ export class RaceAI {
     }
     const obs = [];
     for (const o of w.obstacles) {
-      if (o.path !== P) continue;
+      // (a pop-up on another page of the book isn't there for this racer: game/popup.js)
+      if (o.path !== P || (o.page !== undefined && offPage(o, r))) continue;
       let d = o.i - pi;
       if (P.closed && d < -P.N / 2) d += P.N;
       if (d < -2 || d > n) continue;
@@ -115,6 +125,8 @@ export class RaceAI {
     // traffic and the police convoy read like obstacles (each in its own world), see game/traffic.js, game/police.js
     for (const o of r.session?.traffic?.near(P, pi, n) || []) obs.push(o);
     for (const o of r.session?.police?.near(P, pi, n) || []) obs.push(o);
+    for (const o of r.session?.tower?.near(P, pi, n) || []) obs.push(o); // DROP TOWER's marbles
+    for (const o of r.session?.pinball?.near(P, pi, n) || []) obs.push(o);
     // For each world, the best single lane through everything solid in it.
     const LANES = [-0.65, -0.35, 0, 0.35, 0.65].map((f) => f * P.halfW);
     // Obstacles inside the reaction distance can't be dodged by a lane change any more, so they are checked
@@ -155,9 +167,11 @@ export class RaceAI {
     const score = (m) => {
       if (r.mono) {
         if (m === BOTH || !ok[m]) return 1e6;
-        return blocked[m] * 10 + (m === r.mode ? 0 : afford ? 4 : 1e5);
+        return blocked[m] * 10 + (m === r.mode ? 0 : afford ? 4 : 1e5) + (r.session?.live?.lensScore?.(r, m) || 0);
       }
       if (!ok[m]) return 1e6;
+      // never let go of the road under the wheels while the plan is still about another one
+      if (t && t.path !== P && solidIn(t.path.mask[t.i], r.mode) && !solidIn(t.path.mask[t.i], m)) return 1e6;
       let s = blocked[m] * 10;
       if (m !== BOTH) s += afford ? 3 : 200;
       if (m !== BOTH && saving) s += 6;
@@ -170,6 +184,10 @@ export class RaceAI {
       if (r.session?.quake?.threat(r, m)) s += 6;
       // the police chase is only in BOTH: worth a lens to get through it
       if (r.session?.police?.threat(r, m)) s += 5;
+      // LENS TAG (game/tag.js): the lens this CPU wants for the hunt
+      if (r.session?.tag) s += r.session.tag.lensBias(r, m);
+      // a course's own machinery has a say (QUARTER TURN: which lens the glass ahead is there in)
+      s += r.session?.live?.lensScore?.(r, m) || 0;
       return s;
     };
     this.think -= dt;
@@ -196,9 +214,9 @@ export class RaceAI {
     }
     // A lens is held for a moment once chosen: where the scores sit close (the police chase, lava, a storm over a
     // shortcut) a rival would otherwise flick between lenses several times a second, its forms splitting and
-    // docking in a blur. Only a road that is gone in the lens we're in overrides the hold.
+    // docking in a blur. Only a road that is gone in the lens we're in, or a wall across it, overrides the hold.
     this.modeHold = Math.max(0, this.modeHold - dt);
-    if (this.wantMode !== r.mode && (this.modeHold <= 0 || !ok[r.mode]) && r.canShift(this.wantMode)) {
+    if (this.wantMode !== r.mode && (this.modeHold <= 0 || !ok[r.mode] || blocked[r.mode] >= 10) && r.canShift(this.wantMode)) {
       if (r.shiftTo(this.wantMode, r.session)) this.modeHold = 0.7;
     }
 
@@ -211,8 +229,9 @@ export class RaceAI {
         let c = Math.abs(lat - (r.track ? r.track.lat : 0)) * 0.05 + Math.abs(lat - this.prefLat) * 0.02;
         c += hits(this.wantMode, lat, true) * 10;
         c += (r.session?.quake?.laneCost(r, this.wantMode, lat) || 0) * 6;
+        c += (r.session?.tower?.laneCost(r, this.wantMode, lat) || 0) * 6;
         // a route with a slit: get on the middle line early, so there's no last-moment swerve to thread it
-        if (P.slit) c += Math.abs(lat) * 0.4;
+        if (P.slit || P.thin) c += Math.abs(lat) * 0.4;
         for (const p of w.pads) if (p.path === P && solidIn(p.mask, this.wantMode) && Math.abs(p.i - pi) < n && Math.abs(lat - p.lat) < 2) c -= 0.6;
         if (c < bestCost) {
           bestCost = c;
@@ -232,6 +251,8 @@ export class RaceAI {
       }
       if (r.angryT <= 0) r.angryAt = null;
     }
+    // LENS TAG: line up on IT, or away from whoever's after it
+    r.session?.tag?.steerAI(r, this, P, pi);
 
     // ---- steer at a point down the road
     const aheadN = Math.ceil((7 + speed * 0.45) / P.ds);
@@ -251,7 +272,8 @@ export class RaceAI {
     ctl.steer = clamp(-err * 2.4, -1, 1) * (this.mistake > 0 ? 0.3 : 1);
     // threading a slit: the aim-point steering settles too slowly at speed to be sure of the gap, so hold the
     // line with the lateral error and its rate as well (positive steer carries the car toward positive lat)
-    if (P.slit && this.formOf(P) === r.mode) {
+    // (and a road barely wider than the craft, like FLIPPER ALLEY's wire: aiming down the road would cut every bend)
+    if ((P.slit || P.thin) && this.formOf(P) === r.mode) {
       const latV = r.vel.x * P.rightX(pi) + r.vel.z * P.rightZ(pi);
       ctl.steer = clamp(-err * 2.4 + (this.targetLat - curLat) * 0.2 - latV * 0.12, -1, 1);
     }
@@ -269,11 +291,38 @@ export class RaceAI {
     ctl.throttle = lat > limit ? 0.35 : 1;
     ctl.brake = lat > limit * 1.45 && r.speed > 22 ? 0.5 : 0;
     ctl.drift = false;
+    if (this.tagThrottle != null) ctl.throttle = Math.min(ctl.throttle, this.tagThrottle);
     // traffic or a cruiser dead ahead in our lens and slower: ease off (the hazard says how hard)
     const hz = r.session?.traffic?.brakeFor(r, this.wantMode) || r.session?.police?.brakeFor(r, this.wantMode);
     if (hz) {
       ctl.throttle = Math.min(ctl.throttle, hz.throttle);
       ctl.brake = Math.max(ctl.brake, hz.brake);
+    }
+    // nose against a slit's wall, off the gap: back straight off a few metres, then line up again (crawling sideways
+    // along the wall face took longer than the stuck check allows, and the rival was put back behind the slit)
+    this.backCool = Math.max(0, (this.backCool || 0) - dt);
+    if (this.backT > 0) {
+      this.backT -= dt;
+      // (reversing, the wheel works the other way: this swings the nose round toward the gap)
+      const g = this.backAim;
+      const e = wrapAngle(Math.atan2(g.x - r.pos.x, g.z - r.pos.z) - r.yaw);
+      ctl.throttle = 0;
+      ctl.brake = 1;
+      ctl.steer = clamp(e * 2.4, -1, 1);
+      if (this.backT <= 0) this.backCool = 2.5;
+      return;
+    }
+    if (P.slit && r.speed < 3 && Math.abs(curLat) > 0.6 && this.backCool <= 0) {
+      for (const s of w.slits || []) {
+        if (s.path !== P) continue;
+        const d = (s.i - pi) * P.ds;
+        if (d > -1 && d < 4.5) {
+          this.backT = 1.2;
+          const q = P.point(s.i, 0, 0);
+          this.backAim = { x: q.x, z: q.z };
+          this.targetLat = 0;
+        }
+      }
     }
     // stuck facing the wrong way: a three-point turn, reversing with the wheel one way, then driving out
     if (this.turn > 0) {
@@ -343,8 +392,16 @@ export class RaceAI {
   }
 
   wantsBranch(b) {
+    // a route that says it's shut to this car right now (DROP TOWER's spring, stretched)
+    if (b.shut?.(this.r)) return false;
+    if (b.def?.closed) return false; // (a road that's shut just now: QUARTER TURN's fast lines)
     if (!this.canTakeBranch(b)) return false;
-    return Math.random() < 0.35 + this.skill * 0.5;
+    if (b.def?.must) return true; // (the road past it is shut: QUARTER TURN's gaps)
+    // (TOPPLE RUN: whether a lane is a maze, a wave or flat road right now)
+    const keen = this.world.dominoes?.branchChance(b, this.r);
+    if (keen != null) return Math.random() < keen;
+    // (aiTake: a route too thin for a crowd asks for fewer takers)
+    return Math.random() < (0.35 + this.skill * 0.5) * (b.aiTake ?? 1);
   }
 }
 

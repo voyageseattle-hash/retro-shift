@@ -7,8 +7,9 @@ import * as THREE from '../../vendor/three.js';
 import { clamp, damp, sign } from '../core/util.js';
 import { BOTH, RED, BLUE, SHIFT, LENS, solidIn, COLORS } from '../world/shift.js';
 import { buildBody, Trail } from './bodies.js';
-import { FORMS, addForms, updateForms } from './forms.js';
+import { FORMS, SKIM, SWITCHBACK_TIME, addForms, updateForms } from './forms.js';
 import { bendRacer, lensHeld, PIPE, SCREW } from '../world/warp.js';
+import { curveRacer, curvePoint, curveDir } from '../world/curved.js';
 import { DRIFT_COLORS } from '../game/feel.js';
 import { ACCESS } from '../core/access.js';
 
@@ -111,7 +112,7 @@ export class Racer {
     this.hurtCd = 0;
     // charges (game/items.js): a held one survives a respawn, the effects don't
     this.cellT = this.empT = this.flipT = 0;
-    this.liftT = this.lanceT = this.braceT = 0;
+    this.hoverT = this.hopT = this.lanceT = this.braceT = 0;
     if (this.beamT > 0) this.setBeam(false);
     this.beamT = 0;
     this.suspension = 0;
@@ -202,6 +203,24 @@ export class Racer {
     this.boostTime = Math.max(this.boostTime, time);
     this.boostPower = Math.max(this.boostTime > time ? this.boostPower : 1, power);
   }
+  // The Blade's SWITCHBACK: end for end on the spot, the same speed the other way. The physics turns at once; the model
+  // catches up through a Möbius half twist (twistT, read by updateForms).
+  // (`look` only: an online rival's SWITCHBACK, its facing and motion already sent)
+  switchback(look = false) {
+    this.twistT = SWITCHBACK_TIME;
+    this.twistDir = this.twistDir === 1 ? -1 : 1;
+    if (look) return;
+    this.yaw = Math.atan2(Math.sin(this.yaw + Math.PI), Math.cos(this.yaw + Math.PI));
+    // reverse the motion along the road, keep what's into or off it
+    const n = this.grounded ? _up.set(this.gnd.nx, this.gnd.ny, this.gnd.nz) : _up.set(0, 1, 0);
+    const vn = this.vel.dot(n);
+    this.vel.negate().addScaledVector(n, 2 * vn);
+    this.drift.active = false;
+    this.drift.level = this.drift.charge = 0;
+    this.spinTime = 0;
+    this.yawRate = 0;
+  }
+
   spinOut(time = 1, dir = 1) {
     if (this.invuln > 0) return false;
     this.spinTime = time;
@@ -316,18 +335,31 @@ export class Racer {
       // few metres a second for a second and a half, and it steers in the air. Enough to cross a glide gap the
       // others drop into, and to float the far side of a drop while the Blade clings down it.
       // (only over a real drop: skimming a downhill road with the road just underneath is driving, not gliding)
+      // the Skimmer's LIFT (SKIM in forms.js): a HOVER holds it over the road, a JUMP is a short heavy hop
+      const hovering = this.hoverT > 0 && this.mode === BLUE && !this.controlLocked;
+      const hopping = this.hopT > 0;
+      if (this.hoverT > 0) this.hoverT -= dt;
+      if (this.hopT > 0) this.hopT -= dt;
       const high = !this.gnd.onRoad || this.pos.y - this.gnd.y > 2;
-      const gliding = F.glide && high && this.airTime > 0.08 && this.airTime < 1.6 && this.speed > 25 && !this.controlLocked;
+      const gliding = !hovering && !hopping && F.glide && high && this.airTime > 0.08 && this.airTime < 1.6 && this.speed > 25 && !this.controlLocked;
       // (race.js counts a long glide as a lens move for the SHIFT CHAIN)
       this.gliding = gliding;
-      this.yawRate = damp(this.yawRate, -steer * (gliding ? 1.6 : 0.9), 3, dt);
-      if (gliding) {
+      this.yawRate = damp(this.yawRate, -steer * (gliding || hovering ? 1.6 : 0.9), 3, dt);
+      if (hovering) {
+        // ride a cushion SKIM.hoverH over the road; over a hole, hold the height of the road it left
+        if (this.gnd.onRoad) this.hoverBase = this.gnd.y;
+        const base = this.hoverBase ?? this.pos.y - SKIM.hoverH;
+        const want = clamp((base + SKIM.hoverH - this.pos.y) * 5, -5, 9);
+        this.vel.y = damp(this.vel.y, want, 8, dt);
+      } else if (gliding) {
         this.vel.y -= G_AIR * (this.vel.y > 0 ? 0.55 : 0.22) * dt;
         this.vel.y = Math.max(this.vel.y, -3.5);
-      } else this.vel.y -= G_AIR * dt;
-      if (gliding) {
+      } else this.vel.y -= G_AIR * (hopping ? SKIM.hopG : 1) * dt;
+      if (gliding || hovering) {
         // turn the travel with the nose, so steering in the air bends the glide
-        const hs = Math.hypot(this.vel.x, this.vel.z);
+        let hs = Math.hypot(this.vel.x, this.vel.z);
+        // the hover's fans keep pushing on the gas, so a hover from a crawl doesn't just hang there
+        if (hovering && throttle > 0) hs = Math.min(hs + P.accel * 0.35 * throttle * dt, Math.max(hs, P.topSpeed * this.speedMul * (LENS[BLUE]?.top ?? 1)));
         this.vel.x = Math.sin(this.yaw) * hs;
         this.vel.z = Math.cos(this.yaw) * hs;
       } else {
@@ -344,7 +376,7 @@ export class Racer {
 
     const g2 = world.ground(this.pos.x, this.pos.y, this.pos.z, this.hints, this.mode);
     this.copyGround(g2);
-    if (this.pos.y < world.floorY + 2 || this.airTime > 4) {
+    if (this.pos.y < (world.fallY ?? world.floorY + 2) || this.airTime > 4) {
       session?.onFell?.(this);
       return;
     }
@@ -355,7 +387,10 @@ export class Racer {
       // hover pads hold the road harder the faster you go, so a crest at full speed doesn't throw you off it
       const stick = Math.max(0, this.vel.length() - 45);
       if (h <= 0.02) {
-        if (!this.grounded) this.onLand(-vIntoN, session);
+        if (!this.grounded) {
+          this.onLand(-vIntoN, session);
+          this.hoverT = this.hopT = 0;
+        }
         this.pos.y = g2.y;
         if (vIntoN < 0) this.vel.addScaledVector(nn, -vIntoN);
         this.grounded = true;
@@ -484,6 +519,11 @@ export class Racer {
     const left = _left.crossVectors(this.up, fwd).normalize();
     _m.makeBasis(left, this.up, fwd);
     root.quaternion.setFromRotationMatrix(_m);
+    // a curved course (curved.js): the same pose, carried from the flat world into the drawn one
+    const curved = this.session?.world?.curved ? this.session.world : null;
+    if (curved) curveRacer(this, curved);
+    // (and a course's moving machinery may carry it on from there: QUARTER TURN's turning layers)
+    if (curved) this.session?.live?.pose?.(this);
     const body = this.model.body;
     const rollT = this.grounded ? clamp(-this.yawRate * this.speed * 0.006, -0.14, 0.14) : 0;
     this.bodyRoll = damp(this.bodyRoll, rollT, 8, dt || 0.016);
@@ -491,7 +531,8 @@ export class Racer {
     this.bob = (this.bob || this.index) + dt;
     body.position.y = 0.35 + this.suspension * 0.6 + Math.sin(this.bob * 4) * 0.05;
     body.rotation.set(0, this.drift.active ? this.drift.dir * -0.28 : 0, this.bodyRoll);
-    updateForms(this.model, this.mode, dt, this.speed, this.bob, body);
+    if (this.twistT > 0) this.twistT = Math.max(0, this.twistT - dt);
+    updateForms(this.model, this.mode, dt, this.speed, this.bob, body, this.twistT > 0 ? { k: 1 - this.twistT / SWITCHBACK_TIME, dir: this.twistDir } : null);
     // lens colour: the wedge glows the colour of the world it's in
     const m = this.model;
     const col = this.mode === RED ? COLORS.red : this.mode === BLUE ? COLORS.blue : 0xffffff;
@@ -532,7 +573,11 @@ export class Racer {
       const yaw = this.yaw;
       if (V.on) _v.copy(V.pos).addScaledVector(V.fwd, -2.1).addScaledVector(V.up, 0.45);
       else _v.set(this.pos.x - Math.sin(yaw) * 2.1, this.pos.y + 0.45, this.pos.z - Math.cos(yaw) * 2.1);
-      this.trail.update(dt, _v, -Math.cos(yaw), Math.sin(yaw), clamp(Math.abs(this.speed) / this.phys.topSpeed, 0, 1) + (this.boostTime > 0 ? 0.4 : 0), this.grounded || this.airTime < 0.5);
+      if (curved) {
+        curvePoint(this, _v);
+        curveDir(this, _left.set(-Math.cos(yaw), 0, Math.sin(yaw)));
+        this.trail.update(dt, _v, _left.x, _left.z, clamp(Math.abs(this.speed) / this.phys.topSpeed, 0, 1) + (this.boostTime > 0 ? 0.4 : 0), this.grounded || this.airTime < 0.5, _left.y);
+      } else this.trail.update(dt, _v, -Math.cos(yaw), Math.sin(yaw), clamp(Math.abs(this.speed) / this.phys.topSpeed, 0, 1) + (this.boostTime > 0 ? 0.4 : 0), this.grounded || this.airTime < 0.5);
     }
     m.glowMat.opacity = 0.34 + (this.drift.active ? 0.12 + 0.08 * this.drift.level : 0);
     // spinning out after a hit

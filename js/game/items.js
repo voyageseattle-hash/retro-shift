@@ -12,8 +12,10 @@
 // Which charge you roll depends on your place: the leader rolls the defensive ones, the back of the field the big
 // ones. Rivals use theirs with a few simple rules. (Not in time trials, Mono Run or online.)
 
+import { spot } from '../world/curved.js';
 import * as THREE from '../../vendor/three.js';
 import { BOTH, RED, BLUE, M, solidIn } from '../world/shift.js';
+import { FORMS } from '../vehicles/forms.js';
 
 const _v = new THREE.Vector3();
 const _a = new THREE.Vector3();
@@ -84,8 +86,9 @@ export class Items {
         const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.42), new THREE.MeshBasicMaterial({ color: 0xf4ecff }));
         root.add(red, blue, core);
         m.point(i, lat, 1.6, root.position);
-        this.group.add(root);
-        this.gates.push({ root, red, blue, i, lat, path: m, y0: root.position.y, taken: 0 });
+        // (on a curved course it stands in a holder that carries it into the drawn world; `at` is where it's picked up)
+        (w.curved ? spot(w, m, i) : this.group).add(root);
+        this.gates.push({ root, red, blue, i, lat, path: m, y0: root.position.y, taken: 0, at: root.position.clone() });
       }
     }
   }
@@ -128,7 +131,7 @@ export class Items {
       // pick up
       if (!r.item && !(r.rollT > 0)) {
         for (const g of this.gates) {
-          if (g.taken > 0 || g.root.position.distanceToSquared(r.pos) > 4.2 * 4.2) continue;
+          if (g.taken > 0 || g.at.distanceToSquared(r.pos) > 4.2 * 4.2) continue;
           g.taken = 3;
           g.root.visible = false;
           r.rollT = ROLL;
@@ -212,6 +215,8 @@ export class Items {
     for (let k = 0; k <= n; k++) {
       const j = P.closed ? P.wrap(tr.i + k) : Math.min(P.N - 1, tr.i + k);
       if (!solidIn(P.mask[j], mode)) return false;
+      // (a wall run holds only the form that clings: a FLIP or an EMP there would drop you off the wall)
+      if (P.cling?.[j] && !FORMS[mode].cling) return false;
     }
     return true;
   }
