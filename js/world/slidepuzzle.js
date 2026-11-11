@@ -221,7 +221,7 @@ export class Puzzle {
       const r = (at >> 2) + DZ[side];
       if (c < 0 || c > 3 || r < 0 || r > 3) return true;
       const k2 = B.cells[c + 4 * r];
-      if (k2 ? this.through(k2, colour, opp(side)) >= 0 : colour === 0 && !B.moving) return true;
+      if (k2 ? this.through(k2, colour, opp(side)) >= 0 : holeTakes(colour, side) && !B.moving) return true;
     }
     return false;
   }
@@ -230,19 +230,19 @@ export class Puzzle {
   // { side, idx, t, length, carried, waited } where and when you come out (carried: slides ridden on the way,
   // waited: seconds spent parked), or null if it never gets you out (a wait of more than `patience` at any one
   // cap). v: speed on a straight; bends are taken slower. The empty slot counts as a tile (k 0) with a red road
-  // straight through it either way; it moves whenever anything does.
+  // straight through it either way and a blue one east to west; it moves whenever anything does.
   ride(side, idx, colour, t0, v = 52, patience = 5.5) {
     let cell = mouthCell(side, idx);
     let B = this.at(t0);
     let k = B.cells[cell];
-    if (k ? B.warn?.k === k : colour !== 0 || B.moving) return null;
+    if (k ? B.warn?.k === k : !holeTakes(colour, side) || B.moving) return null;
     let inSide = side;
     let t = t0;
     let length = 0;
     let carried = 0;
     let parked = 0;
     for (let hop = 0; hop < 24; hop++) {
-      const out = k ? this.through(k, colour, inSide) : opp(inSide);
+      const out = k ? this.through(k, colour, inSide) : holeTakes(colour, inSide) ? opp(inSide) : -1;
       if (out < 0) return null;
       const straight = opp(out) === inSide;
       const len = straight ? TILE : (Math.PI * TILE) / 4;
@@ -260,7 +260,7 @@ export class Puzzle {
           cell = at;
           if (c < 0 || c > 3 || r < 0 || r > 3) return { side: out, idx: out % 2 ? at >> 2 : at % 4, t, length, carried, waited: parked };
           const k2 = B.cells[c + 4 * r];
-          if (k2 ? this.through(k2, colour, opp(out)) >= 0 : colour === 0 && !B.moving) {
+          if (k2 ? this.through(k2, colour, opp(out)) >= 0 : holeTakes(colour, out) && !B.moving) {
             k = k2;
             cell = c + 4 * r;
             inSide = opp(out);
@@ -276,6 +276,9 @@ export class Puzzle {
     return null;
   }
 }
+
+// What crosses the empty slot: the red under-road, either way; and the blue cushion of air, east to west only.
+const holeTakes = (colour, side) => colour === 0 || side % 2 === 1;
 
 // Seconds saved by driving in at a mouth at t0 (on the board at t0) instead of staying on the frame, or null if the
 // road doesn't get you out, or puts you out behind where you went in. { gain, out } with out as ride() gives it.
