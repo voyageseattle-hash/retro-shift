@@ -500,5 +500,7 @@ export const TRACKS = [
   TWISTCUBE,
   make(TOPPLE_RUN), // 18 (tracks-domino.js, dominoes.js)
 ];
+// (the courses come from several files; the menu lists them by number)
+TRACKS.sort((a, b) => Number(a.num) - Number(b.num));
 
 export const trackById = (id) => TRACKS.find((t) => t.id === id) || TRACKS[0];
