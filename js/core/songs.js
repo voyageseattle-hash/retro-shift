@@ -567,6 +567,61 @@ export const SONGS = {
       tracks: { pad: 'x---------------', arp: '0.2.4.2.5.4.2.1.', kick: 'x.......x.......', fx: G.rise },
     },
   }),
+  // ------------------------------------------------------------------ 21 (TOYBOX CUP)
+  // DROP TOWER: a music box that found a drum kit. D major, the hook tumbles down the chord like a marble down a
+  // chute, and the blue band's tune is on the music box's own bells.
+  marble: race({
+    name: 'Marbles Away',
+    bpm: 150,
+    swing: 0.03,
+    tonic: 62,
+    kit: { kick: 'punch', snare: 'crack' },
+    band: { lead: 'surf', arp: 'bell', bassCut: 900, extra: { bells: { inst: 'bell', mode: 'notes', vol: 0.8, pan: 0.15, delay: 0.3, verb: 0.45, world: 'blue' } } },
+    chords: { A: 'D A Bm G', B: 'G A D Bm G A D D', C: 'Em Em Bm Bm G G A A' },
+    bassA: 'x..x..x.x..x..x.',
+    arpA: '0.2.4.2.5.4.2.4.',
+    arpB: '4.2.0.2.4.2.5.2.',
+    intro: {
+      bars: 4,
+      chords: 'D A Bm G',
+      tracks: { choir: 'x---------------', bells: bars('f#5 - - - a5 - - - d6 - - - . . . .', 'e5 - - - a5 - - - c#6 - - - . . . .', 'd5 - - - f#5 - - - b5 - - - . . . .', 'g5 - b5 - d6 - g6 - . . . . . . . .'), fx: G.rise },
+    },
+    lead: bars(
+      'f#5 - d5 - a4 - d5 - f#5 - a5 - f#5 - d5 -', 'a5 - - - - - f#5 - a5 - - - . . . .',
+      'e5 - c#5 - a4 - c#5 - e5 - a5 - e5 - c#5 -', 'e5 - - - - - c#5 - e5 - - - . . . .',
+      'd5 - b4 - f#4 - b4 - d5 - f#5 - d5 - b4 -', 'f#5 - - - - - d5 - b5 - - - a5 - - -',
+      'g5 - - - b5 - - - a5 - - - g5 - f#5 -', 'e5 - - - - - - - . . . . . . . .',
+    ),
+    counter: bars(
+      'a5 - - - - - - - f#5 - - - - - - -', 'd6 - - - - - - - - - - - . . . .',
+      'c#6 - - - - - - - a5 - - - - - - -', 'e6 - - - - - - - - - - - . . . .',
+      'b5 - - - - - - - f#5 - - - - - - -', 'd6 - - - - - - - - - - - . . . .',
+      'b5 - - - - - - - d6 - - - - - - -', 'b5 - - - - - - - . . . . . . . .',
+    ),
+    tune: bars(
+      'b5 - - . g5 - - . d5 - g5 - b5 - - .', 'c#6 - - . a5 - - . e5 - a5 - c#6 - - .',
+      'd6 - - - a5 - - - f#5 - - - a5 - d6 -', 'f#6 - - - - - - - d6 - - - b5 - - -',
+      'b5 - - . g5 - - . d5 - g5 - b5 - - .', 'c#6 - - . a5 - - . e5 - a5 - c#6 - - .',
+      'd6 - - - f#6 - - - a6 - - - f#6 - d6 -', 'd6 - - - - - - - . . . . . . . .',
+    ),
+    redB: bars(
+      'g5 - - - - - - - b5 - - - - - - -', 'a5 - - - - - - - c#6 - - - - - - -',
+      'a5 - - - - - - - - - - - - - - -', 'b5 - - . b5 . a5 . f#5 - - - d5 - - -',
+      'g5 - - - - - - - b5 - - - - - - -', 'a5 - - - - - - - c#6 - - - - - - -',
+      'f#5 - - - - - - - a5 - - - - - - -', 'a5 - - - - - - - - - - - - - - -',
+    ),
+    bridge: bars(
+      'e5 - - - - - - - b5 - - - - - - -', 'g5 - - - e5 - - - - - - - . . . .',
+      'f#5 - - - - - - - b5 - - - - - - -', 'd6 - - - - - - - - - - - . . . .',
+      'g5 - - - - - - - b5 - - - - - - -', 'd6 - - - - - - - b5 - - - g5 - - -',
+      'a5 - - - - - - - c#6 - - - - - - -', 'e6 - - - - - - - - - - - - - - -',
+    ),
+    brk: {
+      bars: 4,
+      chords: 'D A Em A',
+      tracks: { pad: 'x---------------', arp: '0.2.4.2.5.4.2.1.', kick: 'x.......x.......', fx: G.rise },
+    },
+  }),
 };
 
 // The title plays the main theme; some courses play another take on a song from elsewhere in the game.
@@ -596,7 +651,7 @@ export const COURSE_SONG = {
   mirror: 'tunnelB',
   relativity: 'paradox',
   popup: 'circuit',
-  marblerun: 'helixB',
+  marblerun: 'marble',
   pinball: 'neon',
   tiles: 'circuit',
 };

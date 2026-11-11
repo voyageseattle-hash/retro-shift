@@ -192,6 +192,13 @@ export const MARBLERUN = (() => {
           ...[20, 45, 68].map((deg, k) => [ARC.x - Math.sin((deg * Math.PI) / 180) * 110, ARC.z - Math.cos((deg * Math.PI) / 180) * 110, 14.7 - k * 0.3]),
         ],
       },
+      // the Blade's way up: off the end of the tray, straight across the inside of the bend and up the side of the
+      // lift's support posts (a wall-run: formroutes.js), onto the lift past its halfway mark
+      {
+        from: P(K.t2, 0.6), to: P(K.lift + 8, 0), mask: M.ALL, side: -1, lift: 0, label: 'POST CLIMB', sub: 'RED CLINGS UP THE POSTS · OTHERS FALL',
+        via: [[118, ROW + 38, 31], [92, ROW + 100, 39], [72, ROW + 170, 48], [56, ROW + 235, 57]],
+        wallrun: { from: 0.26, to: 0.8, bank: 0.95 },
+      },
     ],
     // tinted plastic: a stretch of red tube (gone in blue) and one of blue (gone in red)
     gaps: [{ at: P(K.c6, 0.2), len: 40, mask: M.R, noRails: true }, { at: P(K.c13, 0.1), len: 40, mask: M.B, noRails: true }],
@@ -774,6 +781,22 @@ export function buildDropTower(world, L, main) {
       lineP.needsUpdate = fillP.needsUpdate = true;
     });
     sign(i0 - nb, 'TILT TRAY', 'WATCH THE KNOB · BLUE FLOATS THE HOLES', 70);
+  }
+
+  // ---- the post climb: the posts the Blade's wall leans on, floor to well over the road, banded where it passes
+  {
+    const b = world.paths.find((q) => q.def?.label === 'POST CLIMB');
+    if (b?.cling) {
+      const side = b.side ?? -1;
+      const step = Math.max(1, Math.round(26 / b.ds));
+      let k = 0;
+      for (let j = b.cling.indexOf(1); j >= 0 && j <= b.cling.lastIndexOf(1); j += step, k++) {
+        const top = b.point(j, side * (b.halfW + 2.4), 0, V(0, 0, 0));
+        const col = [GRN, ORG, CYAN, PNK][k % 4];
+        L.cylinder(M.ALL, top.x, floor, top.z, 2.2, top.y + 9 - floor, 8, 8, col);
+        for (const dy of [-1.5, 1.5, 9]) L.ring(M.ALL, V(top.x, top.y + dy, top.z), X, Z, 2.7, 12, YEL);
+      }
+    }
   }
 
   // ---- the lens tubes: hoops of tinted plastic along each, and toy blocks (the other world's) across its mouth
