@@ -197,7 +197,7 @@ const SIDES = [
   { n: V(0, 0, 1), eu: V(1, 0, 0), ev: V(0, -1, 0) },
   { n: V(0, -1, 0), eu: V(1, 0, 0), ev: V(0, 0, -1) },
   { n: V(0, 0, -1), eu: V(1, 0, 0), ev: V(0, 1, 0) },
-  { n: V(-1, 0, 0), eu: V(0, 0, 1), ev: V(0, 1, 0) },
+  { n: V(-1, 0, 0), eu: V(0, 0, -1), ev: V(0, 1, 0) },
   { n: V(1, 0, 0), eu: V(0, 0, 1), ev: V(0, 1, 0) },
 ];
 // A place on a face, h above it: flat in the middle, and round the cube's edge past A (to the middle of the edge at
@@ -451,7 +451,7 @@ class TwistCube {
         const m = st.mask;
         // (pale glass glows harder than deep glass at the same strength: keep the white, yellow and green panes down)
         const pale = st.mask === M.ALL;
-        const RIM = pale ? 0.4 : 0.8;
+        const RIM = pale ? 0.32 : 0.8;
         K.quad(m, P(su0, sv0, h), P(su1, sv0, h), P(su1, sv1, h), P(su0, sv1, h), st.color, pale ? 0.025 : 0.14);
         const W = 1.6;
         K.quad(m, P(su0, sv0, h), P(su1, sv0, h), P(su1, sv0 + W, h), P(su0, sv0 + W, h), st.color, RIM);
@@ -576,22 +576,231 @@ class TwistCube {
         if (i % 2 === 0) prims.push({ kind: 'line', pts: [at(s0, -HW, 0.28), at(s0, HW, 0.28)], color: (i >> 1) % 2 ? COLORS.red : COLORS.blue });
       }
     }
+    // ---- the toys that stand on the cube: the same on every face, each on the cubie under it, so they ride the
+    // turns with the road. The red world's are red and the blue world's blue (each gone through the other lens);
+    // what belongs to both is toy yellow, the cup's lamp colour, and goes whatever colour the lens is.
+    const GOLD = TOY_YELLOW;
+    const ln = (anchor, mask, a, b, color) => prims.push({ kind: 'line', at: anchor, mask, pts: [a, b], color });
+    const qd = (anchor, mask, a, b, c, d, color, k = 1, k1 = k) => prims.push({ kind: 'quad', at: anchor, mask, pts: [a, b, c, d], color, k, k1 });
+    // a flat ring of `n` sides about (u, v) at height h
+    const hoop = (anchor, mask, u, v, h, r, n, color, rot = 0) => {
+      for (let i = 0; i < n; i++) {
+        const a0 = rot + (i / n) * Math.PI * 2;
+        const a1 = rot + ((i + 1) / n) * Math.PI * 2;
+        ln(anchor, mask, [u + Math.cos(a0) * r, v + Math.sin(a0) * r, h], [u + Math.cos(a1) * r, v + Math.sin(a1) * r, h], color);
+      }
+    };
+    // a lantern: a small diamond with a lit band round its middle
+    const lantern = (anchor, u, v, h, r = 1.5) => {
+      for (let i = 0; i < 4; i++) {
+        const a0 = (i / 4) * Math.PI * 2;
+        const a1 = ((i + 1) / 4) * Math.PI * 2;
+        const p0 = [u + Math.cos(a0) * r, v + Math.sin(a0) * r, h];
+        const p1 = [u + Math.cos(a1) * r, v + Math.sin(a1) * r, h];
+        ln(anchor, M.ALL, p0, [u, v, h + r * 1.5], GOLD);
+        ln(anchor, M.ALL, p0, [u, v, h - r * 1.5], GOLD);
+        qd(anchor, M.ALL, p0, p1, [u, v, h + r * 1.5], [u, v, h + r * 1.5], GOLD, 0.5);
+        qd(anchor, M.ALL, p0, p1, [u, v, h - r * 1.5], [u, v, h - r * 1.5], GOLD, 0.3);
+      }
+    };
+    const worldOf = (k) => (k % 2 ? [M.B, COLORS.blue] : [M.R, COLORS.red]);
+
+    // the road's finish: it's tiled with little stickers, in the cube's six colours
+    const PALETTE = STICKERS.map((s) => s.color);
+    {
+      let t = 0;
+      for (const C of curves) {
+        const P = C.pts;
+        for (let i = 0; i < P.length - 1; i++) {
+          const mid = (j) => {
+            const [x, z] = P[j];
+            const a = P[Math.max(0, j - 1)];
+            const b = P[Math.min(P.length - 1, j + 1)];
+            let tx = b[0] - a[0], tz = b[1] - a[1];
+            if (C.ring) {
+              tx = -z;
+              tz = x;
+            }
+            const l = Math.hypot(tx, tz) || 1;
+            return { x, z, tx: tx / l, tz: tz / l, lx: -tz / l, lz: tx / l };
+          };
+          const s0 = mid(i);
+          const s1 = mid(i + 1);
+          for (let q = 0; q < 4; q++) {
+            t++;
+            if ((i + q) % 2) continue; // a checker of them: every other tile is bare road
+            const l0 = -HW + 1.2 + q * ((HW * 2 - 2.4) / 4) + 0.35;
+            const l1 = l0 + (HW * 2 - 2.4) / 4 - 0.7;
+            const g = 0.45; // the gap along the road
+            const pt = (s, lat, back) => [s.x + s.lx * lat + s.tx * back, s.z + s.lz * lat + s.tz * back, 0.2];
+            const mx = (s0.x + s1.x) / 2 + s0.lx * (l0 + l1) / 2;
+            const mz = (s0.z + s1.z) / 2 + s0.lz * (l0 + l1) / 2;
+            if (covered(C, mx, mz)) continue;
+            prims.push({ kind: 'quad', mask: M.ALL, pts: [pt(s0, l0, g), pt(s1, l0, -g), pt(s1, l1, -g), pt(s0, l1, g)], color: PALETTE[(i * 5 + q * 3 + t) % 6], k: 0.055 });
+          }
+        }
+      }
+    }
+
+    // one toy on each corner sticker, out beyond the roundabout
+    for (let k = 0; k < 4; k++) {
+      const su = k === 0 || k === 3 ? 1 : -1;
+      const sv = k < 2 ? 1 : -1;
+      const u = su * 103;
+      const v = sv * 103;
+      const A0 = [u, v];
+      const [mask, color] = worldOf(k);
+      hoop(A0, mask, u, v, 0.4, 19, 8, color, Math.PI / 8);
+      if (k === 0) {
+        // a ring stacker: a peg, and rings getting smaller up it
+        ln(A0, mask, [u, v, 0.4], [u, v, 33], color);
+        [[16, 4], [13.5, 9.5], [11, 15], [8.5, 20.5], [6, 26]].forEach(([r, h], i) => {
+          const c = i % 2 ? GOLD : color;
+          const m = i % 2 ? M.ALL : mask;
+          hoop(A0, m, u, v, h - 1.6, r, 10, c);
+          hoop(A0, m, u, v, h + 1.6, r, 10, c);
+          for (let j = 0; j < 10; j++) {
+            const a0 = (j / 10) * Math.PI * 2;
+            const a1 = ((j + 1) / 10) * Math.PI * 2;
+            qd(A0, m, [u + Math.cos(a0) * r, v + Math.sin(a0) * r, h - 1.6], [u + Math.cos(a1) * r, v + Math.sin(a1) * r, h - 1.6], [u + Math.cos(a1) * r, v + Math.sin(a1) * r, h + 1.6], [u + Math.cos(a0) * r, v + Math.sin(a0) * r, h + 1.6], c, 0.16);
+          }
+        });
+        lantern(A0, u, v, 35, 2.2);
+      } else if (k === 1) {
+        // building blocks, each turned a little on the one under it
+        let h = 0.4;
+        [[20, 0], [15, 0.4], [10.5, 0.8], [6.5, 0.2]].forEach(([w, rot], i) => {
+          const c = i % 2 ? GOLD : color;
+          const m = i % 2 ? M.ALL : mask;
+          const cs = [0, 1, 2, 3].map((j) => [u + Math.cos(rot + Math.PI / 4 + (j * Math.PI) / 2) * w * 0.707, v + Math.sin(rot + Math.PI / 4 + (j * Math.PI) / 2) * w * 0.707]);
+          for (let j = 0; j < 4; j++) {
+            const a = cs[j];
+            const b = cs[(j + 1) % 4];
+            ln(A0, m, [a[0], a[1], h], [b[0], b[1], h], c);
+            ln(A0, m, [a[0], a[1], h + w * 0.8], [b[0], b[1], h + w * 0.8], c);
+            ln(A0, m, [a[0], a[1], h], [a[0], a[1], h + w * 0.8], c);
+            qd(A0, m, [a[0], a[1], h], [b[0], b[1], h], [b[0], b[1], h + w * 0.8], [a[0], a[1], h + w * 0.8], c, 0.2, 0.04);
+          }
+          h += w * 0.8;
+        });
+        lantern(A0, u, v, h + 3.5, 2);
+      } else if (k === 2) {
+        // a spinning top's worth of pennants: a pole and a string of flags down to the sticker's corners
+        ln(A0, mask, [u, v, 0.4], [u, v, 36], color);
+        lantern(A0, u, v, 38, 2.2);
+        for (let j = 0; j < 4; j++) {
+          const a = Math.PI / 4 + (j * Math.PI) / 2;
+          const ex = u + Math.cos(a) * 24, ez = v + Math.sin(a) * 24;
+          ln(A0, M.ALL, [u, v, 34], [ex, ez, 1], GOLD);
+          for (let f = 1; f <= 5; f++) {
+            const t0 = f / 6.5, t1 = t0 + 0.085;
+            const p = (t) => [u + (ex - u) * t, v + (ez - v) * t, 34 - 33 * t];
+            const p0 = p(t0), p1 = p(t1), pm = p((t0 + t1) / 2);
+            const [m2, c2] = f % 2 ? [mask, color] : [M.ALL, GOLD];
+            qd(A0, m2, p0, p1, [pm[0], pm[1], pm[2] - 3.4], [pm[0], pm[1], pm[2] - 3.4], c2, 0.7);
+          }
+        }
+      } else {
+        // a spring, standing on end
+        let prev = null;
+        for (let j = 0; j <= 84; j++) {
+          const a = (j / 12) * Math.PI * 2;
+          const p = [u + Math.cos(a) * 11, v + Math.sin(a) * 11, 0.6 + j * 0.38];
+          if (prev) ln(A0, j % 24 < 12 ? mask : M.ALL, prev, p, j % 24 < 12 ? color : GOLD);
+          prev = p;
+        }
+        hoop(A0, mask, u, v, 0.6 + 84 * 0.38, 11, 12, color);
+        lantern(A0, u, v, 37, 2);
+      }
+    }
+
+    // an arch over the two lanes at every edge, a lantern hung over each lane
+    for (let k = 0; k < 4; k++) {
+      const c = Math.cos((k * Math.PI) / 2);
+      const sn = Math.sin((k * Math.PI) / 2);
+      const T = (lat, rad, h) => [lat * c - rad * sn, lat * sn + rad * c, h];
+      const A0 = [T(0, 100, 0)[0], T(0, 100, 0)[1]];
+      const [mask, color] = worldOf(k);
+      const RAD = 121;
+      const TOP = 13;
+      for (const lat of [-38, 0, 38]) {
+        for (const [dl, dr] of [[-0.7, -0.7], [0.7, -0.7], [0.7, 0.7], [-0.7, 0.7]]) ln(A0, mask, T(lat + dl, RAD + dr, 0.3), T(lat + dl, RAD + dr, TOP), color);
+        hoop(A0, mask, T(lat, RAD, 0)[0], T(lat, RAD, 0)[1], 0.5, 2.2, 6, color);
+        hoop(A0, M.ALL, T(lat, RAD, 0)[0], T(lat, RAD, 0)[1], TOP + 0.3, 1.6, 6, GOLD);
+      }
+      // the beam: a lit band, with a row of the cube's colours along it like a toy's printed strip
+      qd(A0, mask, T(-38, RAD, TOP), T(38, RAD, TOP), T(38, RAD, TOP - 1.6), T(-38, RAD, TOP - 1.6), color, 0.5);
+      ln(A0, mask, T(-38, RAD, TOP), T(38, RAD, TOP), color);
+      ln(A0, mask, T(-38, RAD, TOP - 1.6), T(38, RAD, TOP - 1.6), color);
+      for (let j = 0; j < 12; j++) {
+        const l0 = -36 + j * 6 + 0.8;
+        qd(A0, M.ALL, T(l0, RAD - 0.05, TOP + 0.4), T(l0 + 4.4, RAD - 0.05, TOP + 0.4), T(l0 + 4.4, RAD - 0.05, TOP + 2.4), T(l0, RAD - 0.05, TOP + 2.4), PALETTE[j % 6], 0.55);
+      }
+      for (const lat of [-D, D]) {
+        ln(A0, M.ALL, T(lat, RAD, TOP - 1.6), T(lat, RAD, 10.6), GOLD);
+        const p = T(lat, RAD, 9);
+        lantern(A0, p[0], p[1], 9, 1.3);
+      }
+    }
+
+    // arrow boards round the roundabout: the red world's on the outside of the bend, the blue world's on the inside
+    for (const [rad, mask, color, n, sign] of [[R + HW + 2.8, M.R, COLORS.red, 32, 1], [R - HW - 2.8, M.B, COLORS.blue, 24, -1]]) {
+      for (let j = 0; j < n; j++) {
+        const a = ((j + 0.5) / n) * Math.PI * 2;
+        const u = Math.cos(a) * rad;
+        const v = Math.sin(a) * rad;
+        if (curves.some((o) => !o.ring && distTo(o, u, v) < HW + 2.4)) continue;
+        // (and clear of the fast lines' lanes inside the roundabout)
+        if (sign < 0 && [u, v].some((w) => Math.abs(Math.abs(w) - D) < 10.5)) continue;
+        const A0 = [u, v];
+        const tx = -Math.sin(a), tz = Math.cos(a);
+        const B = (along, h) => [u + tx * along, v + tz * along, h];
+        ln(A0, mask, B(0, 0.3), B(0, 3.2), color);
+        // a chevron pointing the way round
+        for (const e of [-1, 1]) qd(A0, mask, B(-1.9, 4.9 + e * 1.7), B(-0.5, 4.9 + e * 1.7), B(1.9, 4.9), B(0.5, 4.9), color, 0.85);
+        ln(A0, mask, B(-2.4, 3.2), B(2.4, 3.2), color);
+        ln(A0, mask, B(-2.4, 6.6), B(2.4, 6.6), color);
+        ln(A0, mask, B(-2.4, 3.2), B(-2.4, 6.6), color);
+        ln(A0, mask, B(2.4, 3.2), B(2.4, 6.6), color);
+      }
+    }
+
+    // the hub: a spindle in the very middle of every face, between the fast lines' lanes
+    {
+      const A0 = [0, 0];
+      [[10.5, 1.2, COLORS.violet], [7.5, 4.2, GOLD], [4.5, 7.2, COLORS.violet]].forEach(([r, h, color]) => {
+        hoop(A0, M.ALL, 0, 0, h, r, 12, color);
+        hoop(A0, M.ALL, 0, 0, h + 1.4, r, 12, color);
+        for (let j = 0; j < 12; j++) {
+          const a0 = (j / 12) * Math.PI * 2;
+          const a1 = ((j + 1) / 12) * Math.PI * 2;
+          qd(A0, M.ALL, [Math.cos(a0) * r, Math.sin(a0) * r, h], [Math.cos(a1) * r, Math.sin(a1) * r, h], [Math.cos(a1) * r, Math.sin(a1) * r, h + 1.4], [Math.cos(a0) * r, Math.sin(a0) * r, h + 1.4], color, j % 2 ? 0.3 : 0.12);
+        }
+      });
+      ln(A0, M.ALL, [0, 0, 8.6], [0, 0, 13], GOLD);
+      lantern(A0, 0, 0, 15.5, 2.4);
+    }
+
     const _p = [V(0, 0, 0), V(0, 0, 0), V(0, 0, 0), V(0, 0, 0)];
     for (const F of SIDES) {
       for (const pr of prims) {
         let u = 0, v = 0;
-        for (const p of pr.pts) {
-          u += p[0];
-          v += p[1];
+        if (pr.at) [u, v] = pr.at;
+        else {
+          for (const p of pr.pts) {
+            u += p[0];
+            v += p[1];
+          }
+          u /= pr.pts.length;
+          v /= pr.pts.length;
         }
-        u /= pr.pts.length;
-        v /= pr.pts.length;
         const slot = _v.copy(F.n).addScaledVector(F.eu, cellOf(u)).addScaledVector(F.ev, cellOf(v)).round();
         const K = bySlot.get(key(slot.x, slot.y, slot.z)).K;
         const q = pr.pts.map((p, i) => faceP(F, p[0], p[1], p[2], _p[i]));
+        const mask = pr.mask ?? M.ALL;
         if (pr.kind === 'road') K.road(q[0], q[1], q[2], q[3]);
-        else if (pr.kind === 'quad') K.quad(M.ALL, q[0], q[1], q[2], q[3], pr.color, pr.k, pr.k1 ?? pr.k);
-        else K.line(M.ALL, q[0], q[1], pr.color);
+        else if (pr.kind === 'quad') K.quad(mask, q[0], q[1], q[2], q[3], pr.color, pr.k, pr.k1 ?? pr.k);
+        else K.line(mask, q[0], q[1], pr.color);
       }
     }
 
