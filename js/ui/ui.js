@@ -14,7 +14,7 @@ import { MAP_STYLES, MAP_LABEL, mapStyle, drawCard } from './coursemap.js';
 import { BOTH, RED, BLUE, MODE_NAME } from '../world/shift.js';
 import { SPLIT_GLYPHS } from '../core/input.js';
 import { formatTime, ordinal, storage } from '../core/util.js';
-import { CUPS, BONUS, cupReady, courseOpen, courseLock, openTracks, POINTS, TROPHY, getProgress, saveProgress as saveProgressUI, medalInfo, isUnlocked, unlockFor, COLORWAYS, getGarage, setLivery, liveryFor } from '../game/modes.js';
+import { CUPS, isBonus, cupReady, courseOpen, courseLock, openTracks, POINTS, TROPHY, getProgress, saveProgress as saveProgressUI, medalInfo, isUnlocked, unlockFor, COLORWAYS, getGarage, setLivery, liveryFor } from '../game/modes.js';
 import { loadGhost } from '../game/ghost.js';
 import { playerName, setPlayerName, courseName, MAX_PLAYERS } from '../net/online.js';
 import { PREMISE, CUP_STORY, SECRET_SCENES, DRIVERS } from '../game/story.js';
@@ -222,7 +222,7 @@ export class UI {
     const items = TRACKS.map((def) => {
       if (!courseOpen(def.id)) {
         const card = el('button', 'item tcard locked');
-        const bonus = def.id === BONUS.track;
+        const bonus = isBonus(def.id);
         card.innerHTML = `<div class="tnum">${def.num}</div><div class="tmap tlock">LOCKED</div><div class="tname">${bonus ? '???' : def.name}</div>
           <div class="tblurb">${bonus ? 'BONUS COURSE · ' : ''}${unlockFor(courseLock(def.id))?.hint || ''}</div><div class="tbest">&nbsp;</div>`;
         return { node: card, action: () => {} };
@@ -687,11 +687,10 @@ export class UI {
       const best = prog.cups[cup.id];
       const open = isUnlocked(cup.unlock);
       const ready = cupReady(cup);
-      const first = TRACKS.findIndex((t) => t.id === CUPS[0].tracks[0]);
       const row = (id, k) => {
         const d = TRACKS.find((t) => t.id === id);
         // a course that isn't built yet still gets its number, counted on from the cups before it
-        const num = d?.num || String(first + 1 + CUPS.slice(0, CUPS.indexOf(cup)).reduce((a, c) => a + c.tracks.length, 0) + k).padStart(2, '0');
+        const num = d?.num || String(cup.from + k).padStart(2, '0');
         return `<li><span>${num}</span>${d && (open || !cup.unlock) ? d.name : '???'}</li>`;
       };
       const status = !ready ? 'COMING SOON' : !open ? `LOCKED · ${unlockFor(cup.unlock)?.hint || ''}` : best && best <= 3 ? `${TROPHY[best]} TROPHY` : best ? `BEST ${ordinal(best)}` : 'NOT WON YET';
