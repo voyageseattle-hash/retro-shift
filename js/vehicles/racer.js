@@ -358,7 +358,7 @@ export class Racer {
 
     const g2 = world.ground(this.pos.x, this.pos.y, this.pos.z, this.hints, this.mode);
     this.copyGround(g2);
-    if (this.pos.y < world.floorY + 2 || this.airTime > 4) {
+    if (this.pos.y < (world.fallY ?? world.floorY + 2) || this.airTime > 4) {
       session?.onFell?.(this);
       return;
     }

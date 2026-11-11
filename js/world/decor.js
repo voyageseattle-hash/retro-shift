@@ -9,6 +9,7 @@ import { tesseractDecor } from './tesseract.js';
 import { decorParadox } from './paradox.js';
 import { buildBook } from './popupbook.js';
 import { buildDropTower } from './marblerun.js';
+import { dominoDecor } from './dominoes.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const UP = V(0, 1, 0);
@@ -76,6 +77,8 @@ const DECOR = {
   // 21 DROP TOWER: the marble run and its moving pieces (marblerun.js)
   marblerun: buildDropTower,
 
+  // 18 TOPPLE RUN: the rows that stand still (dominoes.js)
+  domino: dominoDecor,
   // 01 CORE CIRCUIT: big red and blue arches, a skyline at the edges.
   core(world, L, main, rng) {
     for (let i = 20; i < main.N; i += 70) {

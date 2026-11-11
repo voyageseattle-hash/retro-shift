@@ -454,6 +454,7 @@ export class TrackWorld {
     this.minY = Math.min(...this.paths.map((p) => p.minY));
     this.maxY = Math.max(...this.paths.map((p) => p.maxY));
     this.floorY = this.minY - (def.floorDrop ?? 26);
+    def.lay?.(this); // a course's own groundwork (TOPPLE RUN: dominoes.js)
     if (opts.preview) return;
     // the Escher room (rooms.js): each stair drawn on its own wall, portals between them
     if (def.room) this.room = new Room(this);
@@ -481,6 +482,7 @@ export class TrackWorld {
     this.group.add(this.layers.build());
     this.fold?.uncull(this.group);
     this.rig?.finish();
+    this.dominoes = def.dominoes?.(this); // TOPPLE RUN's dominoes, def.dominoes; def.live is QUARTER TURN's, race.js (dominoes.js); race.js and ai.js ask after them
     this._f = {};
     this._g = { y: -1e4, nx: 0, ny: 1, nz: 0, lat: 0, path: null, i: 0, f: 0, rx: 1, rz: 0, mask: 0, onRoad: false };
   }

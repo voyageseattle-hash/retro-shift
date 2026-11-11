@@ -915,6 +915,7 @@ export class Race {
     this.book.update(sim);
     this.tower?.update(sim, p);
     this.live?.update(sim, p);
+    this.world.dominoes?.update(this, sim);
     this.traffic.update(sim, p);
     this.police.update(sim, p);
     this.world.mirrors?.update(this);
@@ -1185,6 +1186,8 @@ export class Race {
       this.tower?.step(r, dt);
       if (r.respawnT > 0) continue;
       this.features(r, dt);
+      this.world.dominoes?.racer(this, r, dt);
+      if (r.respawnT > 0) continue;
       this.moves(r, dt);
       this.progress(r, dt);
     }

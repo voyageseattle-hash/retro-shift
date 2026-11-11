@@ -159,6 +159,17 @@ A lap of a giant pinball table standing on the desk. The countdown draws the plu
 - **The wire ramp** high over the arch is a single steel wireform that only the RED Blade can balance on.
 - **Lap 2** lights the kickback in the left outlane and brings the right flipper to life. **Lap 3** is multiball: three steel balls roll down the centre lane on a fixed timetable.
 - The backbox shows the race as a score table.
+## TOPPLE RUN (TOYBOX CUP, course 18)
+
+A toy road round the edge of the bedroom rug, and one chain of giant dominoes snaking across the rug inside it. GO tips the first one and the wave runs the whole way round at about race pace, the same in every race.
+
+- **RUG RUN and CRANE LANE** cut a corner each and are full of dominoes: red pips down one side, blue down the other. A lens only meets its own colour, BOTH meets both and knocks flat what it hits. Get in behind the wave and a tailwind draws you up to its crest, which carries you at the wave's speed and slingshots you off the end. Once the dominoes are down the lane is flat, fast road.
+- **TOP EDGE** runs along the top of a row packed tight. Only the RED Blade balances up there.
+- **BOOK BRIDGE** has a gap until the chain reaches the big book and knocks it flat across it. If the wave is ahead of you, the bridge is open.
+- **BLUE SPUR** is behind a stack of domino boxes that the blue lens takes away.
+- **SHORT ROW** is a low row of slabs across a cut: the BOTH Pair goes straight through, the BLUE Skimmer LIFTs over.
+- Late in the race a toy crane stands CRANE LANE back up, then tips it from the far end, toward you. A slab that lands on you in a lens it's solid in bowls you over.
+- Come off the road and you land on the rug, which puts you straight back on, slower. No wreck.
 
 ## How it's built
 

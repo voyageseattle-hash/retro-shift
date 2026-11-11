@@ -15,6 +15,7 @@ import { MARBLERUN } from './marblerun.js';
 import { PINBALL } from './pinball.js';
 import { slideFifteenDef } from './slidefifteen.js';
 import { TWISTCUBE } from './twistcube.js';
+import { TOPPLE_RUN } from './tracks-domino.js';
 
 function fractions(points) {
   const d = [0];
@@ -497,6 +498,7 @@ export const TRACKS = [
   // SLIDE FIFTEEN (TOYBOX CUP): a sliding-tile puzzle; the tiles carry the shortcuts (slidefifteen.js, platforms.js)
   make(slideFifteenDef()),
   TWISTCUBE,
+  make(TOPPLE_RUN), // 18 (tracks-domino.js, dominoes.js)
 ];
 
 export const trackById = (id) => TRACKS.find((t) => t.id === id) || TRACKS[0];
