@@ -13,7 +13,7 @@ const UP = V(0, 1, 0);
 export function buildDecor(world) {
   const kind = world.def.decor || 'core';
   if (kind === 'mobius') return mobiusDecor(world);
-  const fn = DECOR[kind] || DECOR.core;
+  const fn = world.def.decorFn || DECOR[kind] || DECOR.core;
   fn(world, world.layers, world.main, world.rng);
 }
 

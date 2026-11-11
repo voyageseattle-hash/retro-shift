@@ -15,6 +15,7 @@ import { layStorms } from './storms-def.js';
 import { layFormRoutes, addSlit, routeMask, layRouteBoosts } from './formroutes.js';
 import { layWarps, buildWarps, PIPE } from './warp.js';
 import { layFold, runFold } from './fold.js';
+import { layMirrors, buildMirrors } from './mirrors.js';
 import { FORMS } from '../vehicles/forms.js';
 import { Mobius } from './mobius.js';
 
@@ -438,6 +439,7 @@ export class TrackWorld {
       this.layers.bend = (a) => this.mob.mapArray(a);
     }
     layFold(this, !!opts.preview);
+    layMirrors(this);
     this.minY = Math.min(...this.paths.map((p) => p.minY));
     this.maxY = Math.max(...this.paths.map((p) => p.maxY));
     this.floorY = this.minY - (def.floorDrop ?? 26);
@@ -455,6 +457,7 @@ export class TrackWorld {
     // (a board's place, for the shift wave, is where it's drawn)
     if (this.mob) for (const S of this.layers.signs) if (S.at) S.at = this.mob.map(S.at, new THREE.Vector3());
     buildShapeCues(this); // accessibility: a shape per world (shapes.js), shown from settings
+    buildMirrors(this); // glass that shows the course back (mirrors.js)
     this.group.add(this.layers.build());
     this.fold?.uncull(this.group);
     this._f = {};

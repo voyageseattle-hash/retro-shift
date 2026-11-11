@@ -592,6 +592,7 @@ export const COURSE_SONG = {
   ruins: 'ruins',
   dream: 'neonB',
   tesseract: 'helixB',
+  mirror: 'tunnelB',
 };
 
 const STING_MIX = {

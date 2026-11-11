@@ -118,6 +118,10 @@ Hit a wall or a block flat out and your car comes apart into its own neon lines.
 
 Some roads only exist in one world. Grid City's BLUE ROOFTOPS rise out of the road when you look through the blue lens and are a row of buildings through the red. Deep in Shift Tunnels a blue iris hatch seals the SECRET BORE: shift to RED as you pass and it isn't there. Every coloured shortcut exists only through its lens, and the other world hides it: a billboard across its mouth and a row of buildings over the ground it runs across. Shift to the route's lens and the cover is gone. While you're on a road that only your lens can see, SHIFT doesn't drain, so finding a route is a reward, not a bar to ration.
 
+## Mirror House
+
+Course 12, **Mirror House**, is a hall of mirrors: two long laps of a four-floor house whose walls are glass. The mirrors are real reflections, so a bend beside one looks like a fork, with your own twin driving the other arm. Each mirror is silvered in one world: red glass is gone through the BLUE lens and blue glass through the RED, so the lens tells you which arm is road. Four of the mirrors hide a LOOKING GLASS route of the other colour that runs on through the frame (a diamond over the glass is the tell). The INFINITY HALL has glass down both sides, the FUNHOUSE warps what it shows over a rolling floor, and the GLASS DOORS are mirrors across half the road: if you can see yourself coming, it's glass. Hit a mirror hard and it cracks. The house stands under a neon big top with a mirror ball hung from its peak, marquee bulbs chase round the doorways and along the top of every mirror, and the floor is harlequin tiles with a pearl finish whose colours slide as you move (all red through the RED lens, all blue through the BLUE).
+
 ## The ten courses
 
 01 Core Circuit · 02 Layered Grid · 03 Shift Tunnels · 04 Orbital Loops · 05 Grid City · 06 Void Field · 07 Helix Ascent · 08 Fractal Route · 09 Shift Lattice · 10 Echo Ruins
@@ -132,6 +136,8 @@ Some roads only exist in one world. Grid City's BLUE ROOFTOPS rise out of the ro
 - `js/world/track.js`: a closed main loop plus branch paths, each sample, wall, pad and shard tagged with the worlds it's solid in. The ground query is per racer and per lens.
 - `js/vehicles/racer.js`: the driving model is Absurd Combat Racing's truck physics (throttle curve, drift and mini-turbos, grip, slope gravity, suspension), plus each form's width, cling, glide and water drag.
 - `js/vehicles/forms.js`: the Blade and the Skimmer, how they dock and split, and the FORMS table. `js/world/formroutes.js`: the glide gaps, wall runs and slits.
+- `js/world/mirrorart.js`: Mirror House's look: the big top, the mirror ball, the marquee bulbs and the iridescent floor, each with a shader that follows the lens.
+- `js/world/mirrors.js`: Mirror House's glass. The nearest few mirrors are rendered to a texture from a camera reflected in the glass each frame, and the rest go dark.
 - `js/vehicles/ai.js`: rivals read the road ahead in all three worlds and pick a lens, a lane and a fork.
 - `js/core/audio.js`: synthesized synthwave split into a red band and a blue band; shifting drops the other band behind a filter.
 - `js/core/input.js`, `js/core/renderer.js`, `js/game/camera.js`: carried over from Absurd Combat Racing.

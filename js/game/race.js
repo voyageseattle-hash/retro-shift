@@ -861,6 +861,7 @@ export class Race {
     this.fold.update(sim);
     this.traffic.update(sim, p);
     this.police.update(sim, p);
+    this.world.mirrors?.update(this);
     this.items.update(sim);
 
     // visuals
@@ -1050,6 +1051,8 @@ export class Race {
     // (no wet-road mirror on a road that's drawn turned over or folded)
     this.reflection.render(gl, this.scene, this.cam.camera, p.gnd?.y ?? p.pos.y, on && !this.mob && !this.world.fold ? 0.2 : 0, size.x, size.y, this.t);
     this.mob?.apply(this.scene);
+    // the mirrors (world/mirrors.js): one view here; split-screen draws them per view (views())
+    if (!this.split) this.world.mirrors?.render(gl, this.scene, this.cam.camera, p.mode, { quality: renderer.quality, t: this.t });
   }
 
   // What to draw: one full-screen view, or two stacked views (player 1 on top), each prepared for its own lens.
@@ -1069,6 +1072,7 @@ export class Race {
         this.env.update(this.dtLast || 0, this.t, this.cams[k].camera);
         this.traffic.render(pl.mode, pl);
         this.police.render(pl.mode, pl);
+        this.world.mirrors?.render(this.app.renderer.renderer, this.scene, this.cams[k].camera, pl.mode, { quality: this.app.renderer.quality, t: this.t, instant: true, split: true });
       },
     }));
   }
@@ -1497,6 +1501,7 @@ export class Race {
   dispose() {
     disposeTree(this.scene);
     this.reflection.dispose();
+    this.world.mirrors?.dispose();
   }
 }
 

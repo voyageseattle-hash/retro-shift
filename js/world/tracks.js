@@ -7,6 +7,7 @@
 import { M } from './shift.js';
 import { MOBIUS } from './tracks-mobius.js';
 import { TESSERACT } from './tesseract.js';
+import { MIRROR_HOUSE } from './mirrorhouse.js';
 
 function fractions(points) {
   const d = [0];
@@ -473,6 +474,7 @@ export const TRACKS = [
   }),
   // ------------------------------------------------------------------ 16 (the bonus course: world/tesseract.js)
   TESSERACT,
+  make(MIRROR_HOUSE), // 12 (mirrorhouse.js)
 ];
 
 export const trackById = (id) => TRACKS.find((t) => t.id === id) || TRACKS[0];
