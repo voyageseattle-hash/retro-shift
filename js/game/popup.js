@@ -1,8 +1,11 @@
 // PAGE TURNER (world/tracks-popup.js): the pop-up book. One road, three spreads, one per lap.
 //
-//   THE PAGE TURN  Every racer reads at their own pace: your page turns as you leave the lip of THE FLIP, the jump
-//                  over the gutter at the bottom of the book. The right-hand leaf lifts behind you, swings over the
-//                  top and comes down on the left page ahead of you. The old spread's pop-ups fold flat under it and
+//   THE FLIP       At the bottom of the book the road dives into the gutter, up the spine, round a hairpin and
+//                  back: the GUTTER ROAD, the slow way. Just before it the lip of the page stands up across the
+//                  road on a beat (it twitches first). Reach it while it's up and it flings you clean over the
+//                  gutter; catch it just as it snaps up and it's a PERFECT FLIP. Miss it and you drive the gutter.
+//   THE PAGE TURN  Every racer reads at their own pace: your page turns as you pass the lip, in the air or not.
+//                  The right-hand leaf lifts behind you, swings over the top and comes down on the left page ahead of you. The old spread's pop-ups fold flat under it and
 //                  the new spread's stand up: the right page as the leaf uncovers it, the left page as it lands.
 //   THE PRINTING   The pictures are printed in red and blue, like an old 3-D comic. Each lens shows one printing
 //                  and hides the other, on the paper as well as in the pop-ups.
@@ -21,6 +24,7 @@
 import * as THREE from '../../vendor/three.js';
 import { M, RED, BLUE, COLORS } from '../world/shift.js';
 import { BOOK, pageY, SPREADS } from '../world/tracks-popup.js';
+import { Path } from '../world/track.js';
 import * as S from '../world/popupshapes.js';
 import { FORMS } from '../vehicles/forms.js';
 import { mulberry32, smoothstep, clamp } from '../core/util.js';
@@ -33,6 +37,9 @@ const TURN = 2.7; // seconds the leaf takes to come over
 const SOLID_AFTER = 3.3; // a new page's late pieces go solid for you this long after your page turns
 const BEAT = 3.2; // seconds: one stand-and-fold of a flap, one there-and-back of a pull tab
 const YELLOW = 0xffd04a;
+const LIP_UP = 0.47; // the part of each beat the lip of THE FLIP stands
+const LIP_PERFECT = 0.45; // seconds after it snaps up that a catch is a PERFECT FLIP
+const G_AIR = 27; // racer.js
 const ADD = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending };
 const HALF_PI = Math.PI / 2;
 
@@ -253,6 +260,7 @@ export class PopupBook {
     this.buildLeaf();
     for (let p = 0; p < 3; p++) this.buildSpread(p, world);
     this.buildWater(world);
+    this.buildLip(world);
     for (const r of race.racers || []) r.page = 0;
   }
 
@@ -551,6 +559,86 @@ export class PopupBook {
     this.group.add(this.waterLines);
   }
 
+  // THE FLIP: the lip of the page across the road, and the line it throws you along over the gutter.
+  buildLip(world) {
+    const m = this.main;
+    const def = world.def;
+    const i0 = m.index(def.lipAt);
+    const i1 = m.index(def.landAt);
+    const a = m.point(i0, 0, 0, new THREE.Vector3());
+    const b = m.point(i1, 0, 0, new THREE.Vector3());
+    const pts = [];
+    for (let k = -1; k <= 5; k++) pts.push(a.clone().lerp(b, k / 5));
+    // and on down the road past the landing, so a long flight is still steered home
+    for (const d of [30, 60, 90]) pts.push(m.point(m.wrap(i1 + Math.round(d / m.ds)), 0, 0, new THREE.Vector3()));
+    this.chord = new Path('flip', pts, false, m.halfW, {});
+    const w = m.halfW - 1;
+    const len = 10;
+    this.lip = { i0, i1, n: Math.round(len / m.ds), w, to: b, up: false, since: 9, k: 0 };
+    const root = new THREE.Group();
+    m.point(i0, 0, 0.1, root.position);
+    root.rotation.y = Math.atan2(m.thx[i0], m.thz[i0]);
+    const flap = new THREE.Group();
+    const p = [];
+    const seg = (x0, y0, z0, x1, y1, z1) => p.push(x0, y0, z0, x1, y1, z1);
+    // the sheet, its curled tip, and chevrons pointing up it
+    seg(-w, 0, 0, w, 0, 0);
+    for (const x of [-w, w]) {
+      seg(x, 0, 0, x, 0, len);
+      seg(x, 0, len, x, 0.9, len + 1.6);
+      seg(x, 0.9, len + 1.6, x, 2.4, len + 1.9);
+    }
+    seg(-w, 0, len, w, 0, len);
+    seg(-w, 2.4, len + 1.9, w, 2.4, len + 1.9);
+    for (let k = 0; k < 3; k++) {
+      const z = 1.2 + k * 3;
+      seg(-w * 0.7, 0, z, 0, 0, z + 2.2);
+      seg(w * 0.7, 0, z, 0, 0, z + 2.2);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
+    this.lipMat = new THREE.LineBasicMaterial({ color: YELLOW, ...ADD });
+    const lines = new THREE.LineSegments(g, this.lipMat);
+    lines.renderOrder = 3;
+    const sheet = new THREE.Mesh(new THREE.PlaneGeometry(w * 2, len), new THREE.MeshBasicMaterial({ color: 0x241a05, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
+    sheet.rotation.x = Math.PI / 2;
+    sheet.position.z = len / 2;
+    flap.add(sheet, lines);
+    root.add(flap);
+    this.group.add(root);
+    this.lip.flap = flap;
+  }
+
+  // The lip is up and this racer is on it: off the page edge and over the gutter.
+  catchLip(r, t) {
+    const R = this.race;
+    const L = this.lip;
+    r.flipCd = t + 2.5;
+    const dx = L.to.x - r.pos.x;
+    const dz = L.to.z - r.pos.z;
+    const dist = Math.hypot(dx, dz);
+    const fwd = Math.max(r.speed, 68);
+    const air = dist / fwd;
+    const vy = (G_AIR * air) / 2 + (L.to.y - r.pos.y) / air;
+    r.vel.set((dx / dist) * fwd, vy, (dz / dist) * fwd);
+    r.grounded = false;
+    r.airTime = 0.01;
+    // (Race.flyLaunch steers a launched racer along a path: this one is the straight line over the gutter)
+    r.launch = { path: this.chord, i: 0, t: air + 0.6, fwd };
+    // the same arc for every form (update carries a racer along it: left to itself the Skimmer's glide sails off the page)
+    r.flip = { t0: t, air, vy, fwd, x0: r.pos.x, y0: r.pos.y, z0: r.pos.z, dx: dx / dist, dz: dz / dist };
+    const perfect = L.since < LIP_PERFECT;
+    r.giveBoost(perfect ? 1.5 : 0.8, perfect ? 1.38 : 1.22);
+    if (perfect) r.energy = Math.min(1, r.energy + 0.16);
+    R.onMove(r, 'launch', { perfect });
+    if (R.near(r)) R.debris.sparks(r.pos, _v.set(0, -1, 0), 30, YELLOW, 14, r.pos.y - 0.4);
+    if (r.isPlayer) {
+      R.emitP(r, 'popup', { text: perfect ? 'PERFECT FLIP' : 'FLIP', color: '#ffd04a' });
+      R.app.audio.play('turbo', perfect ? 3 : 2);
+      R.camOf(r).fovPunch(perfect ? 14 : 10);
+    }
+  }
+
   inWater(r) {
     const tr = r.track;
     if (!tr || tr.path !== this.main) return false;
@@ -568,10 +656,36 @@ export class PopupBook {
     const R = this.race;
     const t = R.raceTime;
     NOW = t;
+    // the lip of THE FLIP: up for the first part of every beat, with a twitch before it stands
+    const m = this.main;
+    const L = this.lip;
+    const lp = (t / BEAT + 0.1) % 1;
+    L.k = lp < LIP_UP ? smoothstep(0, 0.04, lp) : lp > 0.84 ? 0.1 + 0.05 * Math.sin(t * 46) : 1 - smoothstep(LIP_UP, LIP_UP + 0.07, lp);
+    L.up = lp < LIP_UP && L.k > 0.6;
+    L.since = lp * BEAT;
+    L.flap.rotation.x = -0.5 * easeOutBack(L.k);
+    this.lipMat.color.set(YELLOW).multiplyScalar(0.55 + 1.1 * L.k);
     // whose page turns
     for (const r of R.racers) {
       // (progress only counts on the ground, so a racer in the air off THE FLIP is counted from its lip)
-      const fl = r.launch && r.launch.path === this.main && Math.abs(r.launch.i - this.flipI) < 70 ? 0.03 : 0;
+      const F = r.flip;
+      const flying = F && !r.grounded && r.respawnT <= 0 && t < F.t0 + F.air + 0.4;
+      if (F && !flying && t > F.t0 + 0.2) r.flip = null;
+      const fl = flying ? 0.03 : 0;
+      if (flying) {
+        // carried along the arc, and its road search pointed at where it will come down, not at the gutter road
+        // under it
+        const q = Math.min(t - F.t0, F.air);
+        r.pos.set(F.x0 + F.dx * F.fwd * q, F.y0 + F.vy * q - 0.5 * G_AIR * q * q + 0.3, F.z0 + F.dz * F.fwd * q);
+        r.vel.set(F.dx * F.fwd, F.vy - G_AIR * q, F.dz * F.fwd);
+        r.yaw = Math.atan2(F.dx, F.dz);
+        r.hints[m.id] = L.i1;
+      }
+      else if (!r.puppet && r.grounded && r.respawnT <= 0 && L.up && !(r.flipCd > t) && r.speed > 18 && r.track?.path === m) {
+        let d = r.track.i - L.i0;
+        if (d < -m.N / 2) d += m.N;
+        if (d >= 0 && d <= L.n && Math.abs(r.track.lat) < L.w) this.catchLip(r, t);
+      }
       const pg = clamp(Math.floor((r.prog || 0) + fl - this.flipU + 1), 0, 2);
       if (pg > (r.page || 0) && !r.finished) {
         r.page = pg;
@@ -586,7 +700,6 @@ export class PopupBook {
       }
     }
     // the moving pieces, on the race clock
-    const m = this.main;
     for (const P of this.pieces) {
       const o = P.ob;
       if (!o) continue;
