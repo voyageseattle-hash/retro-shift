@@ -14,7 +14,7 @@
 import * as THREE from '../../vendor/three.js';
 import { Path } from './track.js';
 import { Platforms, Platform } from './platforms.js';
-import { Puzzle, worth, TILE, SIZE, FRAME, DX, DZ, cellX, cellZ, homeCell, mouthCell } from './slidepuzzle.js';
+import { Puzzle, worth, KINDS, TILE, SIZE, FRAME, DX, DZ, cellX, cellZ, homeCell, mouthCell } from './slidepuzzle.js';
 import { M, RED, BLUE, COLORS } from './shift.js';
 import { toyboxEnv, TOY_YELLOW } from './toybox.js';
 import { SlideArt, DEPTH } from './slideart.js';
@@ -57,7 +57,7 @@ export function slideFifteenDef() {
     id: 'tiles',
     num: '20',
     name: 'SLIDE FIFTEEN',
-    blurb: 'A sliding puzzle on the bed. Ride the tile that lines your road up.',
+    blurb: 'A sliding puzzle on the bed. Park on the tile with the arrows and ride it to your road.',
     decor: 'none',
     skyPiece: 'none',
     // (the bed's own toys are laid out round this course in slideart.js, so the shared loose ones are left out)
@@ -100,9 +100,26 @@ export class SlideFifteen extends Platforms {
       this.puzzle.roads[k].forEach((kind, colour) => {
         const path = new Path(`t${k}${colour ? 'b' : 'r'}`, tileRoad(kind), false, HW, { bankFactor: 0 });
         this.addRoad(path, pl, { mask: colour ? M.BO : M.RO });
+        Object.assign(path, { kind, colour });
       });
       this.tiles[k] = this.addPlatform(pl);
     }
+    // the empty slot: a red road under the board, crossing it both ways, there in RED only. It's wherever the hole
+    // is, so it moves (the other way) every time a tile does, and carries whoever is down there with it.
+    const at0 = start.indexOf(0);
+    const hole = new Platform('hole', cellX(at0), 0, cellZ(at0));
+    hole.k = 0;
+    const under = ['NS', 'EW'].map((name) => {
+      const path = new Path(`h${name.toLowerCase()}`, tileRoad(KINDS[name], UNDER), false, HW, { bankFactor: 0 });
+      this.addRoad(path, hole, { mask: M.RO });
+      Object.assign(path, { kind: KINDS[name], colour: 0 });
+      // (where the two cross there are no rails: it's a junction)
+      for (let i = 0; i < path.N; i++) if (Math.abs(i * path.ds - path.length / 2) < HW + 1.5) path.railL[i] = path.railR[i] = 0;
+      return path;
+    });
+    under[0].cross = under[1];
+    under[1].cross = under[0];
+    this.hole = this.addPlatform(hole);
     // the slip roads: into each mouth off the frame, and back out onto it
     this.slips = [];
     for (let side = 0; side < 4; side++) for (let idx = 0; idx < 4; idx++) {
@@ -117,7 +134,7 @@ export class SlideFifteen extends Platforms {
       out.pair = inn;
       this.slips.push({ inn, out, gate });
     }
-    this.sound = { warn: null, done: 0 };
+    this.sound = { warn: null, count: 0, solved: false };
   }
 
   // A slip road at a mouth: a quarter turn of radius R between the frame (running beside it, its inner edge flush
@@ -147,6 +164,18 @@ export class SlideFifteen extends Platforms {
 
   // Where a tile is: the puzzle says, from the clock.
   pose(pl, t, out) {
+    if (!pl.k) {
+      // the hole: where no tile is, swapping places with the tile on the move
+      const B = this.puzzle.at(t);
+      const from = B.moving ? B.moving.to : B.cells.indexOf(0);
+      const to = B.moving ? B.moving.from : from;
+      out.x = cellX(from) + (cellX(to) - cellX(from)) * B.f;
+      out.y = 0;
+      out.z = cellZ(from) + (cellZ(to) - cellZ(from)) * B.f;
+      out.yaw = 0;
+      out.moving = out.busy = !!B.moving;
+      return;
+    }
     this.puzzle.place(pl.k, t, (this._pl ||= {}));
     out.x = this._pl.x;
     out.y = 0;
@@ -157,15 +186,13 @@ export class SlideFifteen extends Platforms {
   }
 
   leaves(pl) {
-    if (!pl) return Infinity;
-    const { START, PERIOD, SLIDE } = this.puzzle.T;
-    const steps = this.puzzle.steps;
-    for (let j = Math.max(0, Math.floor((this.time - START) / PERIOD)); j < steps.length; j++) {
-      if (steps[j].k !== pl.k) continue;
-      const t0 = START + j * PERIOD;
-      if (this.time < t0 + SLIDE) return Math.max(0, t0 - this.time);
-    }
-    return Infinity;
+    return pl ? this.puzzle.nextMove(pl.k, this.time) : Infinity;
+  }
+
+  joins(P, end, mode) {
+    const pl = P.platform;
+    if (!pl || (mode !== RED && mode !== BLUE)) return true;
+    return this.puzzle.joins(pl.k, P.colour, P.kind[end], this.time);
   }
 
   step(dt, race) {
@@ -176,15 +203,15 @@ export class SlideFifteen extends Platforms {
     const A = race.app?.audio;
     if (B.warn && S.warn !== B.warn) A?.play('rattle');
     S.warn = B.warn;
-    const landed = B.moving ? B.done : B.done;
-    if (!B.moving && landed > S.done) {
+    if (!B.moving && B.count > S.count) {
       A?.play('clack');
-      if (landed === this.puzzle.steps.length) {
+      if (B.whole && !S.solved) {
+        S.solved = true;
         A?.play('perfect');
         for (const p of race.players || []) race.emitP?.(p, 'popup', { text: 'PUZZLE SOLVED', color: '#ffd23a' });
       }
     }
-    if (!B.moving) S.done = landed;
+    if (!B.moving) S.count = B.count;
   }
 
   // A rival coming up on a mouth: drive in if the road gets it out further round, sooner than the frame would.
@@ -198,19 +225,19 @@ export class SlideFifteen extends Platforms {
     // (arrival is a guess, so it has to hold for a while either side)
     const cell = mouthCell(G.side, G.idx);
     const k = this.puzzle.at(t0).cells[cell];
-    if (!k) return 0;
     for (let t = t0 - 1.6; t <= t0 + 1; t += 0.4) {
       const B = this.puzzle.at(t);
-      if (B.cells[cell] !== k || B.warn?.k === k) return 0;
+      // (no tile there means the hole and its red road, unless something is mid-slide)
+      if (B.cells[cell] !== k || (k ? B.warn?.k === k : B.moving)) return 0;
     }
-    for (const colour of [0, 1]) {
+    for (const colour of k ? [0, 1] : [0]) {
       const W = worth(this.puzzle, G.side, G.idx, colour, t0, 46 + ai.skill * 8);
       if (W && W.gain > best) {
         best = W.gain;
         lens = colour ? BLUE : RED;
       }
     }
-    if (best < 1.5 || Math.random() > 0.4 + ai.skill * 0.55) return 0;
+    if (best < 1.2 || Math.random() > 0.4 + ai.skill * 0.55) return 0;
     return lens;
   }
 
@@ -221,6 +248,7 @@ export class SlideFifteen extends Platforms {
     const main = w.main;
     const hw = main.halfW;
     const yellow = TOY_YELLOW;
+    this.buildHole();
     // the slip roads, printed once in each colour
     for (const { inn, out } of this.slips) for (const p of [inn, out]) {
       this.drawRoad(L, p, M.RO, COLORS.red);
@@ -311,6 +339,16 @@ export class SlideFifteen extends Platforms {
     }
   }
 
+  // The empty slot's road: red only, dipping under the level of the tiles, with a red floor light under the junction.
+  buildHole() {
+    const pl = this.hole;
+    const L = this.layersFor(pl);
+    for (const p of pl.paths) this.drawRoad(L, p, M.RO, COLORS.red);
+    const y = -UNDER - 0.05;
+    const h = HW + 1.5;
+    L.quad(M.RO, V(-h, y, -h), V(h, y, -h), V(h, y, h), V(-h, y, h), COLORS.red, 0.22);
+  }
+
   buildTile(pl) {
     const L = this.layersFor(pl);
     const h = TILE / 2 - 1;
@@ -364,6 +402,7 @@ export class SlideFifteen extends Platforms {
   }
 
   arrowMat() {
+    this._arrowDim ||= new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, side: THREE.DoubleSide });
     return (this._arrow ||= new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, side: THREE.DoubleSide }));
   }
 
@@ -381,13 +420,22 @@ export class SlideFifteen extends Platforms {
     const solved = B.done >= this.puzzle.steps.length && !B.moving;
     this.art.update(t, B, tint, tint ? Math.min(1, Math.max(0, (Math.min(tint.r, tint.g, tint.b) - 0.35) / 0.6)) : 1, col, solved);
     this._arrow.color.copy(col);
-    const step = B.moving || B.warn;
+    // the arrows: lit steady on the tile that goes next, flashing once it rattles, and faint on the one after
+    // that, so there's time to get onto a tile before it leaves
+    const step = B.moving || B.next;
+    const then = B.moving ? B.next : B.after;
+    const way = (st) => [0, 1, 2, 3].find((d) => st.to - st.from === DX[d] + 4 * DZ[d]);
+    this._arrowDim.color.copy(col);
     for (let k = 1; k <= 15; k++) {
       const pl = this.tiles[k];
       const mine = step && step.k === k;
-      let dir = -1;
-      if (mine) dir = [0, 1, 2, 3].find((d) => step.to - step.from === DX[d] + 4 * DZ[d]);
-      pl.arrows.forEach((m, d) => (m.visible = d === dir && (B.moving ? true : Math.floor(t * 7) % 2 === 0)));
+      const later = !mine && then && then.k === k;
+      const dir = mine ? way(step) : later ? way(then) : -1;
+      const lit = !mine || B.moving || !B.warn || Math.floor(t * 7) % 2 === 0;
+      pl.arrows.forEach((m, d) => {
+        m.visible = d === dir && lit;
+        m.material = later ? this._arrowDim : this._arrow;
+      });
       pl.group.position.copy(pl.pos);
       if (mine && B.warn) {
         // the rattle (the look only: the road under a craft stays put)
@@ -406,15 +454,18 @@ export class SlideFifteen extends Platforms {
 // The road across a tile between two of its sides, in the tile's own space: straight between opposite sides, a
 // quarter circle round the corner between neighbours. It runs a little past the tile's edge at each end, so two
 // roads that meet overlap.
-function tileRoad([a, b]) {
+// (dip: a straight road that drops under the board in the middle, for the empty slot)
+const UNDER = 1.3;
+function tileRoad([a, b], dip = 0) {
   const h = TILE / 2;
   const pts = [];
   const nub = 0.6;
   if ((a + 2) % 4 === b) {
-    const n = 8;
+    const n = dip ? 20 : 8;
     for (let k = 0; k <= n; k++) {
       const s = -h - nub + ((2 * h + 2 * nub) * k) / n;
-      pts.push(V(-DX[a] * s, 0, -DZ[a] * s));
+      const u = Math.min(1, Math.max(0, (h - Math.abs(s)) / 26));
+      pts.push(V(-DX[a] * s, -dip * u * u * (3 - 2 * u), -DZ[a] * s));
     }
     return pts;
   }
