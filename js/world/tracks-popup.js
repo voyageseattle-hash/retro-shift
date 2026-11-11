@@ -1,6 +1,7 @@
 // 19 PAGE TURNER (TOYBOX CUP): a giant pop-up storybook lying open on the bedroom floor. The road is die-cut through
-// every page, so the lap is the same line each time, but each lap is another spread: the leaf turns as you jump the
-// gutter at the bottom of the book, the old scene folds flat and the next one stands up (game/popup.js).
+// every page, so the lap is the same line each time, but each lap is another spread: the leaf turns as you cross the
+// gutter at the bottom of the book (flung over it by the page edge, or the slow way down the gutter road), the old
+// scene folds flat and the next one stands up (game/popup.js).
 //
 // Laid out in book coordinates, as a reader at the bottom of the book sees it: bx to the reader's right, bz up the
 // page, the spine at bx = 0. (A driver heading up the page has -x on their right, so world x = -bx.) The pages rise
@@ -25,7 +26,7 @@ export const popupDef = {
   id: 'popup',
   num: '19',
   name: 'PAGE TURNER',
-  blurb: 'A pop-up storybook. Jump the gutter and the page turns: city, sea, volcano.',
+  blurb: 'A pop-up storybook. Catch the page edge and fly the gutter as the page turns: city, sea, volcano.',
   decor: 'popup',
   seed: 1919,
   laps: 3,
@@ -36,15 +37,21 @@ export const popupDef = {
   routeBoosts: 'light',
   popup: true, // the book, its three spreads and the page turn (game/popup.js)
   // clockwise as the reader sees it: up the left page, across the top of the spine, down the right page, and back
-  // across the bottom of the spine, where THE FLIP throws you over the gutter and the page turns under you
+  // across the bottom of the spine. There the road itself is the GUTTER ROAD: it turns up the spine, round a hairpin
+  // in the fold and back down the other side. THE FLIP is the way over it: the lip of the page, when it's up
+  // (game/popup.js), flings you straight across the gutter to where the road comes out.
   points: [
     at(-270, -90), at(-270, 60), at(-250, 175), at(-170, 232), at(-85, 215), at(-40, 204), at(0, 200), at(40, 204),
     at(85, 215), at(175, 235), at(262, 180), at(275, 70), at(210, -10), at(215, -100), at(255, -180), at(190, -238),
-    at(95, -228), at(42, -220), at(0, -216), at(-42, -220), at(-95, -228), at(-195, -238), at(-262, -185),
+    at(110, -232), at(48, -228), at(31, -221), at(24, -204), at(24, -150), at(17, -133), at(0, -126), at(-17, -133),
+    at(-24, -150), at(-24, -204), at(-31, -221), at(-48, -228), at(-110, -232), at(-195, -238), at(-262, -185),
   ],
   features: (P) => ({
-    // where a racer's page turns: just past the lip of THE FLIP
-    flipAt: P(16, 0.5),
+    // THE FLIP: the lip stands across the road at lipAt and throws you to landAt; a racer's page turns at flipAt,
+    // just past the lip, whether they flew or took the gutter
+    lipAt: P(16, 0.66),
+    flipAt: P(16, 0.86),
+    landAt: P(27, 0.25),
     branches: [
       // a folded paper wall inside the first corner: only the Blade climbs it
       { from: P(1, 0.45), to: P(3, 0.5), mask: M.ALL, side: 1, lift: 9, label: 'PAPER WALL', sub: 'RED CLINGS · OTHERS FALL', wallrun: { from: 0.28, to: 0.76, bank: 0.95 } },
@@ -56,19 +63,17 @@ export const popupDef = {
       // a pull tab: a heavy cardboard strip that's only there with both printings laid over each other
       { from: P(14, 0.35), to: P(15, 0.75), mask: M.X, side: 1, lift: 0, bulge: -14, label: 'PULL TAB' },
       // the red printing's ribbon over the inside of the last corner
-      { from: P(20, 0.7), to: P(22, 0.55), mask: M.RO, side: 1, lift: 8, label: 'RED RIBBON' },
+      { from: P(28, 0.65), to: P(30, 0.55), mask: M.RO, side: 1, lift: 8, label: 'RED RIBBON' },
     ],
     gaps: [
       { at: P(9, 0.3), len: 36, mask: M.R, noRails: true },
       { at: P(11, 0.55), len: 36, mask: M.B, noRails: true },
       { path: 'b1', at: 0.5, len: 50, glide: true, noRails: true },
     ],
-    // THE FLIP: the curled lip of the page, there in every lens. It throws you clean over the gutter.
-    launchers: [{ at: P(16, 0.28), mask: M.ALL, over: 104 }],
     obstacles: [],
-    boosts: [{ at: P(0, 0.45) }, { at: P(7, 0.6) }, { at: P(10, 0.75), mask: M.BO }, { at: P(19, 0.9) }, { at: P(22, 0.4), mask: M.RO }, { path: 'b0', at: 0.86 }, { path: 'b1', at: 0.8 }, { path: 'b3', at: 0.45, mask: M.X }],
-    shards: [{ at: P(0, 0.75), n: 3 }, { at: P(6, 0.6), n: 3, lat: 0.4 }, { at: P(13, 0.6), n: 3, lat: -0.4 }, { at: P(20, 0.1), n: 3 }],
-    tips: [{ at: P(15, 0.6), text: 'THE FLIP: JUMP THE GUTTER AND THE PAGE TURNS', key: 'both' }],
+    boosts: [{ at: P(0, 0.45) }, { at: P(7, 0.6) }, { at: P(10, 0.75), mask: M.BO }, { at: P(27, 0.8) }, { at: P(30, 0.4), mask: M.RO }, { path: 'b0', at: 0.86 }, { path: 'b1', at: 0.8 }, { path: 'b3', at: 0.45, mask: M.X }],
+    shards: [{ at: P(0, 0.75), n: 3 }, { at: P(6, 0.6), n: 3, lat: 0.4 }, { at: P(13, 0.6), n: 3, lat: -0.4 }, { at: P(28, 0.1), n: 3 }],
+    tips: [{ at: P(15, 0.6), text: 'THE FLIP: CATCH THE PAGE EDGE WHILE IT IS UP, OR TAKE THE GUTTER ROAD', key: 'both' }],
     // Where each spread's moving parts stand (game/popup.js), as fractions of the lap: clear main road between the
     // routes. zone = [from, to].
     zones: {
@@ -78,7 +83,7 @@ export const popupDef = {
       z4: [P(12, 0.35), P(13, 0.9)],
       // (you land out of THE FLIP a little before this one, while the new page is still standing up: its pieces go
       // solid for you a few seconds after your page turns)
-      z5: [P(21, 0.3), P(22, 0.45)],
+      z5: [P(29, 0.3), P(30, 0.45)],
     },
   }),
 };
