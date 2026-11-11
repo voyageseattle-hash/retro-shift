@@ -19,6 +19,7 @@
 import * as THREE from '../../vendor/three.js';
 import { M, RED, BLUE, BOTH, solidIn, colorForMask } from './shift.js';
 import { TOY_YELLOW } from './toybox.js';
+import { dominoArt } from './domino-art.js';
 import { chainEnd } from '../game/chain.js';
 import { clamp, lerp } from '../core/util.js';
 
@@ -166,6 +167,8 @@ export function dominoDecor(world, L) {
     const z = cz + Math.sin(a) * r;
     L.box(k % 2 ? M.R : M.B, x, rugY + H / 2, z, W, H, T, -a, null, k % 2 === 0);
   }
+  // the rug's border, the tiles on the road, the fairy lights and the toys left out round it (domino-art.js)
+  dominoArt(world, L);
 }
 
 const CRANE_H = 30;
