@@ -45,4 +45,45 @@ export function buildBook(world) {
   }
   for (const [bx, bz] of [[-cw, -cd], [cw, -cd], [cw, cd], [-cw, cd]]) L.line(M.ALL, V(bx, floor + 0.1, bz), V(bx, floor + 1.5, bz), YELLOW);
   L.fillQuad(M.ALL, V(-cw, floor + 1.5, -cd), V(cw, floor + 1.5, -cd), V(cw, floor + 1.5, cd), V(-cw, floor + 1.5, cd));
+  dieCut(world);
+}
+
+// The road is die-cut through every page: the cut edge of the paper runs along both sides of it, a bright lip and
+// the thickness of the sheet under it, so the page reads as card right beside the car.
+function dieCut(world) {
+  const L = world.layers;
+  const lip = new THREE.Color(PAPER).multiplyScalar(0.6).getHex();
+  const under = new THREE.Color(PAPER).multiplyScalar(0.2).getHex();
+  const CUT = 5; // how far outside the road the paper is cut (as the printing is, game/popup.js)
+  const inOther = (path, x, z) => {
+    for (const q of world.paths) {
+      if (q === path) continue;
+      const r2 = (q.halfW + CUT - 0.5) ** 2;
+      for (let j = 0; j < q.N; j += 2) {
+        const dx = q.px[j] - x;
+        const dz = q.pz[j] - z;
+        if (dx * dx + dz * dz < r2) return true;
+      }
+    }
+    return false;
+  };
+  const y = (x) => pageY(-x) - 0.8 + 0.05;
+  const a = new THREE.Vector3();
+  for (const path of world.paths) {
+    for (const s of [-1, 1]) {
+      let prev = null;
+      const end = path.closed ? path.N : path.N - 1;
+      for (let i = 0; i <= end; i += 2) {
+        const k = path.closed ? i % path.N : Math.min(i, path.N - 1);
+        path.point(k, s * (path.halfW + CUT), 0, a);
+        const here = Math.abs(a.x) < BOOK.W - 2 && Math.abs(a.z) < BOOK.D / 2 - 2 && !inOther(path, a.x, a.z) ? { x: a.x, z: a.z } : null;
+        if (prev && here) {
+          L.lineXYZ(M.ALL, prev.x, y(prev.x), prev.z, here.x, y(here.x), here.z, lip);
+          L.lineXYZ(M.ALL, prev.x, y(prev.x) - 0.45, prev.z, here.x, y(here.x) - 0.45, here.z, under);
+          if ((i / 2) % 4 === 0) L.lineXYZ(M.ALL, here.x, y(here.x), here.z, here.x, y(here.x) - 0.45, here.z, under);
+        }
+        prev = here;
+      }
+    }
+  }
 }
