@@ -462,6 +462,8 @@ export class SlideFifteen extends Platforms {
       const cz = SIZE / 2 + (oz * SIZE) / 2;
       // (the rim runs between the mouths: each mouth is a road's width plus its rails)
       const cuts = [-200, -150 - HW - 1.5, -150 + HW + 1.5, -50 - HW - 1.5, -50 + HW + 1.5, 50 - HW - 1.5, 50 + HW + 1.5, 150 - HW - 1.5, 150 + HW + 1.5, 200];
+      // (and a door in the middle of the S and E sides, where a crack lane comes out under the rim)
+      if (side === 1 || side === 2) cuts.splice(5, 0, -CRACK - 1, CRACK + 1);
       for (let k = 0; k < cuts.length; k += 2) {
         const a = V(cx + tx * cuts[k] + ox * 1.2, 0, cz + tz * cuts[k] + oz * 1.2);
         const b = V(cx + tx * cuts[k + 1] + ox * 1.2, 0, cz + tz * cuts[k + 1] + oz * 1.2);
