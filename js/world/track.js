@@ -9,7 +9,8 @@ import { clamp, lerp, wrapAngle, mulberry32, smoothstep } from '../core/util.js'
 import { M, BOTH, RED, BLUE, solidIn, colorForMask, COLORS } from './shift.js';
 import { Layers } from './layers.js';
 import { buildDecor } from './decor.js';
-import { buildSigns } from './signs.js';
+import { buildSigns, addSign } from './signs.js';
+import { Room } from './rooms.js';
 import { buildCovers } from './covers.js';
 import { layStorms } from './storms-def.js';
 import { layFormRoutes, addSlit, routeMask, layRouteBoosts } from './formroutes.js';
@@ -444,6 +445,8 @@ export class TrackWorld {
     this.maxY = Math.max(...this.paths.map((p) => p.maxY));
     this.floorY = this.minY - (def.floorDrop ?? 26);
     if (opts.preview) return;
+    // the Escher room (rooms.js): each stair drawn on its own wall, portals between them
+    if (def.room) this.room = new Room(this);
     this.buildRoads();
     buildWarps(this);
     this.buildFeatures();
@@ -453,6 +456,7 @@ export class TrackWorld {
     buildDecor(this);
     this.storms = layStorms(this);
     buildSigns(this);
+    this.room?.build(addSign);
     buildCovers(this);
     // (a board's place, for the shift wave, is where it's drawn)
     if (this.mob) for (const S of this.layers.signs) if (S.at) S.at = this.mob.map(S.at, new THREE.Vector3());
@@ -677,6 +681,7 @@ export class TrackWorld {
       for (let i = 0; i < last; i++) {
         const j = path.wrap(i + 1);
         const mask = path.mask[i];
+        if (this.room) L.region = this.room.regionOf(path, i);
         if (!mask) continue; // a glide gap: nothing there in any world
         const neutral = mask === M.ALL;
         // (the Möbius strip's road is one colour a side: red along the top, blue along the underside)
@@ -741,13 +746,15 @@ export class TrackWorld {
           L.line(mask, path.wpoint(i, hw, -0.6, _a), path.wpoint(j, hw, -0.6, _b), rc);
         }
         const p = path.wpoint(i, 0, 0, _c);
-        if (i % 18 === 0 && p.y - this.floorY > 6 && !this.def.noPylons && !bent) {
+        // (a stair flying across the Escher room has nothing under it to stand on)
+        if (i % 18 === 0 && p.y - this.floorY > 6 && !this.def.noPylons && !bent && (!this.room || this.room.cellAt(p.x, p.z).def.up)) {
           const pc = (i / 18) % 2 ? 0x6a1020 : 0x0c3a6a;
           L.lineXYZ(M.ALL, p.x, p.y - 0.6, p.z, p.x, this.floorY, p.z, pc);
           L.lineXYZ(M.ALL, p.x - 1.5, this.floorY, p.z, p.x + 1.5, this.floorY, p.z, pc);
         }
       }
     }
+    L.region = -1;
   }
 
   // A tunnel mouth that is shut in one world: a hexagonal iris filling the whole bore. It collides like a wall

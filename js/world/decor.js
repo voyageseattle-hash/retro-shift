@@ -6,6 +6,7 @@ import { M, COLORS, RED, solidIn } from './shift.js';
 import { mobiusDecor } from './mobius.js';
 import { buildDreamCity } from './dreamcity.js';
 import { tesseractDecor } from './tesseract.js';
+import { decorParadox } from './paradox.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const UP = V(0, 1, 0);
@@ -54,6 +55,8 @@ const DECOR = {
   dream: buildDreamCity,
   // 16 HYPERCUBE: the tesseract's own frame (tesseract.js)
   tesseract: tesseractDecor,
+  // 14 RELATIVITY ROOM: stair stringers, spiral columns and arches (paradox.js)
+  paradox: (world, L) => decorParadox(world, L),
 
   // 01 CORE CIRCUIT: big red and blue arches, a skyline at the edges.
   core(world, L, main, rng) {

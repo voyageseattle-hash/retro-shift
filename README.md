@@ -129,12 +129,23 @@ Course 12, **Mirror House**, is a hall of mirrors: two long laps of a four-floor
 ## The Hypercube
 
 16 HYPERCUBE is a bonus course laid along the edges of a tesseract: a cube inside a cube, seen corner-on, so the map is a hexagon inside a hexagon. It is one long lap of about 5 km that crosses the middle twice, once through the pit and once over the summit. The tesseract turns twice a lap, at the FOLD LINE signs: first INSIDE OUT (the inner cube swells and the outer one flattens), then INVERTED (every climb becomes a drop), and the road, rails and everything on it goes with it. RED shows the RED CELL, a road that dives under the pit; BLUE shows the BLUE CELL, a road round the summit; THE RIM is a wall run along the last outer edge. The sky carries the tesseract itself, turning in four dimensions, one cell red and one blue. Its look is a cube in a cube in a cube: the cubes' faces are membranes of line that crowd in toward a white axis through the middle, cubes hang on a crystal lattice around it, the floor is the three-way grid a floor of cubes makes seen corner-on, and the horizon is the next cube out. The road is iridescent glass cut in cube facets that turn colour with the angle you see them from: red through violet to blue with both worlds open, and only the lens's own colour through a lens.
+## Relativity Room
+
+Course 14 is a nod to the impossible-staircase pictures: a tight stairwell where stairs run on the floor, the ceiling and the walls, each with its own "down", and more fly across the well at angles of their own. Hexagonal PORTALS join them, twelve in all. Through a portal you see the next stair carrying on, and as you pass through, the whole well turns round you. The ceiling stair hangs just over the floor stair and runs the other way, so rivals come at you upside down, just out of reach; others race up the walls beside you. It runs two long laps: learn the portals on the first, take the lens-only ones on the second.
+
+- Two SPIRAL STAIRS climb (and fall) two full turns over themselves, a CORKSCREW and a FULL PIPE let the Blade ride upside down, a WALL RUN on the floor throws everyone else off, and WATER and MISSING STEPS (a red bridge, then a blue one, on a flying stair) ask for the right lens.
+- The RED INNER STAIR cuts inside the first spiral and out through its own red portal, shut in the other lenses.
+- The BLUE MIDDLE STAIR leaves a flying stair through a blue portal and sweeps through two more stairs floating over the well, each tipped its own way.
+- An impossible triangle hangs in the sky, and flights of stairs nobody drives float in every direction.
+
+For the physics it's an ordinary loop of road round a ring of cells (`js/world/paradox.js`); `js/world/rooms.js` draws each cell turned onto its wall of the room, clipped to the cell, and each portal as a view through to the next cell.
 
 ## How it's built
 
 - `js/world/shift.js`: the three lenses and world masks. The rule comes from LAST LINE's red/blue 3-D matinee: a thing drawn for one eye only is there only while that eye is looking.
 - `js/world/track.js`: a closed main loop plus branch paths, each sample, wall, pad and shard tagged with the worlds it's solid in. The ground query is per racer and per lens.
 - `js/vehicles/racer.js`: the driving model is Absurd Combat Racing's truck physics (throttle curve, drift and mini-turbos, grip, slope gravity, suspension), plus each form's width, cling, glide and water drag.
+- `js/world/rooms.js`: the Escher room: stairs drawn on every face of one room, and the portals between them (Relativity Room, `js/world/paradox.js`).
 - `js/vehicles/forms.js`: the Blade and the Skimmer, how they dock and split, and the FORMS table. `js/world/formroutes.js`: the glide gaps, wall runs and slits.
 - `js/world/mirrorart.js`: Mirror House's look: the big top, the mirror ball, the marquee bulbs and the iridescent floor, each with a shader that follows the lens.
 - `js/world/mirrors.js`: Mirror House's glass. The nearest few mirrors are rendered to a texture from a camera reflected in the glass each frame, and the rest go dark.

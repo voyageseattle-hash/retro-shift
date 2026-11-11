@@ -77,17 +77,19 @@ export class Environment {
     };
     this.gridMat = new THREE.LineBasicMaterial({ color: 0xff2a4a, transparent: true, opacity: 0.5 });
     this.gridMatB = new THREE.LineBasicMaterial({ color: 0x1e8cff, transparent: true, opacity: 0.5 });
+    // (the Escher room, world/rooms.js, has its own walls for a floor, and no horizon)
+    const open = !world.def.room;
     for (const [pos, mat] of [[posA, this.gridMat], [posB, this.gridMatB]]) {
       const g = lines(pos, mat);
       g.position.set(Math.round(cx / step) * step, y, Math.round(cz / step) * step);
-      this.group.add(g);
+      if (open) this.group.add(g);
       (this.floorGrid ||= []).push(g);
     }
     // dark floor under the grid so the void reads as ground
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ color: 0x030108 }));
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(cx, y - 0.2, cz);
-    this.group.add(floor);
+    if (open) this.group.add(floor);
     // horizon glow
     this.skyMat = new THREE.ShaderMaterial({ ...SKY_SHADER, uniforms: THREE.UniformsUtils.clone(SKY_SHADER.uniforms), side: THREE.BackSide, fog: false, depthWrite: false });
     this.sky = new THREE.Mesh(new THREE.SphereGeometry(2600, 48, 24), this.skyMat);
@@ -134,7 +136,7 @@ export class Environment {
     for (const [pos, mat] of [[mp, this.mtnMat], [mpB, this.mtnMatB]]) {
       const g = lines(pos, mat);
       g.position.set(cx, y, cz);
-      this.group.add(g);
+      if (open) this.group.add(g);
       (this.ridges ||= []).push(g);
     }
     // stars
@@ -150,7 +152,8 @@ export class Environment {
     sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
     this.stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0x8a8aa0, size: 1.5, sizeAttenuation: false, fog: false }));
     this.group.add(this.stars);
-    this.fog = new THREE.Fog(0x0a0310, 180, 1100);
+    // (the room's far walls are 600 m off: they need to stay in sight)
+    this.fog = world.def.room ? new THREE.Fog(0x0a0310, 320, 1900) : new THREE.Fog(0x0a0310, 180, 1100);
     this.bg = new THREE.Color(0x000000);
     this.tint = { grid: new THREE.Color(0xff2a4a), gridB: new THREE.Color(0x1e8cff), fog: new THREE.Color(0x020103), top: new THREE.Color(0xff3a7a), bot: new THREE.Color(0x3a6aff) };
     this.mode = BOTH;

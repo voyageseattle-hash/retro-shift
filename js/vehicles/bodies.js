@@ -21,18 +21,22 @@ const HULL_SHADER = {
   vertexShader: `
     varying vec3 vN; varying vec3 vV;
     #include <fog_pars_vertex>
+    #include <clipping_planes_pars_vertex>
     void main(){
       vN = normalize(normalMatrix * normal);
       vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
       vV = -mvPosition.xyz;
       gl_Position = projectionMatrix * mvPosition;
+      #include <clipping_planes_vertex>
       #include <fog_vertex>
     }`,
   fragmentShader: `
     uniform vec3 uL, uR, uPaint; uniform float uFlash;
     varying vec3 vN; varying vec3 vV;
     #include <fog_pars_fragment>
+    #include <clipping_planes_pars_fragment>
     void main(){
+      #include <clipping_planes_fragment>
       vec3 n = normalize(vN) * (gl_FrontFacing ? 1.0 : -1.0);
       vec3 v = normalize(vV);
       float ndv = abs(dot(n, v));
@@ -59,6 +63,8 @@ export function hullMaterial(paint) {
     fragmentShader: HULL_SHADER.fragmentShader,
     side: THREE.DoubleSide,
     fog: true,
+    // (the Escher room, rooms.js, draws each stair through clipping planes)
+    clipping: true,
   });
   m.uniforms.uPaint.value.set(typeof paint === 'number' ? paint : 0xff4fd8);
   return m;

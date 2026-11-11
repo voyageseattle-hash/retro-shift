@@ -33,11 +33,21 @@ export class Layers {
     this.signs = []; // { mat, hideIn }: a board that goes with its colour's world
     this.waveAt = null; // where a shift wave starts (the viewer's car); no wave without it
     this.wave = null;
+    // The Escher room (rooms.js) draws each stair on its own wall, so pieces are batched by the cell they're in as well
+    // as by world: -1 is any cell (drawn with every cell, the clipping planes keep what's in each).
+    this.region = -1;
   }
 
-  b(mask) {
-    let b = this.builders.get(mask);
-    if (!b) this.builders.set(mask, (b = new Builder()));
+  // (p: the piece's first point. With no cell set, `auto` (rooms.js) works the cell out from it.)
+  b(mask, p) {
+    const region = this.region < 0 && this.auto && p ? this.auto(p) : this.region;
+    const key = region < 0 ? mask : `${mask}@${region}`;
+    let b = this.builders.get(key);
+    if (!b) {
+      this.builders.set(key, (b = new Builder()));
+      b.mask = mask;
+      b.region = region;
+    }
     return b;
   }
 
@@ -71,39 +81,39 @@ export class Layers {
 
   // --------------------------------------------------------------- primitives
   line(mask, a, b, color = null) {
-    const B = this.b(mask);
+    const B = this.b(mask, a);
     B.lp.push(a.x, a.y, a.z, b.x, b.y, b.z);
     _c.set(color ?? colorForMask(mask));
     B.lc.push(_c.r, _c.g, _c.b, _c.r, _c.g, _c.b);
   }
   lineXYZ(mask, ax, ay, az, bx, by, bz, color = null) {
-    const B = this.b(mask);
+    const B = this.b(mask, this.auto ? { x: ax, y: ay, z: az } : null);
     B.lp.push(ax, ay, az, bx, by, bz);
     _c.set(color ?? colorForMask(mask));
     B.lc.push(_c.r, _c.g, _c.b, _c.r, _c.g, _c.b);
   }
   // A quad as a glowing ribbon: a, b, c, d in order around the edge.
   quad(mask, a, b, c, d, color = null, k = 1) {
-    const B = this.b(mask);
+    const B = this.b(mask, a);
     B.rp.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
     _c.set(color ?? colorForMask(mask)).multiplyScalar(k);
     for (let i = 0; i < 6; i++) B.rc.push(_c.r, _c.g, _c.b);
   }
   // Ribbon quad that fades across: colour k0 along edge a-b, k1 along d-c (a spill of light onto the road).
   quadFade(mask, a, b, c, d, color, k0, k1) {
-    const B = this.b(mask);
+    const B = this.b(mask, a);
     B.rp.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
     _c.set(color);
     const r = _c.r, g = _c.g, bl = _c.b;
     for (const k of [k0, k0, k1, k0, k1, k1]) B.rc.push(r * k, g * k, bl * k);
   }
   fillQuad(mask, a, b, c, d) {
-    const B = this.b(mask);
+    const B = this.b(mask, a);
     B.fp.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
   }
   // A piece of road surface: dark glass that shows the wet reflection.
   roadQuad(mask, a, b, c, d) {
-    const B = this.b(mask);
+    const B = this.b(mask, a);
     B.gp.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
   }
 
@@ -205,10 +215,12 @@ export class Layers {
       return new THREE.Float32BufferAttribute(out, 3);
     };
     this.neutral = [];
-    for (const [mask, B] of this.builders) {
+    for (const B of this.builders.values()) {
+      const mask = B.mask;
       const m = this.materials(mask);
       // a course that's drawn bent (mobius.js) bends every vertex here, once
       if (this.bend) for (const a of [B.lp, B.rp, B.fp, B.gp]) this.bend(a);
+      const tag = (o) => (o.userData.region = B.region);
       if (B.lp.length) {
         const g = new THREE.BufferGeometry();
         g.setAttribute('position', new THREE.Float32BufferAttribute(B.lp, 3));
@@ -217,6 +229,7 @@ export class Layers {
         const o = new THREE.LineSegments(g, m.line);
         o.frustumCulled = false;
         o.renderOrder = 2;
+        tag(o);
         this.group.add(o);
       }
       if (B.rp.length) {
@@ -227,6 +240,7 @@ export class Layers {
         const o = new THREE.Mesh(g, m.ribbon);
         o.frustumCulled = false;
         o.renderOrder = 3;
+        tag(o);
         this.group.add(o);
       }
       if (B.fp.length) {
@@ -235,6 +249,7 @@ export class Layers {
         g.computeBoundingSphere();
         const o = new THREE.Mesh(g, m.fill);
         o.renderOrder = 1;
+        tag(o);
         this.group.add(o);
       }
       if (B.gp.length) {
@@ -243,6 +258,7 @@ export class Layers {
         g.computeBoundingSphere();
         const o = new THREE.Mesh(g, m.road);
         o.renderOrder = 1;
+        tag(o);
         this.group.add(o);
       }
     }
@@ -265,6 +281,7 @@ export class Layers {
     // takes that lens's colour, so the view is all red or all blue. BOTH shows both worlds and hides the lens-only
     // secrets.
     const T = mode === RED ? TINT_RED : mode === BLUE ? TINT_BLUE : TINT_BOTH;
+    this.mode = mode; // (the lens this view is drawn for: rooms.js shuts lens-only portals in the others)
     // (kept in the level map, so each split-screen view has its own)
     let tint = this.level.get('tint');
     if (!tint || tint.view !== this.view) {
