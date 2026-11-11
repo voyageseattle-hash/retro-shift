@@ -334,6 +334,8 @@ const DECOR = {
     L.hoop(M.B, c, V(1, 0, 0), UP, 90, 10, 64, null, Math.PI * 1.4, -0.2);
     L.hoop(M.R, c, V(1, 0, 0), UP, 60, 6, 48, null, Math.PI * 1.2, 0.3);
   },
+  // a course that brings all its own scenery
+  none() {},
 };
 
 // 19 PAGE TURNER: the open book (popupbook.js); what stands on it is game/popup.js

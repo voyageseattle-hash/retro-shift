@@ -36,6 +36,8 @@ export class RaceAI {
     const r = this.r;
     const w = this.world;
     const ctl = r.ctl;
+    // on a moving platform's road, or lined up for one: the rig drives (world/platforms.js)
+    if (w.rig?.pilot(this, dt)) return;
     const path = this.path;
     const i = this.where();
     const t = r.track;

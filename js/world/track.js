@@ -457,6 +457,8 @@ export class TrackWorld {
     if (opts.preview) return;
     // the Escher room (rooms.js): each stair drawn on its own wall, portals between them
     if (def.room) this.room = new Room(this);
+    // moving platforms (platforms.js): the course's rig, made before the roads are drawn so it can open their rails
+    this.rig = def.rig ? def.rig(this) : null;
     this.buildRoads();
     buildWarps(this);
     this.buildFeatures();
@@ -467,6 +469,7 @@ export class TrackWorld {
     this.storms = layStorms(this);
     buildSigns(this);
     this.room?.build(addSign);
+    this.rig?.build();
     buildCovers(this);
     // (a board's place, for the shift wave, is where it's drawn)
     if (this.mob) for (const S of this.layers.signs) if (S.at) S.at = this.mob.map(S.at, new THREE.Vector3());
@@ -477,6 +480,7 @@ export class TrackWorld {
     buildPinball(this); // FLIPPER ALLEY's table (pinball.js)
     this.group.add(this.layers.build());
     this.fold?.uncull(this.group);
+    this.rig?.finish();
     this._f = {};
     this._g = { y: -1e4, nx: 0, ny: 1, nz: 0, lat: 0, path: null, i: 0, f: 0, rx: 1, rz: 0, mask: 0, onRoad: false };
   }
@@ -1135,8 +1139,10 @@ export class TrackWorld {
     // edge (onto a fork), it ends, or a ramp rises out of it under you. Otherwise a fork that starts level with the
     // road would grab you.
     const cur = hints._cur;
-    for (const path of this.paths) {
+    // (a rig's roads count too: platforms.js)
+    for (const path of this.rig ? this.rig.surfaces : this.paths) {
       if (path === exclude) continue;
+      if (path.box && (x < path.box[0] || x > path.box[1] || z < path.box[2] || z > path.box[3])) continue;
       // cheap bounds reject
       if (y < path.minY - 8 || y > path.maxY + 60) {
         if (!(path.id in hints)) continue;
@@ -1157,7 +1163,7 @@ export class TrackWorld {
       if (f.y > y + 1.6 || f.y < y - 7) continue;
       // a strip climbing out of the road beneath you (a ramp laid over it) takes you up
       const j = Math.min(path.N - 1, f.i + 3);
-      const ramp = !path.closed && path.id !== cur && path.py[j] - path.py[f.i] > 0.25 && f.y > y - 0.6 && Math.abs(f.lat) < path.halfW - 0.5;
+      const ramp = !path.closed && !path.extra && path.id !== cur && path.py[j] - path.py[f.i] > 0.25 && f.y > y - 0.6 && Math.abs(f.lat) < path.halfW - 0.5;
       const score = f.y + (path.id === cur ? 2.5 : 0) + (ramp ? 3 : 0);
       if (score > bestY) {
         bestY = score;

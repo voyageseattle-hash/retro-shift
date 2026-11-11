@@ -629,6 +629,15 @@ export class Audio extends Engine {
         super.play('spark');
         this.arp(t, [93, 88, 96], 0.03, 0.05, 'bell');
         break;
+      case 'rattle':
+        // a sliding tile about to go (SLIDE FIFTEEN): plastic chattering in its tray
+        for (let k = 0; k < 9; k++) this.noiseHit(t + k * 0.16 + Math.random() * 0.03, 0.035, 0.07, this.sfxDry, 'bandpass', 1700 + Math.random() * 900, 4);
+        break;
+      case 'clack':
+        // and landing in its slot
+        this.noiseHit(t, 0.07, 0.22, this.sfxDry, 'bandpass', 900, 2, 300);
+        this.thump(t, 90, 40, 0.5, 0.18);
+        break;
       case 'beep':
         super.play(arg ? 'go' : 'beep');
         break;

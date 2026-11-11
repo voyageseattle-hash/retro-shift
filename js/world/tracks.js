@@ -13,6 +13,7 @@ import { DYSON } from './dyson.js';
 import { popupDef } from './tracks-popup.js';
 import { MARBLERUN } from './marblerun.js';
 import { PINBALL } from './pinball.js';
+import { slideFifteenDef } from './slidefifteen.js';
 
 function fractions(points) {
   const d = [0];
@@ -491,6 +492,9 @@ export const TRACKS = [
   // DROP TOWER, the TOYBOX CUP's marble run (world/marblerun.js)
   MARBLERUN,
   make(PINBALL), // 17 FLIPPER ALLEY (pinball.js)
+  // ------------------------------------------------------------------ 20
+  // SLIDE FIFTEEN (TOYBOX CUP): a sliding-tile puzzle; the tiles carry the shortcuts (slidefifteen.js, platforms.js)
+  make(slideFifteenDef()),
 ];
 
 export const trackById = (id) => TRACKS.find((t) => t.id === id) || TRACKS[0];

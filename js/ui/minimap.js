@@ -338,6 +338,8 @@ export class MiniMap {
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
+    // (a course with moving platforms shows their roads too, where they are right now)
+    if (world.rig) return drawPaths(ctx, world.rig.surfaces, w, h, mode, 10, racers, 3, me);
     if (this.style === 'flat' || customMap(world.paths)) return drawPaths(ctx, world.paths, w, h, mode, 10, racers, 3, me);
     // 3/4 view: copy the cached course, then only the racers are drawn each tick
     const L = this.course(world, mode, w, h, dpr);

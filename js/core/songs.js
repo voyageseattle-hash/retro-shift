@@ -598,6 +598,7 @@ export const COURSE_SONG = {
   popup: 'circuit',
   marblerun: 'helixB',
   pinball: 'neon',
+  tiles: 'circuit',
 };
 
 const STING_MIX = {
