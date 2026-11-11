@@ -90,17 +90,14 @@ export const PINBALL = {
       { from: P(1, 0.8), to: P(9, 0.55), mask: M.BO, side: -1, halfWidth: 6, label: 'SECRET LANE', hatch: true, via: TABLE.secret.map(([x, z]) => W(x, z)), pin: 'secret', shards: [{ at: 0.3 }, { at: 0.5 }, { at: 0.7 }] },
     ],
     obstacles: [
-      // the drop targets: lens walls across the centre lane
-      { type: 'wall', at: P(18, 0.55), mask: M.R },
-      { type: 'wall', at: P(20, 0.35), mask: M.B },
-      // standup targets down the left orbit
-      { type: 'block', at: P(9, 0.25), lat: -0.5, mask: M.R, size: 3 },
-      { type: 'block', at: P(9, 0.6), lat: 0.5, mask: M.B, size: 3 },
-      { type: 'block', at: P(10, 0.0), lat: -0.45, mask: M.B, size: 3 },
-      { type: 'block', at: P(10, 0.4), lat: 0.45, mask: M.R, size: 3 },
-      // and two on the inner lane
-      { type: 'block', at: P(28, 0.3), lat: 0.5, mask: M.B, size: 3 },
-      { type: 'block', at: P(28, 0.75), lat: -0.5, mask: M.R, size: 3 },
+      // the drop targets, lens walls: a red bank across the centre lane (clear of where the flipper lane and the
+      // trough come back in, so nobody rejoins straight into it) and a blue bank across the left orbit (well below where the blue-only secret lane comes back in). One at a
+      // time: two close together ask for a lens change faster than a rival can make it.
+      { type: 'wall', at: P(19, 0.2), mask: M.R },
+      { type: 'wall', at: P(11, 0.0), mask: M.B },
+      // standup targets down the left orbit: one each side, far enough apart that the middle is always open
+      { type: 'block', at: P(9, 0.25), lat: -0.62, mask: M.R, size: 3 },
+      { type: 'block', at: P(10, 0.4), lat: 0.62, mask: M.B, size: 3 },
     ],
     boosts: [
       { at: P(0, 0.45) },
@@ -118,7 +115,7 @@ export const PINBALL = {
       { at: P(20, 0.9), text: 'BUMPER PIT ON THE RIGHT: THREE KICKS IN A ROW IS A RICOCHET', key: 'both' },
     ],
     // where the lap-by-lap pieces sit (game/pinball.js)
-    pin: { kickback: P(12, 0.45), ballsFrom: P(21, 0.2), ballsTo: P(17, 0.2) },
+    pin: { kickback: P(12, 0.45), ballsFrom: P(20, 0.15), ballsTo: P(17, 0.2) },
   }),
 };
 
