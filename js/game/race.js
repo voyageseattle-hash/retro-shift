@@ -123,6 +123,8 @@ export class Race {
     if (this.tower) this.scene.add(this.tower.group);
     // FLIPPER ALLEY's flippers, bumpers and steel balls (game/pinball.js)
     this.pinball = this.world.pinball ? new Pinball(this) : null;
+    // a course's own moving machinery (QUARTER TURN's cube): def.live(race) -> { update(dt, p) }
+    this.live = this.world.def.live?.(this) || null;
     this.slowT = 0;
     this.slowLen = 0.9; // (so a slow-motion beat never divides by nothing)
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
@@ -912,6 +914,7 @@ export class Race {
     this.fold.update(sim);
     this.book.update(sim);
     this.tower?.update(sim, p);
+    this.live?.update(sim, p);
     this.traffic.update(sim, p);
     this.police.update(sim, p);
     this.world.mirrors?.update(this);
