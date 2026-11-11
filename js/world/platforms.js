@@ -380,6 +380,12 @@ export class Platforms {
     return pl?.moving ? 0 : Infinity;
   }
 
+  // Will this end of a road (0 its start, 1 its end) join onto something a craft in `mode` can drive on, soon
+  // enough to be worth waiting for? Subclasses that know their own timetable say; the CPU gives up at once on a no.
+  joins() {
+    return true;
+  }
+
   // After a craft has moved: the bumper across an end of its road that's joined to nothing in its lens.
   hold(r, race) {
     const g = r.gnd;
@@ -494,11 +500,12 @@ export class Platforms {
     ai.rigOn = true;
     let f = g.f;
     let gi = g.i;
-    if (P.pair) {
+    if (P.pair || P.cross) {
       // Two one-way roads that lie over each other where they meet a platform (a way in and a way out): the ground
-      // can name either. Keep to the one we were on; coming off a platform, it's the way out.
+      // can name either. Keep to the one we were on; coming off a platform, it's the way out. The same where two
+      // roads cross on one platform (path.cross): straight on, on the one we were on.
       const prev = ai.rigPath;
-      const want = prev === P.pair ? prev : prev !== P && !P.sockets[1].main && g.f > 0.5 ? P.pair : null;
+      const want = prev && prev === P.cross ? prev : !P.pair ? null : prev === P.pair ? prev : prev !== P && !P.sockets[1].main && g.f > 0.5 ? P.pair : null;
       if (want && want.frame(r.pos.x, r.pos.z, -1, _f2, r.pos.y) !== false && Math.abs(_f2.lat) < want.halfW + 1) {
         P = want;
         f = _f2.f;
@@ -570,7 +577,8 @@ export class Platforms {
     }
     // a road that never joins up: give it a while, then take the loop (the race puts the craft back on it)
     ai.rigWait = waiting && Math.abs(r.speed) < 3 ? ai.rigWait + dt : 0;
-    if (ai.rigWait > this.patience) {
+    // (and no waiting at all for a road the course knows won't join up)
+    if (ai.rigWait > this.patience || (ai.rigWait > 0.5 && !this.joins(P, dir > 0 ? 1 : 0, r.mode))) {
       ai.rigWait = 0;
       // try the way we came, once; after that the race puts the craft back on the loop
       if (!ai.rigTurned) {
@@ -590,6 +598,6 @@ export class Platforms {
     return C._lat0;
   }
 }
-Platforms.prototype.patience = 5.5;
+Platforms.prototype.patience = 7.5;
 
 export { COLORS };

@@ -17,8 +17,8 @@ export const cellZ = (cell) => (cell >> 2) * TILE + TILE / 2;
 
 // The road on each tile: [red, blue], each the two sides it joins. Red runs straight down the third column when
 // the puzzle is solved (tiles 3, 7, 11, 15) and blue straight along the third row (9, 10, 11, 12): the picture's
-// reward. The rest, and the slide order, were picked by tools/slide-design.mjs to keep a way across the board on
-// offer through the whole race, in both colours.
+// reward. The rest, and the slide order, were picked by tools/slide-design.mjs so that the best way across
+// the board is usually a ride: park on a tile and let it carry you to where its road joins up.
 const NS = [0, 2];
 const EW = [1, 3];
 const NE = [0, 1];
@@ -29,15 +29,18 @@ export const KINDS = { NS, EW, NE, ES, SW, NW };
 // prettier-ignore
 export const ROADS = [
   null,
-  /* 1*/ [SW, NW], /* 2*/ [ES, NE], /* 3*/ [NS, EW], /* 4*/ [NS, ES],
-  /* 5*/ [NE, ES], /* 6*/ [SW, ES], /* 7*/ [NS, ES], /* 8*/ [NE, NS],
-  /* 9*/ [ES, EW], /*10*/ [NE, EW], /*11*/ [NS, EW], /*12*/ [ES, EW],
-  /*13*/ [NE, SW], /*14*/ [SW, NE], /*15*/ [NS, NE],
+  /* 1*/ [NW, NE], /* 2*/ [SW, NE], /* 3*/ [NS, EW], /* 4*/ [NS, NW],
+  /* 5*/ [NW, NE], /* 6*/ [NE, SW], /* 7*/ [NS, NE], /* 8*/ [NS, NW],
+  /* 9*/ [SW, EW], /*10*/ [NE, EW], /*11*/ [NS, EW], /*12*/ [SW, EW],
+  /*13*/ [ES, SW], /*14*/ [NE, EW], /*15*/ [NS, SW],
 ];
 
 // The tiles in the order they slide (each into the hole), ending solved.
 // prettier-ignore
-export const MOVES = [13, 14, 11, 3, 8, 4, 3, 7, 6, 2, 1, 5, 9, 13, 14, 15];
+export const MOVES = [11, 9, 6, 2, 3, 4, 8, 7, 10, 12, 15, 11, 14, 13, 9, 10, 11, 15];
+
+// And once it's solved: these repeat to the finish, each pair opening the picture by one tile and closing it again.
+export const TAIL = [15, 15, 12, 12];
 
 // Timing, in seconds of race clock: move j starts at START + j * PERIOD and takes SLIDE; the tile rattles and its
 // arrow lights WARN before it goes.
@@ -47,20 +50,33 @@ export const TIMING = { START: 3, PERIOD: 3.6, SLIDE: 1.5, WARN: 1.6 };
 // of radius FRAME.RC, and the slip roads into and out of each mouth bending on FRAME.R.
 export const FRAME = { D: 30, RC: 44, R: 28, HW: 8, Y: 3.5 };
 const LSIDE = SIZE + 2 * (FRAME.D - FRAME.RC) + (Math.PI * FRAME.RC) / 2;
-const LAP = 4 * LSIDE;
+export const LAP = 4 * LSIDE;
 // how far round the lap a mouth is (side 3 W is driven first, heading +z, then N, E, S)
-const lapAt = (side, idx) => ((side + 1) % 4) * LSIDE + (side === 3 || side === 0 ? 50 + 100 * idx : SIZE - 50 - 100 * idx) - (FRAME.RC - FRAME.D);
+export const lapAt = (side, idx) => ((side + 1) % 4) * LSIDE + (side === 3 || side === 0 ? 50 + 100 * idx : SIZE - 50 - 100 * idx) - (FRAME.RC - FRAME.D);
 
 const ease = (f) => f * f * f * (f * (f * 6 - 15) + 10);
 
-// The puzzle with its tables: the cells after each move, worked back from the solved board.
+// The puzzle with its tables: the cells after each move, worked back from the solved board. Once it's solved it
+// doesn't stop: the `tail` moves repeat for as long as the race runs (they come back to the solved board each time
+// round), so there's a tile to ride on the last lap too.
 export class Puzzle {
-  constructor(roads = ROADS, moves = MOVES, timing = TIMING) {
+  constructor(roads = ROADS, moves = MOVES, timing = TIMING, tail = TAIL) {
     this.roads = roads;
     this.moves = moves;
+    this.tail = tail;
     this.T = timing;
     const solved = new Uint8Array(16);
     for (let k = 1; k <= 15; k++) solved[homeCell(k)] = k;
+    const slide = (cur, k, j) => {
+      const from = cur.indexOf(k);
+      const to = cur.indexOf(0);
+      const d = Math.abs((to % 4) - (from % 4)) + Math.abs((to >> 2) - (from >> 2));
+      if (from < 0 || d !== 1) throw new Error(`slide ${j}: tile ${k} isn't beside the hole`);
+      const next = Uint8Array.from(cur);
+      next[to] = k;
+      next[from] = 0;
+      return { step: { k, from, to }, next };
+    };
     // undo the moves from the solved board to find where each one starts
     this.states = [solved];
     this.steps = [];
@@ -78,18 +94,50 @@ export class Puzzle {
       this.steps.unshift({ k, from, to });
       cur = prev;
     }
+    // the tail, forward from the solved board, and back to it
+    this.tailStates = [solved];
+    this.tailSteps = [];
+    cur = solved;
+    tail.forEach((k, j) => {
+      const { step, next } = slide(cur, k, `tail ${j}`);
+      this.tailSteps.push(step);
+      this.tailStates.push(next);
+      cur = next;
+    });
+    if (tail.length && cur.some((k, c) => k !== solved[c])) throw new Error("the tail doesn't end on the solved board");
     // and the board mid-slide: the tile on the move is in neither cell
-    this.mid = this.steps.map((s, j) => {
-      const m = Uint8Array.from(this.states[j]);
+    const mid = (st, s) => {
+      const m = Uint8Array.from(st);
       m[s.from] = 0;
       return m;
-    });
+    };
+    this.mid = this.steps.map((s, j) => mid(this.states[j], s));
+    this.tailMid = this.tailSteps.map((s, j) => mid(this.tailStates[j], s));
     this.end = timing.START + (moves.length - 1) * timing.PERIOD + timing.SLIDE;
-    this._b = { cells: null, moving: null, f: 0, warn: null, done: 0 };
+    this._b = { cells: null, moving: null, f: 0, warn: null, next: null, after: null, done: 0, count: 0, whole: false };
   }
 
-  // The board at race time t: { cells (tile in each cell, 0 for none or for a tile mid-slide), moving (the step
-  // under way, or null), f (how far along, eased), warn (the step about to start, or null), done (slides finished) }.
+  // Slide number j (0 the first), the board before it, and the board during it: the solving moves, then the tail
+  // round and round. null past the end when there's no tail.
+  stepAt(j) {
+    const n = this.steps.length;
+    if (j < n) return this.steps[j];
+    return this.tailSteps.length ? this.tailSteps[(j - n) % this.tailSteps.length] : null;
+  }
+  stateAt(j) {
+    const n = this.steps.length;
+    if (j <= n) return this.states[j];
+    return this.tailSteps.length ? this.tailStates[(j - n) % this.tailSteps.length] : this.states[n];
+  }
+  midAt(j) {
+    const n = this.steps.length;
+    return j < n ? this.mid[j] : this.tailMid[(j - n) % this.tailSteps.length];
+  }
+
+  // The board at race time t: { cells (tile in each cell, 0 for the hole or for a tile mid-slide), moving (the step
+  // under way, or null), f (how far along, eased), warn (the step about to start, or null), next and after (the
+  // next two steps to come, whether or not they're close), count (slides finished), whole (the picture is
+  // complete and still), done (slides finished toward solving it: steps.length while it's whole) }.
   // The same object every call.
   at(t) {
     const { START, PERIOD, SLIDE, WARN } = this.T;
@@ -98,18 +146,42 @@ export class Puzzle {
     const j = Math.floor((t - START) / PERIOD);
     B.moving = B.warn = null;
     B.f = 0;
-    if (j >= 0 && j < n && t - START - j * PERIOD < SLIDE) {
-      B.moving = this.steps[j];
+    B.whole = false;
+    const cur = j >= 0 ? this.stepAt(j) : null;
+    if (cur && t - START - j * PERIOD < SLIDE) {
+      B.moving = cur;
       B.f = ease((t - START - j * PERIOD) / SLIDE);
-      B.cells = this.mid[j];
-      B.done = j;
+      B.cells = this.midAt(j);
+      B.count = j;
+      B.done = Math.min(j, n - 1);
+      B.next = this.stepAt(j + 1);
+      B.after = this.stepAt(j + 2);
       return B;
     }
-    const done = Math.max(0, Math.min(n, j + 1));
-    B.done = done;
-    B.cells = this.states[done];
-    if (done < n && START + done * PERIOD - t <= WARN) B.warn = this.steps[done];
+    const count = Math.max(0, cur ? j + 1 : Math.min(n, j + 1));
+    B.count = count;
+    B.cells = this.stateAt(count);
+    B.next = this.stepAt(count);
+    B.after = this.stepAt(count + 1);
+    B.whole = count >= n && B.cells.every((k, c) => k === this.states[n][c]);
+    B.done = B.whole ? n : Math.min(count, n - 1);
+    if (B.next && START + count * PERIOD - t <= WARN) B.warn = B.next;
     return B;
+  }
+
+  // Seconds from t until tile k next sets off (0 while it's sliding; k 0: until anything does, which is when the
+  // hole moves). Infinity if it never will.
+  nextMove(k, t) {
+    const { START, PERIOD, SLIDE } = this.T;
+    const j0 = Math.max(0, Math.floor((t - START) / PERIOD));
+    for (let j = j0; j < j0 + 40; j++) {
+      const s = this.stepAt(j);
+      if (!s) return Infinity;
+      if (k && s.k !== k) continue;
+      const t0 = START + j * PERIOD;
+      if (t < t0 + SLIDE) return Math.max(0, t0 - t);
+    }
+    return Infinity;
   }
 
   // Where tile k is at time t (x, z of its middle), into out.
@@ -138,20 +210,39 @@ export class Puzzle {
     return a === side ? b : b === side ? a : -1;
   }
 
+  // Parked on tile k (0: the empty slot) at time t, at the end of its road on `side`: does that end meet a road
+  // (or the edge of the board, where there's always a way out) within `within` seconds?
+  joins(k, colour, side, t, within = 8) {
+    for (let tt = t; tt <= t + within; tt += 0.3) {
+      const B = this.at(tt);
+      const at = k ? B.cells.indexOf(k) : B.moving ? -1 : B.cells.indexOf(0);
+      if (at < 0) continue;
+      const c = (at % 4) + DX[side];
+      const r = (at >> 2) + DZ[side];
+      if (c < 0 || c > 3 || r < 0 || r > 3) return true;
+      const k2 = B.cells[c + 4 * r];
+      if (k2 ? this.through(k2, colour, opp(side)) >= 0 : colour === 0 && !B.moving) return true;
+    }
+    return false;
+  }
+
   // Drive in at a mouth (side, and which cell along it) at time t0, in a colour, and see where the road leads:
-  // { side, idx, t, length, carried } where and when you come out (carried: slides ridden on the way), or null if it never gets you out (a wait of more than `patience`
-  // at any one cap). v: speed on a straight; bends are taken slower.
-  ride(side, idx, colour, t0, v = 52, patience = 4) {
+  // { side, idx, t, length, carried, waited } where and when you come out (carried: slides ridden on the way,
+  // waited: seconds spent parked), or null if it never gets you out (a wait of more than `patience` at any one
+  // cap). v: speed on a straight; bends are taken slower. The empty slot counts as a tile (k 0) with a red road
+  // straight through it either way; it moves whenever anything does.
+  ride(side, idx, colour, t0, v = 52, patience = 5.5) {
     let cell = mouthCell(side, idx);
     let B = this.at(t0);
     let k = B.cells[cell];
-    if (!k || B.warn?.k === k) return null;
+    if (k ? B.warn?.k === k : colour !== 0 || B.moving) return null;
     let inSide = side;
     let t = t0;
     let length = 0;
     let carried = 0;
+    let parked = 0;
     for (let hop = 0; hop < 24; hop++) {
-      const out = this.through(k, colour, inSide);
+      const out = k ? this.through(k, colour, inSide) : opp(inSide);
       if (out < 0) return null;
       const straight = opp(out) === inSide;
       const len = straight ? TILE : (Math.PI * TILE) / 4;
@@ -161,15 +252,15 @@ export class Puzzle {
       let waited = 0;
       for (;;) {
         B = this.at(t);
-        const at = B.cells.indexOf(k);
+        const at = k ? B.cells.indexOf(k) : B.moving ? -1 : B.cells.indexOf(0);
         if (at >= 0) {
           const c = (at % 4) + DX[out];
           const r = (at >> 2) + DZ[out];
           if (at !== cell) carried++;
           cell = at;
-          if (c < 0 || c > 3 || r < 0 || r > 3) return { side: out, idx: out % 2 ? at >> 2 : at % 4, t, length, carried };
+          if (c < 0 || c > 3 || r < 0 || r > 3) return { side: out, idx: out % 2 ? at >> 2 : at % 4, t, length, carried, waited: parked };
           const k2 = B.cells[c + 4 * r];
-          if (k2 && this.through(k2, colour, opp(out)) >= 0) {
+          if (k2 ? this.through(k2, colour, opp(out)) >= 0 : colour === 0 && !B.moving) {
             k = k2;
             cell = c + 4 * r;
             inSide = opp(out);
@@ -178,6 +269,7 @@ export class Puzzle {
         }
         t += 0.2;
         waited += 0.2;
+        parked += 0.2;
         if (waited > patience) return null;
       }
     }
