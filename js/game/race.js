@@ -579,6 +579,7 @@ export class Race {
     if (r.respawnT > 0) return;
     chainEnd(this, r);
     r.falls = (r.falls || 0) + 1;
+    r.loopFalls = this.raceTime - (r.backAt ?? -99) < 8 ? (r.loopFalls || 0) + 1 : 0;
     r.respawnT = 1.1;
     r.root.visible = false;
     if (r.isPlayer) {
@@ -738,7 +739,22 @@ export class Race {
     if (into > 8) this.debris.burst(r.root, _a.copy(dir).multiplyScalar(into * 0.4).add(r.vel), 6, r.gnd.y, Math.min(0.18, into * 0.008), 1.6);
   }
 
+  // A rival put back a little way further round the lap (lap progress moves with it, so nothing is skipped or
+  // counted twice): for one that keeps sticking or falling at the same spot.
+  nudgeOn(r, k = 0.015) {
+    r.lastU = (r.lastU + k) % 1;
+    r.prog += k;
+    r.headway = r.prog;
+  }
+
   respawn(r) {
+    // a rival that falls again straight after it's put back (a respawn spot that's no road for it right now: a page
+    // that isn't there yet, a piece that's moved) goes a little further on the third time, so it never loops
+    if (r.ai && !r.isPlayer && r.loopFalls >= 2) {
+      r.loopFalls = 0;
+      this.nudgeOn(r);
+    }
+    r.backAt = this.raceTime;
     const u = r.lastU;
     const sp = this.world.respawnPoint(u, r.mono ? r.mode : BOTH);
     r.reset(sp.pos, sp.yaw);
@@ -1158,7 +1174,7 @@ export class Race {
         if (r.finished) {
           r.ai.update(dt);
           r.ctl.throttle *= 0.6;
-        } else if (this.state === 'race') r.ai.update(dt);
+        } else if (this.state === 'race' || this.state === 'finished') r.ai.update(dt); // (rivals race on to the line behind your results)
       }
       if (r.finished && r.isPlayer && !r.ai) {
         // autopilot after the flag
@@ -1190,12 +1206,11 @@ export class Race {
         if (r.prog > (r.headway ?? -Infinity) + 0.004) {
           r.headway = r.prog;
           r.headwayT = 0;
+          r.headwayHits = 0;
         } else if ((r.headwayT = (r.headwayT || 0) + dt) > 12) {
+          // (the first time, back on the road where it is; stuck there again, a little further on)
           r.headwayT = 0;
-          const k = 0.015;
-          r.lastU = (r.lastU + k) % 1;
-          r.prog += k;
-          r.headway = r.prog;
+          if (r.headwayHits++ > 0) this.nudgeOn(r);
           this.onFell(r);
           continue;
         }
