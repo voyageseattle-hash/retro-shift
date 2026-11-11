@@ -591,6 +591,7 @@ export const COURSE_SONG = {
   lattice: 'ruinsB',
   ruins: 'ruins',
   dream: 'neonB',
+  tesseract: 'helixB',
 };
 
 const STING_MIX = {

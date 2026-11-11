@@ -4,6 +4,7 @@
 // Core, Layered, City, Helix and Tunnels keep the striped retro sun (env.js).
 
 import * as THREE from '../../vendor/three.js';
+import { HyperSky } from '../world/tesseract.js';
 
 export const SKY_PIECE = {
   core: 'sun',
@@ -154,6 +155,10 @@ export class SkyPiece {
       const core = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.OctahedronGeometry(90, 0)), this.matA);
       G.add(outer, inner, core);
       this.spin.push([outer, 0.03], [inner, -0.05], [core, 0.11]);
+    } else if (kind === 'tesseract') {
+      // a hypercube turning in the fourth dimension (world/tesseract.js)
+      this.hyper = new HyperSky(this.matA, this.matB);
+      G.add(this.hyper.group);
     }
     G.scale.setScalar(1.6);
     G.renderOrder = -2;
@@ -176,5 +181,6 @@ export class SkyPiece {
       this.glow.lookAt(camPos);
     }
     if (this.billboards) for (const b of this.billboards) b.lookAt(camPos);
+    this.hyper?.update(dt, tint);
   }
 }

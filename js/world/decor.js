@@ -5,6 +5,7 @@ import * as THREE from '../../vendor/three.js';
 import { M, COLORS, RED, solidIn } from './shift.js';
 import { mobiusDecor } from './mobius.js';
 import { buildDreamCity } from './dreamcity.js';
+import { tesseractDecor } from './tesseract.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const UP = V(0, 1, 0);
@@ -51,6 +52,8 @@ function arch(L, main, i, mask, r, width = 2.2, color = null, arc = Math.PI, a0 
 const DECOR = {
   // 13 DREAM FOLD: a street-level city in districts that move between laps (dreamcity.js)
   dream: buildDreamCity,
+  // 16 HYPERCUBE: the tesseract's own frame (tesseract.js)
+  tesseract: tesseractDecor,
 
   // 01 CORE CIRCUIT: big red and blue arches, a skyline at the edges.
   core(world, L, main, rng) {

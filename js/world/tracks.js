@@ -6,6 +6,7 @@
 
 import { M } from './shift.js';
 import { MOBIUS } from './tracks-mobius.js';
+import { TESSERACT } from './tesseract.js';
 
 function fractions(points) {
   const d = [0];
@@ -470,6 +471,8 @@ export const TRACKS = [
       tips: [{ at: P(0, 0.3), text: 'THE CITY FOLDS · RED STANDS IT UP · BLUE ROLLS IT FLAT · THE ROAD IS THE SAME ROAD', key: 'both' }],
     }),
   }),
+  // ------------------------------------------------------------------ 16 (the bonus course: world/tesseract.js)
+  TESSERACT,
 ];
 
 export const trackById = (id) => TRACKS.find((t) => t.id === id) || TRACKS[0];

@@ -81,6 +81,7 @@ export class Environment {
       const g = lines(pos, mat);
       g.position.set(Math.round(cx / step) * step, y, Math.round(cz / step) * step);
       this.group.add(g);
+      (this.floorGrid ||= []).push(g);
     }
     // dark floor under the grid so the void reads as ground
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ color: 0x030108 }));
@@ -134,6 +135,7 @@ export class Environment {
       const g = lines(pos, mat);
       g.position.set(cx, y, cz);
       this.group.add(g);
+      (this.ridges ||= []).push(g);
     }
     // stars
     const sp = [];
@@ -153,8 +155,14 @@ export class Environment {
     this.tint = { grid: new THREE.Color(0xff2a4a), gridB: new THREE.Color(0x1e8cff), fog: new THREE.Color(0x020103), top: new THREE.Color(0xff3a7a), bot: new THREE.Color(0x3a6aff) };
     this.mode = BOTH;
     this.pulse = 0;
+    // a course can dress the space its own way (def.dressEnv): it gets this, and may hand back a per-frame update
+    // (called with the camera position, and the camera itself after it)
+    this.dress = world.def.dressEnv?.(this, world);
     // the Möbius strip has its own space round it: no ground, a horizon that turns over (world/mobius-art.js)
-    if (world.def.decor === 'mobius') this.dress = mobiusEnv(this, world);
+    if (world.def.decor === 'mobius') {
+      const mob = mobiusEnv(this, world);
+      this.dress = mob && ((dt, t, cp, camera) => mob(dt, t, camera));
+    }
     // the sky stays where it is when a course folds (world/fold.js)
     exemptFold(this.group);
   }
@@ -206,7 +214,7 @@ export class Environment {
     this.skyMat.uniforms.uI.value = 1 + this.pulse * 0.8;
     // keep the band on the course's horizon, not the camera's: high on Helix it sinks below you
     this.skyMat.uniforms.uY.value = Math.max(-0.3, Math.min(0.05, (this.center.y - cp.y) / 900));
-    this.dress?.(dt, t, camera);
+    this.dress?.(dt, t, cp, camera);
   }
 }
 
