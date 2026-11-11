@@ -29,6 +29,7 @@ import { chainMove, chainTick, chainEnd, shiftTiming, perfectFx, newChain, newTa
 import { PIPE } from '../world/warp.js';
 import { buildRoomFrame } from '../world/paradox.js';
 import { disposeTree } from '../core/renderer.js';
+import { PHOSPHOR } from '../world/phosphor.js';
 
 const _v = new THREE.Vector3();
 const _a = new THREE.Vector3();
@@ -1086,6 +1087,7 @@ export class Race {
   beforeRender(renderer) {
     const gl = renderer.renderer;
     const on = !this.split && renderer.quality === 'high' && !this.world.room;
+    PHOSPHOR.uDetail.value = renderer.quality === 'low' ? 0 : 1;
     const size = gl.getDrawingBufferSize(_s);
     const p = this.player;
     // (no wet-road mirror on a road that's drawn turned over or folded)

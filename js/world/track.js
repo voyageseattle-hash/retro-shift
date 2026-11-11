@@ -21,6 +21,7 @@ import { layMirrors, buildMirrors } from './mirrors.js';
 import { layCurved, spot, drawnAt } from './curved.js';
 import { FORMS } from '../vehicles/forms.js';
 import { Mobius } from './mobius.js';
+import { buildPhosphor } from './phosphor.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -468,6 +469,7 @@ export class TrackWorld {
     buildShapeCues(this); // accessibility: a shape per world (shapes.js), shown from settings
     buildMirrors(this); // glass that shows the course back (mirrors.js)
     buildGrain(this); // Static Cup road finish
+    buildPhosphor(this); // Signal Cup road finish
     this.group.add(this.layers.build());
     this.fold?.uncull(this.group);
     this._f = {};
