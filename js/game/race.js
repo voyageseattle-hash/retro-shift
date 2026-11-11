@@ -43,6 +43,8 @@ const HORNS = { vector: 'honk1', scanline: 'honk2', polygon: 'honk3', chroma: 'h
 const G_AIR_RACE = 27; // racer.js G_AIR
 // recharge time of each form's move (seconds)
 const FORM_CD = { lift: 5, lance: 6, brace: 8 };
+// how many LANCEs this session have shown the SWITCHBACK hint
+let sbHints = 0;
 const NO_INPUT = { throttle: 0, brake: 0, steer: 0, drift: false, item: false, special: false, jump: false, reset: false, look: false };
 
 export class Race {
@@ -242,6 +244,21 @@ export class Race {
       }
       return true;
     }
+    // the second tap of a LANCE, while it's still young: SWITCHBACK. The Blade turns end for end round its wheel (the
+    // cab spins one way, the wheel the other), the LANCE cancelled, and goes back the way it came at the same speed
+    // (not round a pipe wall or through a corkscrew, where the road's own frame holds the Blade's facing)
+    if (r.mode === RED && r.lanceT > 0 && this.t - (r.lanceAt ?? -9) < SKIM.doubleTap && !r.vis?.on) {
+      r.lanceT = 0;
+      r.boostTime = 0;
+      r.switchback();
+      if (near) this.debris.sparks(_v.copy(r.pos).setY(r.pos.y + 0.3), _a.set(0, 1, 0), 30, 0xff4a6a, 14, r.gnd.y);
+      if (r.isPlayer) {
+        this.emitP(r, 'popup', { text: 'SWITCHBACK', color: '#ff4a6a', small: true });
+        this.app.audio.play('phase');
+        this.camOf(r).fovPunch(5);
+      }
+      return true;
+    }
     if ((r.formCd || 0) > 0) return false;
     if (r.mode === BLUE) {
       // (a moment off a crest still counts as on the road)
@@ -261,10 +278,13 @@ export class Race {
       }
     } else if (r.mode === RED) {
       r.lanceT = 0.7;
+      r.lanceAt = this.t;
       r.giveBoost(0.7, 1.45);
       r.formCd = FORM_CD.lance;
       if (r.isPlayer) {
         this.emitP(r, 'popup', { text: 'LANCE', color: '#ff4a6a', small: true });
+        // the first few LANCEs of a session say what a second tap does
+        if (sbHints++ < 3) this.emitP(r, 'popup', { text: 'TAP AGAIN: SWITCHBACK', color: '#ff9aae', small: true });
         this.app.audio.play('turbo', 2);
         this.camOf(r).fovPunch(10);
       }
@@ -336,6 +356,11 @@ export class Race {
       r.aiHopAt = 0;
       this.formMove(r);
     }
+    // a LANCE's second tap: the rival SWITCHBACKs
+    if (r.aiFlipAt && this.t >= r.aiFlipAt) {
+      r.aiFlipAt = 0;
+      this.formMove(r);
+    }
     if ((r.formCd || 0) > 0 || this.state !== 'race' || r.finished) return;
     r.formThink = (r.formThink || 0) - 1;
     if (r.formThink > 0) return;
@@ -361,6 +386,12 @@ export class Race {
         }
       }
     } else if (r.mode === RED) {
+      // knocked round and running back down the road at speed: tap, tap, SWITCHBACK, and carry the speed the right way
+      const along = r.vel.x * P.thx[tr.i] + r.vel.z * P.thz[tr.i];
+      if (r.grounded && along < -12 && (r.wrongWay || 0) > 0.4) {
+        if (this.formMove(r)) r.aiFlipAt = this.t + 0.12;
+        return;
+      }
       if (this.racers.some((o) => o !== r && o.respawnT <= 0 && (({ d, s }) => d > 3 && d < 16 && s < 2.5)(ahead(o)))) this.formMove(r);
     } else if (r.mode === BOTH) {
       if (this.racers.some((o) => o !== r && o.respawnT <= 0 && o.pos.distanceToSquared(r.pos) < 9 * 9) && (r.hp < 75 || Math.random() < 0.3)) this.formMove(r);
