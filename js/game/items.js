@@ -15,6 +15,7 @@
 import { spot } from '../world/curved.js';
 import * as THREE from '../../vendor/three.js';
 import { BOTH, RED, BLUE, M, solidIn } from '../world/shift.js';
+import { FORMS } from '../vehicles/forms.js';
 
 const _v = new THREE.Vector3();
 const _a = new THREE.Vector3();
@@ -214,6 +215,8 @@ export class Items {
     for (let k = 0; k <= n; k++) {
       const j = P.closed ? P.wrap(tr.i + k) : Math.min(P.N - 1, tr.i + k);
       if (!solidIn(P.mask[j], mode)) return false;
+      // (a wall run holds only the form that clings: a FLIP or an EMP there would drop you off the wall)
+      if (P.cling?.[j] && !FORMS[mode].cling) return false;
     }
     return true;
   }

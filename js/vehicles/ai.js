@@ -49,7 +49,8 @@ export class RaceAI {
     if (t && t.path !== path && !path.closed && path.frame(r.pos.x, r.pos.z, i, _f) && Math.abs(_f.lat) < path.halfW + 1 && Math.abs(_f.y - r.pos.y) < 2.5) this.planT = 0;
     // (a lens-only road under the wheels is adopted at once: read as the road we meant to be on, it looked solid in
     // every lens, and a rival that had drifted up BLUE ROOFTOPS shifted back to BOTH and dropped through it)
-    const lensOnly = t && r.gnd?.onRoad && r.gnd.path === t.path && !solidIn(r.gnd.mask, BOTH);
+    // (read from the strip we're over, not the wheels: off a roof edge for a moment, the wheels have nothing under them)
+    const lensOnly = t && t.path.mask[t.i] && !solidIn(t.path.mask[t.i], BOTH);
     if (t && t.path !== path && (this.planT > 1.5 || (lensOnly && this.planT > 0.2))) {
       this.path = t.path;
       this._branch = null;
@@ -170,7 +171,7 @@ export class RaceAI {
       }
       if (!ok[m]) return 1e6;
       // never let go of the road under the wheels while the plan is still about another one
-      if (t && t.path !== P && r.gnd?.onRoad && !solidIn(r.gnd.mask, m)) return 1e6;
+      if (t && t.path !== P && solidIn(t.path.mask[t.i], r.mode) && !solidIn(t.path.mask[t.i], m)) return 1e6;
       let s = blocked[m] * 10;
       if (m !== BOTH) s += afford ? 3 : 200;
       if (m !== BOTH && saving) s += 6;
@@ -296,6 +297,32 @@ export class RaceAI {
     if (hz) {
       ctl.throttle = Math.min(ctl.throttle, hz.throttle);
       ctl.brake = Math.max(ctl.brake, hz.brake);
+    }
+    // nose against a slit's wall, off the gap: back straight off a few metres, then line up again (crawling sideways
+    // along the wall face took longer than the stuck check allows, and the rival was put back behind the slit)
+    this.backCool = Math.max(0, (this.backCool || 0) - dt);
+    if (this.backT > 0) {
+      this.backT -= dt;
+      // (reversing, the wheel works the other way: this swings the nose round toward the gap)
+      const g = this.backAim;
+      const e = wrapAngle(Math.atan2(g.x - r.pos.x, g.z - r.pos.z) - r.yaw);
+      ctl.throttle = 0;
+      ctl.brake = 1;
+      ctl.steer = clamp(e * 2.4, -1, 1);
+      if (this.backT <= 0) this.backCool = 2.5;
+      return;
+    }
+    if (P.slit && r.speed < 3 && Math.abs(curLat) > 0.6 && this.backCool <= 0) {
+      for (const s of w.slits || []) {
+        if (s.path !== P) continue;
+        const d = (s.i - pi) * P.ds;
+        if (d > -1 && d < 4.5) {
+          this.backT = 1.2;
+          const q = P.point(s.i, 0, 0);
+          this.backAim = { x: q.x, z: q.z };
+          this.targetLat = 0;
+        }
+      }
     }
     // stuck facing the wrong way: a three-point turn, reversing with the wheel one way, then driving out
     if (this.turn > 0) {
