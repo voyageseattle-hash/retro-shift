@@ -345,6 +345,7 @@ export class RaceAI {
   }
 
   wantsBranch(b) {
+    if (b.def?.closed) return false; // (a road that's shut just now: QUARTER TURN's fast lines)
     if (!this.canTakeBranch(b)) return false;
     return Math.random() < 0.35 + this.skill * 0.5;
   }
