@@ -61,7 +61,7 @@ Touch controls appear on phones and tablets.
 
 - **Hull**: a hit takes a share of your hull (the ten cells under SHIFT) instead of wrecking you; only a car with nothing left comes apart. A hull above 60% always survives one hit. It patches itself up after a few quiet seconds, faster in BOTH. The rails are bumpers that turn you along the road; falling off only happens at the planned holes.
 - **SEAM CHARGES**: drive through a gate of red-and-blue prisms to roll one. LENS CELL (six seconds of free lens), EMP (stalls every car near you), FLIP (throws everyone else into the other world and holds them there), LIGHTSPEED (you become a beam of light that burns anyone crossing your trail), SEAM WALL (a block behind you, solid in your lens's world) and PATCH (half your hull back). The back of the field rolls the big ones. Not in Time Trial, Mono Run or online.
-- **Form moves**: the Skimmer LIFTs and floats over what's in front of it, the Blade LANCEs through whoever's ahead, the pair BRACEs behind a shield that sends a ram back.
+- **Form moves**: the Skimmer LIFTs: tap to HOVER (a few metres up for a second and a half, over traffic, low blocks and holes), double-tap to JUMP (a short, high hop over a lens wall or any block, if you time it), the Blade LANCEs through whoever's ahead, the pair BRACEs behind a shield that sends a ram back.
 - **Launchers**: before a hole in one lens's road, the other lens has a ramp, there only for it, that throws you over.
 
 ## Modes

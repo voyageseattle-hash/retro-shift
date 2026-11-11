@@ -4,6 +4,7 @@
 import * as THREE from '../../vendor/three.js';
 import { TrackWorld } from '../world/track.js';
 import { Racer, CARS } from '../vehicles/racer.js';
+import { SKIM } from '../vehicles/forms.js';
 import { RaceAI } from '../vehicles/ai.js';
 import { ChaseCamera } from './camera.js';
 import { Environment } from './env.js';
@@ -239,22 +240,42 @@ export class Race {
     return msg;
   }
 
-  // Each form's own move (Y / △, Z): the Skimmer LIFTs off the road and floats over whatever's there, the Blade
-  // LANCEs forward and runs straight through whoever's in front, the pair BRACEs behind a shield that sends a hit
-  // back at whoever threw it. One move, then a few seconds to recharge.
+  // Each form's own move (Y / △, Z): the Skimmer LIFTs (one tap HOVERs over the road, a quick second tap JUMPs high
+  // over a wall or a block), the Blade LANCEs forward and runs straight through whoever's in front, the pair BRACEs
+  // behind a shield that sends a hit back at whoever threw it. One move, then a few seconds to recharge.
   formMove(r) {
-    if (this.state !== 'race' || r.finished || r.respawnT > 0 || (r.formCd || 0) > 0 || r.empT > 0) return false;
+    if (this.state !== 'race' || r.finished || r.respawnT > 0 || r.empT > 0) return false;
     const near = this.near(r);
+    // the second tap of a LIFT, while its hover is still young: JUMP (the hover's recharge already running)
+    if (r.mode === BLUE && r.hoverT > 0 && !r.hopT && this.t - (r.hoverAt ?? -9) < SKIM.doubleTap) {
+      const base = r.gnd.onRoad ? r.gnd.y : (r.hoverBase ?? r.pos.y);
+      const g = 27 * SKIM.hopG;
+      r.vel.y = Math.sqrt(2 * g * Math.max(0.5, SKIM.hopH - Math.max(0, r.pos.y - base)));
+      r.hoverT = 0;
+      r.hopT = 1.6;
+      if (near) this.debris.sparks(r.pos, _a.set(0, -1, 0), 34, 0x9ad8ff, 16, base);
+      if (r.isPlayer) {
+        this.emitP(r, 'popup', { text: 'JUMP', color: '#4ab0ff', small: true });
+        this.app.audio.play('turbo', 2);
+        this.camOf(r).fovPunch(6);
+      }
+      return true;
+    }
+    if ((r.formCd || 0) > 0) return false;
     if (r.mode === BLUE) {
-      if (!r.grounded) return false;
-      r.vel.addScaledVector(_v.set(r.gnd.nx, r.gnd.ny, r.gnd.nz), 12);
+      // (a moment off a crest still counts as on the road)
+      if (!r.grounded && r.airTime > 0.25) return false;
+      r.vel.addScaledVector(_v.set(r.gnd.nx, r.gnd.ny, r.gnd.nz), 5);
       r.grounded = false;
       r.airTime = 0.01;
-      r.liftT = 1.6;
+      r.hoverT = SKIM.hoverT;
+      r.hoverAt = this.t;
+      r.hoverBase = r.gnd.onRoad ? r.gnd.y : r.pos.y;
+      r.hopT = 0;
       r.formCd = FORM_CD.lift;
       if (near) this.debris.sparks(r.pos, _a.set(0, -1, 0), 26, 0x4ab0ff, 12, r.gnd.y);
       if (r.isPlayer) {
-        this.emitP(r, 'popup', { text: 'LIFT', color: '#4ab0ff', small: true });
+        this.emitP(r, 'popup', { text: 'HOVER', color: '#4ab0ff', small: true });
         this.app.audio.play('boost');
       }
     } else if (r.mode === RED) {
@@ -307,7 +328,6 @@ export class Race {
   // the form moves ticking, and how they look
   formTick(r, dt) {
     if (r.formCd > 0) r.formCd -= dt;
-    if (r.liftT > 0) r.liftT -= dt;
     if (r.lanceT > 0) {
       r.lanceT -= dt;
       if (this.near(r) && Math.random() < 0.7) this.debris.sparks(_v.copy(r.pos).setY(r.pos.y + 0.5), _a.set(Math.sin(r.yaw), 0, Math.cos(r.yaw)), 3, 0xff4a6a, 30, r.gnd.y);
@@ -330,6 +350,11 @@ export class Race {
 
   // Rivals use their form's move by a few simple rules.
   formAI(r) {
+    // a LIFT's second tap, a beat after the first: the rival JUMPs the block it saw
+    if (r.aiHopAt && this.t >= r.aiHopAt) {
+      r.aiHopAt = 0;
+      this.formMove(r);
+    }
     if ((r.formCd || 0) > 0 || this.state !== 'race' || r.finished) return;
     r.formThink = (r.formThink || 0) - 1;
     if (r.formThink > 0) return;
@@ -349,7 +374,8 @@ export class Race {
         if (P.closed) di = ((di % P.N) + P.N + P.N / 2) % P.N - P.N / 2;
         const d = di * P.ds;
         if (d > 10 && d < 10 + r.speed * 0.45 && Math.abs(o.lat - tr.lat) < o.w + 1.5) {
-          this.formMove(r);
+          // a low block: a hover clears it; a tall one wants the jump
+          if (this.formMove(r) && o.h + 1 > SKIM.hoverH) r.aiHopAt = this.t + 0.15;
           return;
         }
       }
@@ -1165,7 +1191,15 @@ export class Race {
       }
       const dlat = tr.lat - o.lat;
       if (Math.abs(dlat) > o.w + r.halfW) continue;
-      if (r.pos.y - P.py[o.i] > o.h + 1) continue;
+      if (r.pos.y - P.py[o.i] > o.h + 1) {
+        // the Skimmer LIFTed clean over something solid in its lens: HOP OVER, a link in the SHIFT CHAIN
+        if ((r.hopT > 0 || r.hoverT > 0) && r.hopOver !== o && solidIn(o.mask, r.mode)) {
+          r.hopOver = o;
+          this.onMove(r, 'hop', { type: o.type });
+          if (r.isPlayer) this.app.audio.play('phase');
+        }
+        continue;
+      }
       if (!solidIn(o.mask, r.mode)) {
         // phased straight through it
         if (r.inside !== o) {

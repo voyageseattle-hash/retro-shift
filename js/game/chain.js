@@ -43,6 +43,8 @@ function linkOf(kind, d) {
       return 'WALL RUN';
     case 'glide':
       return 'GLIDE';
+    case 'hop':
+      return 'HOP OVER';
     case 'slit':
       return 'SLIT';
     case 'pad':
