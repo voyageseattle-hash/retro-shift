@@ -595,6 +595,7 @@ export const COURSE_SONG = {
   tesseract: 'helixB',
   mirror: 'tunnelB',
   relativity: 'paradox',
+  popup: 'circuit',
 };
 
 const STING_MIX = {

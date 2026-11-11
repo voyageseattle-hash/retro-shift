@@ -25,6 +25,7 @@ import { Reflection } from './reflect.js';
 import { Construction } from './construction.js';
 import { Quake } from './quake.js';
 import { Fold } from './fold.js';
+import { PopupBook, offPage } from './popup.js';
 import { chainMove, chainTick, chainEnd, shiftTiming, perfectFx, newChain, newTally } from './chain.js';
 import { PIPE } from '../world/warp.js';
 import { buildRoomFrame } from '../world/paradox.js';
@@ -112,6 +113,9 @@ export class Race {
     this.quake = new Quake(this);
     this.scene.add(this.works.group, this.quake.group);
     this.fold = new Fold(this); // a course that changes pose lap by lap (HYPERCUBE)
+    // the pop-up book (PAGE TURNER): a spread per lap
+    this.book = new PopupBook(this);
+    this.scene.add(this.book.group);
     this.slowT = 0;
     this.slowLen = 0.9; // (so a slow-motion beat never divides by nothing)
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
@@ -371,7 +375,7 @@ export class Race {
     };
     if (r.mode === BLUE && r.grounded && r.speed > 30) {
       for (const o of this.world.obstacles) {
-        if (o.path !== P || o.broken || !solidIn(o.mask, BLUE) || o.type === 'wall' || o.door) continue;
+        if (o.path !== P || o.broken || !solidIn(o.mask, BLUE) || o.type === 'wall' || o.door || offPage(o, r)) continue;
         let di = o.i - tr.i;
         if (P.closed) di = ((di % P.N) + P.N + P.N / 2) % P.N - P.N / 2;
         const d = di * P.ds;
@@ -899,6 +903,7 @@ export class Race {
     this.works.update(sim);
     this.quake.update(sim, p);
     this.fold.update(sim);
+    this.book.update(sim);
     this.traffic.update(sim, p);
     this.police.update(sim, p);
     this.world.mirrors?.update(this);
@@ -1116,6 +1121,7 @@ export class Race {
         this.traffic.render(pl.mode, pl);
         this.police.render(pl.mode, pl);
         this.world.mirrors?.render(this.app.renderer.renderer, this.scene, this.cams[k].camera, pl.mode, { quality: this.app.renderer.quality, t: this.t, instant: true, split: true });
+        this.book.render(k, pl);
       },
     }));
   }
@@ -1174,7 +1180,7 @@ export class Race {
     if (!tr) return;
     const P = tr.path;
     for (const o of w.obstacles) {
-      if (o.path !== P || o.broken || r.beamT > 0) continue;
+      if (o.path !== P || o.broken || r.beamT > 0 || offPage(o, r)) continue;
       let di = tr.i - o.i;
       if (P.closed) {
         if (di > P.N / 2) di -= P.N;
