@@ -5,6 +5,7 @@ import * as THREE from '../../vendor/three.js';
 import { MODE_TINT, BOTH } from '../world/shift.js';
 import { damp } from '../core/util.js';
 import { SkyPiece, SKY_PIECE } from './skypieces.js';
+import { mobiusEnv } from '../world/mobius-art.js';
 
 const SUN_SHADER = {
   uniforms: { uTop: { value: new THREE.Color(0xff3a7a) }, uBot: { value: new THREE.Color(0x3a6aff) }, uTime: { value: 0 } },
@@ -151,6 +152,8 @@ export class Environment {
     this.tint = { grid: new THREE.Color(0xff2a4a), gridB: new THREE.Color(0x1e8cff), fog: new THREE.Color(0x020103), top: new THREE.Color(0xff3a7a), bot: new THREE.Color(0x3a6aff) };
     this.mode = BOTH;
     this.pulse = 0;
+    // the Möbius strip has its own space round it: no ground, a horizon that turns over (world/mobius-art.js)
+    if (world.def.decor === 'mobius') this.dress = mobiusEnv(this, world);
   }
 
   // Split-screen: the sky and grid tint follow each player's own lens.
@@ -200,6 +203,7 @@ export class Environment {
     this.skyMat.uniforms.uI.value = 1 + this.pulse * 0.8;
     // keep the band on the course's horizon, not the camera's: high on Helix it sinks below you
     this.skyMat.uniforms.uY.value = Math.max(-0.3, Math.min(0.05, (this.center.y - cp.y) / 900));
+    this.dress?.(dt, t, camera);
   }
 }
 

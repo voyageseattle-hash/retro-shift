@@ -15,6 +15,7 @@ import { layStorms } from './storms-def.js';
 import { layFormRoutes, addSlit, routeMask, layRouteBoosts } from './formroutes.js';
 import { layWarps, buildWarps, PIPE } from './warp.js';
 import { FORMS } from '../vehicles/forms.js';
+import { Mobius } from './mobius.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -429,6 +430,11 @@ export class TrackWorld {
     this.applyGaps();
     layFormRoutes(this);
     layWarps(this);
+    // the Möbius strip: a flat two-lobe loop to the engine, drawn turned over (mobius.js)
+    if (def.mobius) {
+      this.mob = new Mobius(this, def.mobius);
+      this.layers.bend = (a) => this.mob.mapArray(a);
+    }
     this.minY = Math.min(...this.paths.map((p) => p.minY));
     this.maxY = Math.max(...this.paths.map((p) => p.maxY));
     this.floorY = this.minY - (def.floorDrop ?? 26);
@@ -438,10 +444,13 @@ export class TrackWorld {
     this.buildFeatures();
     this.buildWater();
     this.buildStart();
+    if (this.mob) this.buildStart(this.main.N >> 1);
     buildDecor(this);
     this.storms = layStorms(this);
     buildSigns(this);
     buildCovers(this);
+    // (a board's place, for the shift wave, is where it's drawn)
+    if (this.mob) for (const S of this.layers.signs) if (S.at) S.at = this.mob.map(S.at, new THREE.Vector3());
     buildShapeCues(this); // accessibility: a shape per world (shapes.js), shown from settings
     this.group.add(this.layers.build());
     this._f = {};
@@ -660,10 +669,12 @@ export class TrackWorld {
         const mask = path.mask[i];
         if (!mask) continue; // a glide gap: nothing there in any world
         const neutral = mask === M.ALL;
-        const lc = neutral ? COLORS.red : colorForMask(mask);
-        const rc = neutral ? COLORS.blue : colorForMask(mask);
+        // (the Möbius strip's road is one colour a side: red along the top, blue along the underside)
+        const face = neutral && this.mob && path.closed ? (i < path.N / 2 ? COLORS.red : COLORS.blue) : null;
+        const lc = face ?? (neutral ? COLORS.red : colorForMask(mask));
+        const rc = face ?? (neutral ? COLORS.blue : colorForMask(mask));
         // neutral road: red lines on the left half, blue on the right, the two worlds printed over each other
-        const mid = neutral ? null : colorForMask(mask);
+        const mid = face ?? (neutral ? null : colorForMask(mask));
         const ml = mid ?? COLORS.red;
         const mr = mid ?? COLORS.blue;
         // fill
@@ -715,7 +726,7 @@ export class TrackWorld {
         for (const f of [-2 / 3, 0, 2 / 3]) if (i % 3 !== 2 && f !== 0) L.line(mask, path.wpoint(i, f * hw, 0.03, _a), path.wpoint(j, f * hw, 0.03, _b), f < 0 ? ml : mr);
         // underside and supports for raised road
         const bent = path.warpK?.[i] > 0;
-        if (i % 2 === 0 && !bent) {
+        if (i % 2 === 0 && !bent && !this.mob) {
           L.line(mask, path.wpoint(i, -hw, -0.6, _a), path.wpoint(j, -hw, -0.6, _b), lc);
           L.line(mask, path.wpoint(i, hw, -0.6, _a), path.wpoint(j, hw, -0.6, _b), rc);
         }
@@ -1014,7 +1025,8 @@ export class TrackWorld {
     });
   }
 
-  buildStart() {
+  // (at: the sample the line is on. The Möbius strip has two, one a side.)
+  buildStart(at = 0) {
     const m = this.main;
     const L = this.layers;
     const hw = this.halfWidth;
@@ -1024,17 +1036,17 @@ export class TrackWorld {
         if ((k + r) % 2) continue;
         const l0 = -hw + (k * 2 * hw) / 10;
         const l1 = -hw + ((k + 1) * 2 * hw) / 10;
-        const a = m.point(r, l0, 0.05, new THREE.Vector3());
-        const b = m.point(r + 1, l0, 0.05, new THREE.Vector3());
-        const c = m.point(r + 1, l1, 0.05, new THREE.Vector3());
-        const d = m.point(r, l1, 0.05, new THREE.Vector3());
+        const a = m.point(at + r, l0, 0.05, new THREE.Vector3());
+        const b = m.point(at + r + 1, l0, 0.05, new THREE.Vector3());
+        const c = m.point(at + r + 1, l1, 0.05, new THREE.Vector3());
+        const d = m.point(at + r, l1, 0.05, new THREE.Vector3());
         L.quad(M.ALL, a, b, c, d, 0xffffff, 0.3);
       }
     }
     // gantry
-    const p = m.point(0, 0, 0, new THREE.Vector3());
-    const yaw = Math.atan2(m.thx[0], m.thz[0]);
-    const right = new THREE.Vector3(m.rightX(0), 0, m.rightZ(0));
+    const p = m.point(at, 0, 0, new THREE.Vector3());
+    const yaw = Math.atan2(m.thx[at], m.thz[at]);
+    const right = new THREE.Vector3(m.rightX(at), 0, m.rightZ(at));
     for (const s of [-1, 1]) {
       const q = p.clone().addScaledVector(right, s * (hw + 1.5));
       L.box(M.ALL, q.x, q.y + 5, q.z, 1, 10, 1, yaw, s < 0 ? COLORS.red : COLORS.blue, true);

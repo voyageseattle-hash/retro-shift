@@ -61,6 +61,10 @@ export class Race {
     this.world = new TrackWorld(def);
     this.env = new Environment(this.world);
     this.scene.add(this.env.group, this.world.group);
+    // the Möbius strip is drawn turned over (world/mobius.js): the scene is bent before each frame and put back after
+    this.mob = this.world.mob || null;
+    // a lap can be a part of the loop the engine drives (the Möbius strip's two sides are one loop)
+    this.lapSplit = def.lapSplit || 1;
     this.scene.fog = this.env.fog;
     this.scene.background = this.env.bg;
     this.cam = new ChaseCamera();
@@ -85,6 +89,7 @@ export class Race {
     this.scene.add(this.debris.mesh);
     this.speedLines = new SpeedLines();
     this.scene.add(this.speedLines.mesh);
+    if (this.mob) for (const o of [this.env.group, this.world.layers.group, this.speedLines.mesh]) this.mob.skip.add(o);
     this.feel = new Feel(this); // drift stages, surface rumble, pass-bys (feel.js)
     this.storms = new Storms(this);
     this.traffic = new Traffic(this);
@@ -147,7 +152,7 @@ export class Race {
       // best time through each third of the lap, for the results screen. The first lap's clock starts at GO, so its
       // first sector does too (the grid counts as sector 1), and a lap's three sectors add up to the lap.
       r.sectors = [Infinity, Infinity, Infinity];
-      r.sec = Math.max(0, Math.floor(r.prog * 3));
+      r.sec = Math.max(0, Math.floor(r.prog * this.lapSplit * 3));
       r.secStart = 0;
       r.secFull = true;
       if (!isPlayer && !r.puppet) {
@@ -172,11 +177,12 @@ export class Race {
       c2.camera.updateProjectionMatrix();
       this.cams.push(c2);
     }
+    if (this.mob) for (const c of this.cams) c.mob = this.mob;
     this.players.forEach((p, k) => this.cams[k].snap(p));
     this.items = new Items(this);
     this.scene.add(this.items.group);
     // the lens-shift wave starts from the player's car (split-screen fades each view instead)
-    this.world.layers.waveAt = this.split ? null : this.player.pos;
+    this.world.layers.waveAt = this.split ? null : this.mob ? (this.wavePos = this.mob.map(this.player.pos, new THREE.Vector3())) : this.player.pos;
     this.events = [];
     this.lastMode = BOTH;
     // ghosts: your best run and the staff run
@@ -751,6 +757,7 @@ export class Race {
   // ------------------------------------------------------------ per frame
   update(dt) {
     this.t += dt;
+    this.mob?.undo();
     if (this.radioLater && this.t >= this.radioLater.t) {
       const q = this.radioLater;
       this.radioLater = null;
@@ -862,7 +869,10 @@ export class Race {
         this.world.layers.useView(k);
         this.world.layers.update(dt, pl.mode, this.t);
       });
-    } else this.world.update(dt, this.t, p.mode);
+    } else {
+      if (this.wavePos) this.mob.map(p.pos, this.wavePos);
+      this.world.update(dt, this.t, p.mode);
+    }
     this.players.forEach((pl, k) => {
       const cam = this.cams[k];
       if (this.state === 'intro') {
@@ -899,9 +909,14 @@ export class Race {
     cam.getWorldDirection(_v);
     const fl = Math.hypot(_v.x, _v.z) || 1;
     this._listener ||= { pos: new THREE.Vector3(), fwd: { x: 0, z: 1 }, vel: p.vel };
-    this._listener.pos.copy(cam.position);
+    this._listener.pos.copy(this.mob ? this.cam.pos : cam.position);
     this._listener.fwd.x = _v.x / fl;
     this._listener.fwd.z = _v.z / fl;
+    if (this.mob) {
+      // (heard in the flat course, where the cars are)
+      this._listener.fwd.x = Math.sin(this.cam.heading);
+      this._listener.fwd.z = Math.cos(this.cam.heading);
+    }
     this._listener.vel = p.vel;
     // player 2 is heard like a rival, from player 1's camera
     A.rivalEngines(this._listener, this.racers, this.split ? p : null);
@@ -1024,7 +1039,9 @@ export class Race {
     const on = !this.split && renderer.quality === 'high';
     const size = gl.getDrawingBufferSize(_s);
     const p = this.player;
-    this.reflection.render(gl, this.scene, this.cam.camera, p.gnd?.y ?? p.pos.y, on ? 0.2 : 0, size.x, size.y, this.t);
+    // (no wet-road mirror on a road that's drawn turned over)
+    this.reflection.render(gl, this.scene, this.cam.camera, p.gnd?.y ?? p.pos.y, on && !this.mob ? 0.2 : 0, size.x, size.y, this.t);
+    this.mob?.apply(this.scene);
   }
 
   // What to draw: one full-screen view, or two stacked views (player 1 on top), each prepared for its own lens.
@@ -1370,7 +1387,7 @@ export class Race {
     r.prog += du;
     r.lastU = u;
     // sectors: a third of the lap driven whole, start to end, counts toward its best
-    const sec = Math.max(0, Math.floor(r.prog * 3));
+    const sec = Math.max(0, Math.floor(r.prog * this.lapSplit * 3));
     if (sec !== r.sec && !r.finished) {
       if (sec === r.sec + 1 && r.secFull) {
         const k = ((r.sec % 3) + 3) % 3;
@@ -1380,7 +1397,7 @@ export class Race {
       r.sec = sec;
       r.secStart = this.raceTime;
     }
-    const lap = Math.floor(r.prog);
+    const lap = Math.floor(r.prog * this.lapSplit);
     if (lap > r.lap && !r.finished) {
       const lt = this.raceTime - r.lapStart;
       r.bestLap = Math.min(r.bestLap, lt);

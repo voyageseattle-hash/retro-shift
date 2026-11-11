@@ -144,5 +144,7 @@ export function buildSigns(world) {
     const name = there === 'RED' ? 'RED' : there === 'BLUE' ? 'BLUE' : 'OVERLAP';
     addSign(world, path, back(path, g.at, 60), 0, `${name} BRIDGE`, there === 'RED OR BLUE' || !there ? 'STAY IN BOTH' : `NO ROAD IN ${there === 'RED' ? 'BLUE' : 'RED'}`, g.mask);
   }
+  // a course's own boards: def.signs [{ at, title, sub, mask }]
+  for (const s of def.signs || []) addSign(world, main, main.index(s.at), 0, s.title, s.sub || '', s.mask ?? M.ALL);
   signFormRoutes(world, addSign);
 }
