@@ -44,7 +44,10 @@ export class RaceAI {
     // A branch that starts flush with the main road reads as "main" under the wheels until it climbs away; we are
     // still on it as long as we sit inside its strip at its height.
     if (t && t.path !== path && !path.closed && path.frame(r.pos.x, r.pos.z, i, _f) && Math.abs(_f.lat) < path.halfW + 1 && Math.abs(_f.y - r.pos.y) < 2.5) this.planT = 0;
-    if (t && t.path !== path && this.planT > 1.5) {
+    // (a lens-only road under the wheels is adopted at once: read as the road we meant to be on, it looked solid in
+    // every lens, and a rival that had drifted up BLUE ROOFTOPS shifted back to BOTH and dropped through it)
+    const lensOnly = t && r.gnd?.onRoad && r.gnd.path === t.path && !solidIn(r.gnd.mask, BOTH);
+    if (t && t.path !== path && (this.planT > 1.5 || (lensOnly && this.planT > 0.2))) {
       this.path = t.path;
       this._branch = null;
       this.planT = 0;
@@ -158,6 +161,8 @@ export class RaceAI {
         return blocked[m] * 10 + (m === r.mode ? 0 : afford ? 4 : 1e5);
       }
       if (!ok[m]) return 1e6;
+      // never let go of the road under the wheels while the plan is still about another one
+      if (t && t.path !== P && r.gnd?.onRoad && !solidIn(r.gnd.mask, m)) return 1e6;
       let s = blocked[m] * 10;
       if (m !== BOTH) s += afford ? 3 : 200;
       if (m !== BOTH && saving) s += 6;
