@@ -63,6 +63,7 @@ export class RaceAI {
     if (this.path === w.main) {
       for (const b of w.paths) {
         // (noFork: a strip nothing leads onto, DROP TOWER's catch chute and seesaw plank)
+        // (noFork: a road you don't drive onto from this one, like FLIPPER ALLEY's centre ramp)
         if (b.closed || b.noFork) continue;
         const iFrom = w.main.index(b.mainFrom);
         let d = iFrom - i;
@@ -122,6 +123,7 @@ export class RaceAI {
     for (const o of r.session?.traffic?.near(P, pi, n) || []) obs.push(o);
     for (const o of r.session?.police?.near(P, pi, n) || []) obs.push(o);
     for (const o of r.session?.tower?.near(P, pi, n) || []) obs.push(o); // DROP TOWER's marbles
+    for (const o of r.session?.pinball?.near(P, pi, n) || []) obs.push(o);
     // For each world, the best single lane through everything solid in it.
     const LANES = [-0.65, -0.35, 0, 0.35, 0.65].map((f) => f * P.halfW);
     // Obstacles inside the reaction distance can't be dodged by a lane change any more, so they are checked
@@ -224,7 +226,7 @@ export class RaceAI {
         c += (r.session?.quake?.laneCost(r, this.wantMode, lat) || 0) * 6;
         c += (r.session?.tower?.laneCost(r, this.wantMode, lat) || 0) * 6;
         // a route with a slit: get on the middle line early, so there's no last-moment swerve to thread it
-        if (P.slit) c += Math.abs(lat) * 0.4;
+        if (P.slit || P.thin) c += Math.abs(lat) * 0.4;
         for (const p of w.pads) if (p.path === P && solidIn(p.mask, this.wantMode) && Math.abs(p.i - pi) < n && Math.abs(lat - p.lat) < 2) c -= 0.6;
         if (c < bestCost) {
           bestCost = c;
@@ -265,7 +267,8 @@ export class RaceAI {
     ctl.steer = clamp(-err * 2.4, -1, 1) * (this.mistake > 0 ? 0.3 : 1);
     // threading a slit: the aim-point steering settles too slowly at speed to be sure of the gap, so hold the
     // line with the lateral error and its rate as well (positive steer carries the car toward positive lat)
-    if (P.slit && this.formOf(P) === r.mode) {
+    // (and a road barely wider than the craft, like FLIPPER ALLEY's wire: aiming down the road would cut every bend)
+    if ((P.slit || P.thin) && this.formOf(P) === r.mode) {
       const latV = r.vel.x * P.rightX(pi) + r.vel.z * P.rightZ(pi);
       ctl.steer = clamp(-err * 2.4 + (this.targetLat - curLat) * 0.2 - latV * 0.12, -1, 1);
     }
@@ -361,7 +364,8 @@ export class RaceAI {
     // a route that says it's shut to this car right now (DROP TOWER's spring, stretched)
     if (b.shut?.(this.r)) return false;
     if (!this.canTakeBranch(b)) return false;
-    return Math.random() < 0.35 + this.skill * 0.5;
+    // (aiTake: a route too thin for a crowd asks for fewer takers)
+    return Math.random() < (0.35 + this.skill * 0.5) * (b.aiTake ?? 1);
   }
 }
 

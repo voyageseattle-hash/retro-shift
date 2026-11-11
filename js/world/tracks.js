@@ -12,6 +12,7 @@ import { paradoxDef } from './paradox.js';
 import { DYSON } from './dyson.js';
 import { popupDef } from './tracks-popup.js';
 import { MARBLERUN } from './marblerun.js';
+import { PINBALL } from './pinball.js';
 
 function fractions(points) {
   const d = [0];
@@ -489,6 +490,7 @@ export const TRACKS = [
   // ------------------------------------------------------------------ 21
   // DROP TOWER, the TOYBOX CUP's marble run (world/marblerun.js)
   MARBLERUN,
+  make(PINBALL), // 17 FLIPPER ALLEY (pinball.js)
 ];
 
 export const trackById = (id) => TRACKS.find((t) => t.id === id) || TRACKS[0];

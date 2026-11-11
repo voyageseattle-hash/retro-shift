@@ -27,6 +27,7 @@ import { Quake } from './quake.js';
 import { Fold } from './fold.js';
 import { PopupBook, offPage } from './popup.js';
 import { DropTower } from './droptower.js';
+import { Pinball } from './pinball.js';
 import { chainMove, chainTick, chainEnd, shiftTiming, perfectFx, newChain, newTally } from './chain.js';
 import { PIPE } from '../world/warp.js';
 import { buildRoomFrame } from '../world/paradox.js';
@@ -120,6 +121,8 @@ export class Race {
     // DROP TOWER's moving pieces and marbles, on the race clock
     this.tower = this.world.tower ? new DropTower(this) : null;
     if (this.tower) this.scene.add(this.tower.group);
+    // FLIPPER ALLEY's flippers, bumpers and steel balls (game/pinball.js)
+    this.pinball = this.world.pinball ? new Pinball(this) : null;
     this.slowT = 0;
     this.slowLen = 0.9; // (so a slow-motion beat never divides by nothing)
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
@@ -912,6 +915,7 @@ export class Race {
     this.traffic.update(sim, p);
     this.police.update(sim, p);
     this.world.mirrors?.update(this);
+    this.pinball?.update(sim);
     this.items.update(sim);
 
     // visuals

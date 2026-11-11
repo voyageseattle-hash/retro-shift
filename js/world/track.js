@@ -20,6 +20,7 @@ import { layFold, runFold } from './fold.js';
 import { layMirrors, buildMirrors } from './mirrors.js';
 import { layCurved, spot, drawnAt } from './curved.js';
 import { layDropTower } from './marblerun.js';
+import { layPinball, buildPinball } from './pinball.js';
 import { FORMS } from '../vehicles/forms.js';
 import { Mobius } from './mobius.js';
 import { buildPhosphor } from './phosphor.js';
@@ -437,6 +438,7 @@ export class TrackWorld {
     this.buildMain();
     this.buildBranches();
     this.paths.extra = def.mapLines; // lines the map draws under the roads (ui/minimap.js)
+    layPinball(this); // FLIPPER ALLEY's own roads (pinball.js)
     this.applyGaps();
     layFormRoutes(this);
     layWarps(this);
@@ -472,6 +474,7 @@ export class TrackWorld {
     buildMirrors(this); // glass that shows the course back (mirrors.js)
     buildGrain(this); // Static Cup road finish
     buildPhosphor(this); // Signal Cup road finish
+    buildPinball(this); // FLIPPER ALLEY's table (pinball.js)
     this.group.add(this.layers.build());
     this.fold?.uncull(this.group);
     this._f = {};

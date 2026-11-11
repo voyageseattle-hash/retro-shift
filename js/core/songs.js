@@ -597,6 +597,7 @@ export const COURSE_SONG = {
   relativity: 'paradox',
   popup: 'circuit',
   marblerun: 'helixB',
+  pinball: 'neon',
 };
 
 const STING_MIX = {
