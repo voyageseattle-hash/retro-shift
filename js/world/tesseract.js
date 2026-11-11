@@ -241,7 +241,7 @@ export const TESSERACT = {
   sun: 0,
   noPylons: true,
   floorDrop: 44,
-  fold: FOLD,
+  pose: FOLD, // (game/fold.js; `fold` is DREAM FOLD's crease, world/fold.js)
   dressEnv: tesseractEnv,
   mapLines: EDGES,
   points: MAIN.pts.map((p) => [p.x, p.z, p.h]),

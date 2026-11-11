@@ -1,5 +1,5 @@
 // The fold: a course whose heights change pose by pose (HYPERCUBE, world/tesseract.js). The course's def carries
-// `fold: { T, names, phases, at }`, each phase a function (x, z, y, outer) -> y that says how high a point of the
+// `pose: { T, names, phases, at }`, each phase a function (x, z, y, outer) -> y that says how high a point of the
 // built course sits in that pose (outer: the point is on a branch marked cell: 'outer'). When the leader reaches
 // each of `at` (fractions of the race; with no `at`, each new lap) the course turns to the next pose over T seconds: every road's heights move (so ground(), the rails, the AI and respawns all see the new course), and
 // everything drawn on or beside a road rides with it, as the quake's plates carry their baked lines (game/quake.js).
@@ -25,7 +25,7 @@ export class Fold {
   constructor(race) {
     this.race = race;
     this.on = false;
-    const F = race.def.fold;
+    const F = race.def.pose;
     if (!F || race.tutorial) return;
     this.on = true;
     this.F = F;
