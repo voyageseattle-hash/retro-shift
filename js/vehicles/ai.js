@@ -367,7 +367,9 @@ export class RaceAI {
   wantsBranch(b) {
     // a route that says it's shut to this car right now (DROP TOWER's spring, stretched)
     if (b.shut?.(this.r)) return false;
+    if (b.def?.closed) return false; // (a road that's shut just now: QUARTER TURN's fast lines)
     if (!this.canTakeBranch(b)) return false;
+    if (b.def?.must) return true; // (the road past it is shut: QUARTER TURN's gaps)
     // (TOPPLE RUN: whether a lane is a maze, a wave or flat road right now)
     const keen = this.world.dominoes?.branchChance(b, this.r);
     if (keen != null) return Math.random() < keen;

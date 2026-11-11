@@ -563,6 +563,8 @@ export class TrackWorld {
       const last = inner[inner.length - 1] || S;
       pts.push(...(b.drop ? [] : bendToward(S, tS, first)), ...inner, ...bendToward(E, tE, last).reverse());
       pts.push(E, midB, B, B.clone().addScaledVector(tB, 4));
+      // (or the course says exactly where it runs: a road laid flush along the main one and straight on where it bends)
+      if (b.pts) pts.splice(0, pts.length, ...b.pts.map(([x, z]) => new THREE.Vector3(x, A.y, z)));
       const path = new Path(`b${k}`, pts, false, hw, { bankFactor: 3, mainFrom: b.from, mainTo: b.to, profile: b.profile });
       path.mask.fill(b.mask ?? M.ALL);
       path.def = b;
@@ -694,6 +696,7 @@ export class TrackWorld {
   }
 
   buildRoads() {
+    if (this.def.noRoads) return; // (a course that draws its own road: QUARTER TURN's is printed on its cube)
     const L = this.layers;
     const v = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
     for (const path of this.paths) {

@@ -504,6 +504,8 @@ export class Racer {
     // a curved course (curved.js): the same pose, carried from the flat world into the drawn one
     const curved = this.session?.world?.curved ? this.session.world : null;
     if (curved) curveRacer(this, curved);
+    // (and a course's moving machinery may carry it on from there: QUARTER TURN's turning layers)
+    if (curved) this.session?.live?.pose?.(this);
     const body = this.model.body;
     const rollT = this.grounded ? clamp(-this.yawRate * this.speed * 0.006, -0.14, 0.14) : 0;
     this.bodyRoll = damp(this.bodyRoll, rollT, 8, dt || 0.016);
