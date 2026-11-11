@@ -1175,7 +1175,7 @@ export class Race {
       if (r.ai) this.formAI(r);
       // wedged against something: put rivals back on the road (the player has RESET)
       // (not a craft waiting on a platform for its road to line up)
-      if (this.state === 'race' && !r.finished && Math.abs(r.speed) < 3 && !w.rig?.parked(r)) {
+      if ((this.state === 'race' || this.state === 'finished') && !r.finished && Math.abs(r.speed) < 3 && !w.rig?.parked(r)) {
         r.stuckT = (r.stuckT || 0) + dt;
         if (r.stuckT > (r.isPlayer ? 6 : 2.5)) {
           r.stuckT = 0;
@@ -1183,6 +1183,23 @@ export class Race {
           continue;
         }
       } else r.stuckT = 0;
+      // a rival that's made no headway round the lap for 12 s (pinned against a moving piece or a rail while still
+      // reading as moving, so the check above never fires; or put back each time on the spot it sticks on) is put
+      // back on the road a little further round, so it always finishes
+      if (r.ai && !r.isPlayer && (this.state === 'race' || this.state === 'finished') && !r.finished && !w.rig?.parked(r) && !r.offLoop) {
+        if (r.prog > (r.headway ?? -Infinity) + 0.004) {
+          r.headway = r.prog;
+          r.headwayT = 0;
+        } else if ((r.headwayT = (r.headwayT || 0) + dt) > 12) {
+          r.headwayT = 0;
+          const k = 0.015;
+          r.lastU = (r.lastU + k) % 1;
+          r.prog += k;
+          r.headway = r.prog;
+          this.onFell(r);
+          continue;
+        }
+      }
       this.tower?.step(r, dt);
       if (r.respawnT > 0) continue;
       this.features(r, dt);
