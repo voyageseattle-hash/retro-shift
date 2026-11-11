@@ -1377,6 +1377,8 @@ export class Race {
         const d = _v.length();
         const min = A.radius + B.radius;
         if (d > min || d < 1e-4) continue;
+        // LENS TAG: a touch can pass the tag, and IT phases through a hunter who's only seeing its shimmer
+        if (this.tag?.contact(A, B)) continue;
         _v.multiplyScalar(1 / d);
         // heavier cars shove lighter ones (GREAT WEDGE weighs as much as two wedges)
         if (A.puppet && B.puppet) continue;

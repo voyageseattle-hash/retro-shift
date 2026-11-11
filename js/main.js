@@ -23,6 +23,8 @@ import { tourMenu, legMenu, tourHud, tourResults } from './ui/tourui.js';
 import { tourEvent, legEvents } from './game/tour.js';
 import { SCHOOL } from './game/school.js';
 import { applyAccess } from './core/access.js';
+import { LensTag, ARENA } from './game/tag.js';
+import { tagMenu, tagHud, tagResults } from './ui/tagui.js';
 
 class App {
   constructor() {
@@ -165,6 +167,7 @@ class App {
     const c = this.ui.choice;
     // (RESTART from the pause menu lands here: an event restarts itself)
     if (c.mode === 'event' && this.eventDef) return this.startEvent(this.eventDef);
+    if (c.mode === 'tag') return this.startTag();
     if (c.mode !== 'gp') this.gp = null;
     if (this.gp) c.track = this.gp.cup.tracks[this.gp.round];
     const def = trackById(c.track);
@@ -232,6 +235,46 @@ class App {
     this.paused = false;
     this.resultsShown = false;
     document.body.classList.add('racing');
+  }
+  // LENS TAG (game/tag.js): a battle in the PRISM BOWL, alone against five CPUs or two players split-screen
+  // against four.
+  startTag() {
+    this.audio.init();
+    this.gp = null;
+    this.eventDef = null;
+    if (this.race) this.race.dispose();
+    this.audio.stopEngines();
+    this.audio.duckMusic(false);
+    this.showAttract(false);
+    this.hideCar();
+    this.recentUnlocks = [];
+    this.ui.clear();
+    const c = this.ui.choice;
+    const split = !!c.tagSplit;
+    this.input.twoPlayer = split;
+    this.race = new Race(this, ARENA, {
+      kind: 'tag',
+      split,
+      car: c.car,
+      livery: liveryFor(c.car),
+      car2: c.car2,
+      livery2: split ? liveryFor(c.car2) : null,
+      rivals: split ? 4 : 5,
+      difficulty: this.ui.settings.difficulty,
+      assist: this.ui.settings.assist !== false,
+      autopilot: this.autopilot,
+      laps: 99,
+    });
+    new LensTag(this.race);
+    this.race.setAspect(this.renderer.width / this.renderer.height);
+    applyAccess(this.race);
+    this.ui.buildHud(this.race);
+    this.paused = false;
+    this.resultsShown = false;
+    document.body.classList.add('racing');
+  }
+  openTag() {
+    tagMenu(this.ui);
   }
   // Leaving an event goes back to its list (SHIFT SCHOOL, or the SHIFT TOUR leg), not the title.
   quitEvent() {
@@ -301,7 +344,8 @@ class App {
   // ------------------------------------------------------------------ online
   startOnline(cfg, mySlot, isHost) {
     this.audio.init();
-    const def = trackById(cfg.course);
+    const tag = cfg.mode === 'tag';
+    const def = tag ? ARENA : trackById(cfg.course);
     const me = cfg.slots.find((s) => s.slot === mySlot);
     if (this.race) this.race.dispose();
     this.audio.stopEngines();
@@ -310,9 +354,10 @@ class App {
     this.hideCar();
     this.recentUnlocks = [];
     this.ui.clear();
-    this.ui.choice.track = def.id;
+    if (!tag) this.ui.choice.track = def.id;
     this.input.twoPlayer = false;
-    this.race = new Race(this, def, { kind: 'online', car: me?.car, livery: me?.livery, online: { slots: cfg.slots, mySlot, isHost } });
+    this.race = new Race(this, def, { kind: 'online', car: me?.car, livery: me?.livery, online: { slots: cfg.slots, mySlot, isHost }, laps: tag ? 99 : undefined });
+    if (tag) new LensTag(this.race);
     this.race.setAspect(this.renderer.width / this.renderer.height);
     applyAccess(this.race);
     this.ui.buildHud(this.race);
@@ -383,12 +428,14 @@ class App {
         this.net.tick(dt, this.race);
         this.ui.updateHud(this.race, dt);
         if (this.race.event) (this.race.event.def.tour ? tourHud : eventHud)(this.ui, this.race);
+        if (this.race.tag) tagHud(this.ui, this.race);
         if (this.race.state === 'finished') {
           this.race.finishT = (this.race.finishT || 0) + dt;
           if (this.race.finishT > 2.5 && !this.resultsShown) {
             this.resultsShown = true;
             if (this.race.tutorial) this.ui.tutorialDone();
             else if (this.race.event) (this.race.event.def.tour ? tourResults : eventResults)(this.ui, this.race);
+            else if (this.race.tag) tagResults(this.ui, this.race);
             else this.ui.results(this.race);
           }
           if (this.resultsShown) this.ui.update();

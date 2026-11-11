@@ -175,6 +175,8 @@ export class RaceAI {
       if (r.session?.quake?.threat(r, m)) s += 6;
       // the police chase is only in BOTH: worth a lens to get through it
       if (r.session?.police?.threat(r, m)) s += 5;
+      // LENS TAG (game/tag.js): the lens this CPU wants for the hunt
+      if (r.session?.tag) s += r.session.tag.lensBias(r, m);
       return s;
     };
     this.think -= dt;
@@ -237,6 +239,8 @@ export class RaceAI {
       }
       if (r.angryT <= 0) r.angryAt = null;
     }
+    // LENS TAG: line up on IT, or away from whoever's after it
+    r.session?.tag?.steerAI(r, this, P, pi);
 
     // ---- steer at a point down the road
     const aheadN = Math.ceil((7 + speed * 0.45) / P.ds);
@@ -274,6 +278,7 @@ export class RaceAI {
     ctl.throttle = lat > limit ? 0.35 : 1;
     ctl.brake = lat > limit * 1.45 && r.speed > 22 ? 0.5 : 0;
     ctl.drift = false;
+    if (this.tagThrottle != null) ctl.throttle = Math.min(ctl.throttle, this.tagThrottle);
     // traffic or a cruiser dead ahead in our lens and slower: ease off (the hazard says how hard)
     const hz = r.session?.traffic?.brakeFor(r, this.wantMode) || r.session?.police?.brakeFor(r, this.wantMode);
     if (hz) {

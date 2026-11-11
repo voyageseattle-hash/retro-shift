@@ -19,6 +19,7 @@ import { loadGhost } from '../game/ghost.js';
 import { playerName, setPlayerName, courseName, MAX_PLAYERS } from '../net/online.js';
 import { PREMISE, CUP_STORY, SECRET_SCENES, DRIVERS } from '../game/story.js';
 import { accessScreen } from './access.js';
+import { ARENA } from '../game/tag.js';
 
 export const el = (tag, cls, html) => {
   const e = document.createElement(tag);
@@ -121,6 +122,7 @@ export class UI {
       { label: 'TIME TRIAL', action: () => ((this.choice.mode = 'trial'), this.app.audio.announce('timetrial'), this.trackSelect()) },
       { label: 'MONO RUN', action: () => ((this.choice.mode = 'mono'), this.app.audio.announce('monorun'), this.trackSelect()) },
       { label: '2 PLAYER', action: () => ((this.choice.mode = 'split'), this.app.audio.announce('twoplayer'), this.trackSelect()) },
+      { label: 'LENS TAG', action: () => this.app.openTag() },
       { label: 'ONLINE', action: () => (this.app.audio.announce('online'), this.onlineMenu()) },
       { label: 'GARAGE', action: () => this.garage() },
       { label: 'FIRST RUN', action: () => this.app.startTutorial() },
@@ -278,7 +280,7 @@ export class UI {
   carSelect(who = 1) {
     this.clear();
     const s = el('div', 'screen cars');
-    const split = this.choice.mode === 'split';
+    const split = this.choice.mode === 'split' || (this.choice.mode === 'tag' && !!this.choice.tagSplit);
     s.innerHTML = `<h2>${split ? `PLAYER ${who} · ` : ''}SELECT A CRAFT</h2>${split ? `<div class="sub">${who === 1 ? 'Player 1 drives with W A S D, shifts with Q · F · E, drifts with SPACE.' : 'Player 2 drives with the arrows, shifts with , . /, drifts with RIGHT SHIFT. Gamepads work too.'}</div>` : ''}<div class="stage-gap"></div>`;
     const grid = el('div', 'grid cars-grid');
     const items = CARS.map((car) => {
@@ -309,7 +311,7 @@ export class UI {
     this.root.appendChild(s);
     const cur = who === 2 ? this.choice.car2 || storage.get('rs.lastCar2', 'scanline') : this.choice.car;
     const focus = Math.max(0, CARS.findIndex((c) => c.id === cur));
-    this.menu = new Menu(this.app, grid, items, { cols: 4, focus, onBack: () => (who === 2 ? this.carSelect(1) : this.choice.mode === 'online' ? this.lobby() : this.choice.mode === 'gp' ? this.cupSelect() : this.trackSelect()) });
+    this.menu = new Menu(this.app, grid, items, { cols: 4, focus, onBack: () => (who === 2 ? this.carSelect(1) : this.choice.mode === 'tag' ? this.app.openTag() : this.choice.mode === 'online' ? this.lobby() : this.choice.mode === 'gp' ? this.cupSelect() : this.trackSelect()) });
     this.menu.nodes.forEach((n) => grid.appendChild(n));
   }
 
@@ -401,16 +403,19 @@ export class UI {
     if (!net.active) return this.onlineMenu();
     const s = el('div', 'screen lobby');
     const host = net.isHost;
-    const rows = Array.from({ length: MAX_PLAYERS }, (_, k) => {
+    const tag = net.mode === 'tag';
+    const rows = Array.from({ length: Math.max(net.players.length, tag ? MAX_PLAYERS : 6) }, (_, k) => {
       const p = net.players[k];
       if (!p) return `<tr class="empty"><td>${k + 1}</td><td>AI RIVAL</td><td></td></tr>`;
       const car = CARS.find((c) => c.id === p.car) || CARS[0];
       return `<tr class="${p.slot === net.mySlot ? 'me' : ''}"><td>${k + 1}</td><td>${p.name}${p.slot === 0 ? ' <small>HOST</small>' : ''}</td><td style="color:${hex(car.color)}">${car.name}</td></tr>`;
     }).join('');
     s.innerHTML = `<h2>ROOM <span class="code">${net.code}</span></h2>
-      <div class="sub">${host ? 'Share the code. Friends pick ONLINE, then JOIN A ROOM.' : 'Waiting for the host to start the race.'}</div>
+      <div class="sub">${host ? 'Share the code. Friends pick ONLINE, then JOIN A ROOM.' : `Waiting for the host to start the ${tag ? 'round of LENS TAG' : 'race'}.`}</div>
       <div class="rgrid"><table class="standings lobby-table">${rows}</table>
-      <div class="lobby-course"><span>COURSE</span><b>${courseName(net.course)}</b><canvas width="220" height="130"></canvas></div></div>`;
+      <div class="lobby-course"><span>${tag ? 'LENS TAG · BATTLE' : 'COURSE'}</span><b>${tag ? ARENA.name : courseName(net.course)}</b><canvas width="220" height="130"></canvas></div></div>`;
+    // (LENS TAG plays the PRISM BOWL: the course map isn't its)
+    if (tag) s.querySelector('.lobby-course canvas').style.visibility = 'hidden';
     const cv = s.querySelector('canvas');
     const def = TRACKS.find((t) => t.id === net.course);
     if (def) requestAnimationFrame(() => drawCard(cv, this.preview(def).paths, mapStyle(this.settings), def));
@@ -421,7 +426,13 @@ export class UI {
       net.setCourse(open[(i + d + open.length) % open.length].id);
     };
     const items = [
-      ...(host ? [{ label: 'START RACE', action: () => net.start() }, { label: '◀ COURSE ▶', action: () => cycleCourse(1), cycle: cycleCourse }] : []),
+      ...(host
+        ? [
+            { label: tag ? 'START LENS TAG' : 'START RACE', action: () => net.start() },
+            { label: tag ? '◀ MODE: LENS TAG ▶' : '◀ MODE: RACE ▶', action: () => net.setMode(tag ? 'race' : 'tag'), cycle: () => net.setMode(tag ? 'race' : 'tag') },
+            ...(tag ? [] : [{ label: '◀ COURSE ▶', action: () => cycleCourse(1), cycle: cycleCourse }]),
+          ]
+        : []),
       { label: 'CHANGE CRAFT', action: () => this.carSelect() },
       { label: 'LEAVE ROOM', action: () => (net.close(), this.onlineMenu()) },
     ];
@@ -1195,7 +1206,7 @@ export class UI {
         <p>${race.mono ? 'SWAP flips your lens.' : 'RED is fastest · BLUE grips and drifts · BOTH refills SHIFT'}</p>`;
       if (h.controlsHtml !== html) h.controls.innerHTML = h.controlsHtml = html;
     }
-    if (drawMap) h.map.draw(race.world, race.racers, p.mode, p);
+    if (drawMap) h.map.draw(race.world, race.tag ? race.tag.mapRacers(p) : race.racers, p.mode, p);
   }
 }
 
