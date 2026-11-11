@@ -8,7 +8,7 @@
 // candy gloss. Where each course sits is in SPOTS below.
 
 import * as THREE from '../../vendor/three.js';
-import { M, BOTH } from './shift.js';
+import { M, BOTH, RED, BLUE } from './shift.js';
 
 const TAU = Math.PI * 2;
 export const TOY_YELLOW = 0xffd23a;
@@ -16,16 +16,18 @@ export const TOY_YELLOW = 0xffd23a;
 // Where a course sits. `drop` is how far below the course's own floor the bedroom floor lies, `top` is the pattern
 // on the surface the course stands on, `at` is where that piece of furniture stands in the room (so the walls, the
 // lamp and the cat are in the same places from every course), and `toy` is the little glowing figure the other
-// courses see on it from across the room.
+// courses see on it from across the room. `wall` is the wall the furniture is pushed up against ('x' or 'z', and which
+// end): the course sits right under that wall, so it towers over the road.
 export const SPOTS = {
-  desk: { name: 'the desk', drop: 620, top: 'planks', at: [-900, -700], toy: 'table' }, // FLIPPER ALLEY
+  desk: { name: 'the desk', drop: 620, top: 'planks', at: [-900, -700], toy: 'table', wall: ['x', -1] }, // FLIPPER ALLEY
   rug: { name: 'the rug', drop: 0, top: 'rug', at: [0, 0], toy: 'dominoes' }, // TOPPLE RUN
   floor: { name: 'the floorboards', drop: 0, top: 'planks', at: [650, 780], toy: 'book' }, // PAGE TURNER
-  bed: { name: 'the bed', drop: 380, top: 'quilt', at: [900, -520], toy: 'tiles' }, // SLIDE FIFTEEN
-  bookcase: { name: 'the bookcase', drop: 1150, top: 'planks', at: [-1000, 620], toy: 'tower' }, // DROP TOWER
-  shelf: { name: 'the shelf', drop: 900, top: 'planks', at: [0, -1150], toy: 'cube' }, // QUARTER TURN
+  bed: { name: 'the bed', drop: 380, top: 'quilt', at: [900, -520], toy: 'tiles', wall: ['x', 1] }, // SLIDE FIFTEEN
+  bookcase: { name: 'the bookcase', drop: 1150, top: 'planks', at: [-1000, 620], toy: 'tower', wall: ['x', -1] }, // DROP TOWER
+  shelf: { name: 'the shelf', drop: 900, top: 'planks', at: [0, -1150], toy: 'cube', wall: ['z', -1] }, // QUARTER TURN
 };
-const ROOM = { half: 1500, height: 2300 };
+const ROOM = { half: 1300, height: 2300 };
+const WALL_GAP = 140; // from the edge of the furniture top to the wall behind it
 
 // ------------------------------------------------------------------ line helpers
 // Everything in the room is drawn in two sets of lines, one for each world, so a lens turns the whole room its colour.
@@ -343,8 +345,368 @@ function star(pen, x, y, z, r, rot, w) {
   pen.loop(pts, w);
 }
 
+// ------------------------------------------------------------------ surfaces
+const LAMP_AT = [-1100, -1100];
+// The room as a lit box seen from inside: wallpaper in stripes with a diamond in each, a skirting board, floorboards
+// with grain, the window's moonlight on the floor, the hall light under the door and the lava lamp's glow in its
+// corner. uA and uB are the two worlds' colours and uG the warm one; through a lens all three are the lens's colour.
+function roomShell(R) {
+  const H = ROOM.height;
+  const RH = ROOM.half;
+  const u = { uA: { value: new THREE.Color() }, uB: { value: new THREE.Color() }, uG: { value: new THREE.Color() }, uH: { value: H }, uR: { value: RH }, uLamp: { value: new THREE.Vector2(LAMP_AT[0], LAMP_AT[1]) } };
+  const mat = new THREE.ShaderMaterial({
+    uniforms: u,
+    side: THREE.BackSide,
+    fog: false,
+    vertexShader: `varying vec3 vP; varying vec3 vN;
+      void main() { vP = position; vN = normal; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `varying vec3 vP; varying vec3 vN;
+      uniform vec3 uA; uniform vec3 uB; uniform vec3 uG; uniform float uH; uniform float uR; uniform vec2 uLamp;
+      void main() {
+        vec3 col = vec3(0.0);
+        float y = vP.y + uH * 0.5;
+        if (abs(vN.y) > 0.5) {
+          if (vP.y < 0.0) {
+            // floorboards, running along x
+            float b = vP.z / 150.0;
+            float id = floor(b);
+            float f = fract(b);
+            float seam = 1.0 - smoothstep(0.0, 0.025, min(f, 1.0 - f));
+            float grain = 0.5 + 0.5 * sin(vP.x * 0.045 + sin(vP.x * 0.011 + id * 3.1) * 4.0 + id * 1.7);
+            col = mix(uA, uB, 0.5 + 0.5 * sin(id * 2.4)) * (0.008 + 0.014 * grain) * (1.0 - seam);
+            // moonlight through the window, the hall light under the door, the lava lamp
+            vec2 m = vec2((vP.x + 170.0 - (vP.z + uR) * 0.25) / 350.0, (vP.z + uR) / 1100.0);
+            float moon = (1.0 - smoothstep(0.8, 1.0, abs(m.x))) * smoothstep(0.05, 0.2, m.y) * (1.0 - smoothstep(0.5, 1.0, m.y));
+            moon *= 1.0 - 0.6 * (1.0 - smoothstep(0.0, 0.06, abs(m.x))) ; // the glazing bar's shadow
+            float hall = exp(-length(vec2((uR - vP.x) * 0.5, vP.z - 640.0)) / 260.0);
+            float lamp = exp(-length(vP.xz - uLamp) / 420.0);
+            col += uG * (moon * 0.045 + hall * 0.16) + (uA + uB) * lamp * 0.035;
+          } else {
+            col = (uA + uB) * 0.004 + uG * 0.006;
+          }
+        } else {
+          float u = abs(vN.x) > 0.5 ? vP.z : vP.x;
+          float h = y / uH;
+          float s = u / 150.0;
+          float stripe = mod(floor(s), 2.0);
+          float paper = step(70.0, y) * step(h, 0.78);
+          vec2 q = vec2(fract(s) - 0.5, fract(y / 150.0 + stripe * 0.5) - 0.5);
+          float dia = 1.0 - smoothstep(0.15, 0.19, abs(q.x) + abs(q.y));
+          vec3 pa = mix(uA, uB, stripe);
+          vec3 pb = mix(uB, uA, stripe);
+          col = paper * (pa * (0.016 + 0.014 * stripe) + pb * dia * 0.05);
+          col += (1.0 - step(70.0, y)) * (uA * 0.03 + uG * 0.02); // skirting board
+          col += step(0.78, h) * (uA + uB) * 0.006;
+          float rail = 1.0 - smoothstep(0.0, 14.0, abs(y - uH * 0.78));
+          col += rail * uG * 0.07;
+          // light falls off up the wall, and the lava lamp warms its corner
+          col *= 0.55 + 0.9 * (1.0 - h);
+          float lamp = exp(-length(vec3(vP.x - uLamp.x, (y - 500.0) * 0.6, vP.z - uLamp.y)) / 520.0);
+          col += (uA + uB) * lamp * 0.03;
+          // the window (on the -z wall): moonlit glass
+          if (vP.z < -uR + 1.0) {
+            vec2 w = vec2((vP.x + 170.0) / 350.0, (y - 1325.0) / 425.0);
+            float inside = (1.0 - step(1.0, abs(w.x))) * (1.0 - step(1.0, abs(w.y)));
+            float bar = max(1.0 - smoothstep(0.0, 0.03, abs(w.x)), 1.0 - smoothstep(0.0, 0.025, abs(w.y)));
+            col = mix(col, uG * (0.06 + 0.05 * (0.5 + 0.5 * w.y)) * (1.0 - bar * 0.8), inside);
+            float spill = exp(-max(max(abs(w.x), abs(w.y)) - 1.0, 0.0) * 3.0) * (1.0 - inside);
+            col += uG * spill * 0.03;
+          }
+        }
+        gl_FragColor = vec4(col, 1.0);
+      }`,
+  });
+  const box = new THREE.Mesh(new THREE.BoxGeometry(RH * 2, H + 2, RH * 2), mat);
+  box.position.y = H / 2 - 1;
+  box.frustumCulled = false;
+  box.renderOrder = -5;
+  R.add(box);
+  return u;
+}
+
+// The top the course stands on: a faint grain (boards, quilt diamonds or the rug's rings) that only adds light, and
+// the fairy lights' warm glow lying along its edge.
+function topSurface(G, kind, hx, hz, y) {
+  const u = { uA: { value: new THREE.Color() }, uB: { value: new THREE.Color() }, uG: { value: new THREE.Color() }, uHalf: { value: new THREE.Vector2(hx, hz) }, uKind: { value: kind === 'rug' ? 2 : kind === 'quilt' ? 1 : 0 } };
+  const mat = new THREE.ShaderMaterial({
+    uniforms: u,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    fog: false,
+    vertexShader: `varying vec2 vQ; varying vec3 vW;
+      void main() { vQ = position.xy; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `varying vec2 vQ; varying vec3 vW;
+      uniform vec3 uA; uniform vec3 uB; uniform vec3 uG; uniform vec2 uHalf; uniform float uKind;
+      void main() {
+        vec2 p = vec2(vQ.x, -vQ.y);
+        vec3 col;
+        if (uKind < 0.5) {
+          float b = p.y / 48.0;
+          float id = floor(b);
+          float grain = 0.5 + 0.5 * sin(p.x * 0.12 + sin(p.x * 0.031 + id * 3.1) * 3.0 + id * 1.7);
+          col = mix(uA, uB, 0.5 + 0.5 * sin(id * 2.4)) * (0.006 + 0.02 * grain);
+        } else if (uKind < 1.5) {
+          vec2 d = vec2(p.x + p.y, p.x - p.y) / 60.0;
+          float ch = mod(floor(d.x) + floor(d.y), 2.0);
+          vec2 f = abs(fract(d) - 0.5);
+          float puff = 1.0 - smoothstep(0.1, 0.5, max(f.x, f.y));
+          col = mix(uA, uB, ch) * (0.008 + 0.03 * puff);
+        } else {
+          vec2 e = abs(p) / uHalf;
+          float r = max(length(e), max(e.x, e.y)) * 14.0;
+          float ring = mod(floor(r), 2.0);
+          float tuft = 0.6 + 0.4 * sin(fract(r) * 3.14159);
+          col = mix(uA, uB, ring) * 0.028 * tuft;
+        }
+        // the lights round the edge, a pool under each bulb
+        float de = min(uHalf.x - abs(p.x), uHalf.y - abs(p.y));
+        float along = (uHalf.x - abs(p.x) < uHalf.y - abs(p.y)) ? p.y : p.x;
+        float pool = exp(-max(de - 12.0, 0.0) / 46.0) * (0.75 + 0.25 * cos(along * 0.45));
+        col += uG * pool * 0.085;
+        float far = exp(-length(cameraPosition - vW) / 700.0);
+        gl_FragColor = vec4(col * (0.25 + 0.75 * far), 1.0);
+      }`,
+  });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(hx * 2, hz * 2), mat);
+  m.rotation.x = -Math.PI / 2;
+  m.position.y = y;
+  m.renderOrder = -4;
+  G.add(m);
+  return u;
+}
+
+// ------------------------------------------------------------------ warm light
+let bulbTex = null;
+function bulbTexture() {
+  if (bulbTex) return bulbTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)');
+  gr.addColorStop(0.18, 'rgba(255,255,255,0.85)');
+  gr.addColorStop(0.45, 'rgba(255,255,255,0.22)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr;
+  g.fillRect(0, 0, 64, 64);
+  return (bulbTex = new THREE.CanvasTexture(c));
+}
+
+// Fairy lights: a string of warm bulbs hung in swags between coloured pencils stood on end round the edge of the top.
+// The bulbs are the room's one warm colour (toy yellow); through a lens they go that lens's colour with the rest.
+function fairyLights(G, pen, glow, hx, hz, y) {
+  const POST = 54;
+  const inx = hx - 14;
+  const inz = hz - 14;
+  const corners = [[-inx, -inz], [inx, -inz], [inx, inz], [-inx, inz]];
+  const posts = [];
+  for (let c = 0; c < 4; c++) {
+    const [ax, az] = corners[c];
+    const [bx, bz] = corners[(c + 1) % 4];
+    const n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / 120));
+    for (let i = 0; i < n; i++) posts.push([ax + ((bx - ax) * i) / n, az + ((bz - az) * i) / n]);
+  }
+  const bulbs = [];
+  const wire = [];
+  posts.forEach(([px, pz], i) => {
+    // the pencil: six sides, a cone, a point
+    const r = 2.6;
+    const hex = [];
+    for (let k = 0; k < 6; k++) hex.push([px + Math.cos((k / 6) * TAU) * r, pz + Math.sin((k / 6) * TAU) * r]);
+    const w = i % 2;
+    for (let k = 0; k < 6; k++) {
+      const [x0, z0] = hex[k];
+      const [x1, z1] = hex[(k + 1) % 6];
+      if (k % 2 === 0) pen.seg(x0, y, z0, x0, y + POST - 8, z0, w);
+      pen.seg(x0, y + POST - 8, z0, x1, y + POST - 8, z1, w);
+      pen.seg(x0, y, z0, x1, y, z1, w);
+      pen.seg(x0, y + POST - 8, z0, px, y + POST, pz, 1 - w);
+    }
+    // the swag to the next pencil
+    const [qx, qz] = posts[(i + 1) % posts.length];
+    const len = Math.hypot(qx - px, qz - pz);
+    const nb = Math.max(4, Math.round(len / 9));
+    let last = [px, y + POST, pz];
+    for (let b = 1; b <= nb; b++) {
+      const f = b / nb;
+      const p = [px + (qx - px) * f, y + POST - Math.sin(f * Math.PI) * Math.min(20, len * 0.16), pz + (qz - pz) * f];
+      wire.push(...last, ...p);
+      last = p;
+      if (b < nb) bulbs.push(p[0], p[1] - 1.2, p[2]);
+    }
+  });
+  const wg = new THREE.BufferGeometry();
+  wg.setAttribute('position', new THREE.Float32BufferAttribute(wire, 3));
+  const wires = new THREE.LineSegments(wg, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, depthWrite: false }));
+  wires.frustumCulled = false;
+  G.add(wires);
+  const bg = new THREE.BufferGeometry();
+  bg.setAttribute('position', new THREE.Float32BufferAttribute(bulbs, 3));
+  const mat = new THREE.PointsMaterial({ color: 0xffffff, map: bulbTexture(), size: 9, sizeAttenuation: true, transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending });
+  const pts = new THREE.Points(bg, mat);
+  pts.frustumCulled = false;
+  G.add(pts);
+  return {
+    twinkle(t) {
+      mat.color.copy(glow.color);
+      wires.material.color.copy(glow.color);
+      mat.opacity = 0.9 + 0.08 * Math.sin(t * 3.1);
+    },
+  };
+}
+
+// A night light plugged in low on the wall behind the course: a glowing star as big as a bus.
+function nightLight(R, glow, wall, at, drop, half) {
+  const sh = new THREE.Shape();
+  for (let i = 0; i < 10; i++) {
+    const a = Math.PI / 2 + (i / 10) * TAU;
+    const r = i % 2 ? 21 : 50;
+    if (i) sh.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    else sh.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  const g = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, fog: false, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
+  mat.color = glow.color; // (shared: it turns with the glow stars)
+  g.add(new THREE.Mesh(new THREE.ShapeGeometry(sh), mat));
+  const halo = new THREE.Mesh(new THREE.PlaneGeometry(320, 320), new THREE.MeshBasicMaterial({ map: bulbTexture(), transparent: true, opacity: 0.08, fog: false, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+  halo.material.color = glow.color;
+  g.add(halo);
+  const along = half * 0.45;
+  const h = drop + 170;
+  if (wall[0] === 'x') {
+    g.position.set(wall[1] * (ROOM.half - 6), h, at[1] + along);
+    g.rotation.y = Math.PI / 2;
+  } else g.position.set(at[0] + along, h, wall[1] * (ROOM.half - 6));
+  R.add(g);
+  return { material: mat };
+}
+
+// ------------------------------------------------------------------ toys left lying about
+// Just off the course, on the margin of the top: alphabet blocks (some stacked), marbles and crayons, each many times
+// the size of the car. Dark solid bodies so they have weight, edges in the two worlds' colours.
+const GLYPHS = {
+  A: [[[-0.3, -0.34], [0, 0.34], [0.3, -0.34]], [[-0.17, -0.05], [0.17, -0.05]]],
+  T: [[[-0.3, 0.34], [0.3, 0.34]], [[0, 0.34], [0, -0.34]]],
+  X: [[[-0.3, -0.34], [0.3, 0.34]], [[-0.3, 0.34], [0.3, -0.34]]],
+  Z: [[[-0.3, 0.34], [0.3, 0.34], [-0.3, -0.34], [0.3, -0.34]]],
+  O: [[[0, 0.36], [0.3, 0], [0, -0.36], [-0.3, 0], [0, 0.36]]],
+  S: [[[0.3, 0.34], [-0.3, 0.34], [-0.3, 0], [0.3, 0], [0.3, -0.34], [-0.3, -0.34]]],
+  star: [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map((i) => [Math.sin((i / 10) * TAU) * (i % 2 ? 0.15 : 0.36), Math.cos((i / 10) * TAU) * (i % 2 ? 0.15 : 0.36)])],
+};
+function props(G, pen, rnd, hx, hz, y) {
+  const fill = [];
+  const quad = (a, b, c, d) => fill.push(...a, ...b, ...c, ...a, ...c, ...d);
+  const names = Object.keys(GLYPHS);
+  const block = (cx, cy, cz, s, yaw, w) => {
+    const co = Math.cos(yaw) * s * 0.5;
+    const si = Math.sin(yaw) * s * 0.5;
+    // corners of the square footprint
+    const c = [[cx - co + si, cz - si - co], [cx + co + si, cz + si - co], [cx + co - si, cz + si + co], [cx - co - si, cz - si + co]];
+    const lo = c.map(([x, z]) => [x, cy, z]);
+    const hi = c.map(([x, z]) => [x, cy + s, z]);
+    pen.loop(lo, w);
+    pen.loop(hi, w);
+    for (let k = 0; k < 4; k++) {
+      pen.seg(...lo[k], ...hi[k], w);
+      const n = (k + 1) % 4;
+      quad(lo[k], lo[n], hi[n], hi[k]);
+      // an inset frame and a letter on each side
+      const ux = (lo[n][0] - lo[k][0]) / s;
+      const uz = (lo[n][2] - lo[k][2]) / s;
+      const mx = (lo[k][0] + lo[n][0]) / 2 + uz * 0.08;
+      const mz = (lo[k][2] + lo[n][2]) / 2 - ux * 0.08;
+      const at = ([gx, gy]) => [mx + ux * gx * s, cy + s * (0.5 + gy), mz + uz * gx * s];
+      pen.loop([[-0.42, -0.42], [0.42, -0.42], [0.42, 0.42], [-0.42, 0.42]].map(at), 1 - w);
+      for (const stroke of GLYPHS[names[Math.floor(rnd() * names.length)]]) pen.path(stroke.map(at), 1 - w);
+    }
+    quad(hi[0], hi[1], hi[2], hi[3]);
+  };
+  const marble = (cx, cz, r, w) => {
+    for (let k = 0; k < 3; k++) {
+      const pts = [];
+      const a0 = (k / 3) * Math.PI + rnd();
+      for (let i = 0; i < 20; i++) {
+        const a = (i / 20) * TAU;
+        pts.push([cx + Math.cos(a) * Math.cos(a0) * r, y + r + Math.sin(a) * r, cz + Math.cos(a) * Math.sin(a0) * r]);
+      }
+      pen.loop(pts, (w + k) % 2);
+    }
+    pen.ring(cx, y + r, cz, r, 1, w, 20);
+    // the swirl inside
+    const sw = [];
+    for (let i = 0; i <= 16; i++) sw.push([cx + Math.cos(i * 0.6) * r * 0.45 * (1 - i / 20), y + r * (0.3 + (1.4 * i) / 16), cz + Math.sin(i * 0.6) * r * 0.45 * (1 - i / 20)]);
+    pen.path(sw, 1 - w);
+  };
+  const crayon = (cx, cz, len, yaw, w) => {
+    const r = 3.4;
+    const dx = Math.cos(yaw);
+    const dz = Math.sin(yaw);
+    const ring = (f, rr) => {
+      const pts = [];
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * TAU;
+        const side = Math.cos(a) * rr;
+        pts.push([cx + dx * f * len - dz * side, y + r + Math.sin(a) * rr, cz + dz * f * len + dx * side]);
+      }
+      return pts;
+    };
+    const a = ring(-0.5, r);
+    const b = ring(0.36, r);
+    const tip = [cx + dx * 0.5 * len, y + r, cz + dz * 0.5 * len];
+    pen.loop(a, w);
+    pen.loop(b, w);
+    pen.loop(ring(-0.25, r * 1.03), 1 - w); // the paper wrapper
+    pen.loop(ring(0.2, r * 1.03), 1 - w);
+    for (let k = 0; k < 6; k++) {
+      pen.seg(...a[k], ...b[k], w);
+      pen.seg(...b[k], ...tip, 1 - w);
+      quad(a[k], a[(k + 1) % 6], b[(k + 1) % 6], b[k]);
+    }
+  };
+  // walk round the margin, a toy every so often, in the band between the course and the pencils
+  const ex = hx - 110;
+  const ez = hz - 110;
+  const per = 4 * (ex + ez) + 8 * 60;
+  let n = 0;
+  for (let d = rnd() * 40; d < per; d += 46 + rnd() * 70, n++) {
+    // a point on the rounded outline 60 outside the course's extent, then jittered in and out
+    let u = d;
+    const off = 34 + rnd() * 52;
+    let x;
+    let z;
+    const sides = [2 * ex + 120, 2 * ez + 120, 2 * ex + 120, 2 * ez + 120];
+    let sdx = 0;
+    while (u > sides[sdx] && sdx < 3) u -= sides[sdx++];
+    const f = u / sides[sdx] - 0.5;
+    if (sdx === 0) [x, z] = [f * 2 * (ex + off), -(ez + off)];
+    else if (sdx === 1) [x, z] = [ex + off, f * 2 * (ez + off)];
+    else if (sdx === 2) [x, z] = [-f * 2 * (ex + off), ez + off];
+    else [x, z] = [-(ex + off), -f * 2 * (ez + off)];
+    const pick = rnd();
+    const w = n % 2;
+    if (pick < 0.55) {
+      const s = 15 + rnd() * 11;
+      const yaw = rnd() * TAU;
+      block(x, y, z, s, yaw, w);
+      if (rnd() < 0.45) {
+        const s2 = s * (0.7 + rnd() * 0.2);
+        block(x + (rnd() - 0.5) * 3, y + s, z + (rnd() - 0.5) * 3, s2, yaw + 0.3 + rnd() * 0.8, 1 - w);
+        if (rnd() < 0.35) block(x, y + s + s2, z, s2 * 0.8, yaw + rnd() * 1.5, w);
+      }
+    } else if (pick < 0.78) marble(x, z, 5 + rnd() * 5, w);
+    else crayon(x, z, 40 + rnd() * 24, rnd() * TAU, w);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(fill, 3));
+  const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x06030b, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
+  mesh.frustumCulled = false;
+  G.add(mesh);
+}
+
 // ------------------------------------------------------------------ the hook
-// dressEnv for a TOYBOX course: `spot` is a key of SPOTS. Options: gloss (false to leave the road finish alone).
+// dressEnv for a TOYBOX course: `spot` is a key of SPOTS. Options, each false to leave that part out: gloss (the road
+// finish), lights (the fairy lights and the night light), props (the toys lying about the margin).
 export function toyboxEnv(spot = 'desk', opts = {}) {
   return (env, world) => {
     const S = SPOTS[spot] || SPOTS.desk;
@@ -393,6 +755,11 @@ export function toyboxEnv(spot = 'desk', opts = {}) {
     const k = scale;
     const slide = (a, h) => (a ? a * Math.min(1, Math.max(0, (ROOM.half * k - h - 250) / (Math.abs(a) * k))) : 0);
     const at = [slide(S.at[0], hx), slide(S.at[1], hz)];
+    // furniture stands against a wall: push the course's spot out until the wall is just behind its edge
+    if (S.wall) {
+      const ax = S.wall[0] === 'x' ? 0 : 1;
+      at[ax] = S.wall[1] * (ROOM.half - ((ax ? hz : hx) + WALL_GAP) / k);
+    }
     const R = new THREE.Group();
     R.position.set(-at[0] * k, fy, -at[1] * k);
     R.scale.setScalar(k);
@@ -409,6 +776,12 @@ export function toyboxEnv(spot = 'desk', opts = {}) {
     }
     floorPen.add(R, env.gridMat, env.gridMatB);
     far.add(R, env.mtnMat, env.mtnMatB);
+
+    // the room has surfaces, not only edges: papered walls, floorboards, a ceiling, lit by what glows in the room
+    const shell = roomShell(R);
+    if (plane) plane.visible = false;
+    // the top the course stands on, with the warm light of the fairy lights pooling round its edge
+    const top = topSurface(G, S.top, hx, hz, y + 0.02);
 
     // glow stars stuck to the ceiling, and a crescent moon in the window: toy yellow, or the lens's colour
     const glow = new THREE.LineBasicMaterial({ color: TOY_YELLOW, fog: false, transparent: true, opacity: 0.9, depthWrite: false });
@@ -429,9 +802,10 @@ export function toyboxEnv(spot = 'desk', opts = {}) {
     sp.add(R, glow, glow);
 
     const onBed = spot !== 'bed' && clear(SPOTS.bed.at[0], SPOTS.bed.at[1]);
-    const kitty = onBed ? cat(R, env.mtnMat, env.mtnMatB, 1060, SPOTS.bed.drop + 2, -470, 0.5) : cat(R, env.mtnMat, env.mtnMatB, 1150, 0, 1050, 0.9); // on the foot of the bed, or on the floor by the door
-    const lamp = lavaLamp(R, env.mtnMat, env.mtnMatB, -1250, 0, -1250); // on the floor in the corner
+    const kitty = onBed ? cat(R, env.mtnMat, env.mtnMatB, 1060, SPOTS.bed.drop + 2, -470, 0.5) : cat(R, env.mtnMat, env.mtnMatB, 1000, 0, 950, 0.9); // on the foot of the bed, or on the floor by the door
+    const lamp = lavaLamp(R, env.mtnMat, env.mtnMatB, LAMP_AT[0], 0, LAMP_AT[1]); // on the floor in the corner
 
+    const near2 = new Pen();
     // dust in the lamplight: it hangs in the air round the course and drifts
     const dp = [];
     for (let k = 0; k < 420; k++) dp.push((rnd() * 2 - 1) * (hx + 200), y + 4 + rnd() * 260, (rnd() * 2 - 1) * (hz + 200));
@@ -440,6 +814,13 @@ export function toyboxEnv(spot = 'desk', opts = {}) {
     const dust = new THREE.Points(dg, new THREE.PointsMaterial({ color: TOY_YELLOW, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
     dust.frustumCulled = false;
     G.add(dust);
+
+    // fairy lights on pencil posts round the edge of the top, and toys left lying about just off the course
+    const lights = opts.lights === false ? null : fairyLights(G, near2, glow, hx, hz, y);
+    if (opts.props !== false) props(G, near2, rnd, hx, hz, y);
+    near2.add(G, env.gridMat, env.gridMatB);
+    // a night light plugged in low on the wall behind the course
+    const night = S.wall && opts.lights !== false ? nightLight(R, glow, S.wall, at, S.drop, (S.wall[0] === 'x' ? hz : hx) / k) : null;
 
     if (opts.gloss !== false) candyGloss(world);
 
@@ -450,6 +831,14 @@ export function toyboxEnv(spot = 'desk', opts = {}) {
       c.copy(env.mode === BOTH ? yellow : env.tint.grid);
       glow.color.lerp(c, 1 - Math.exp(-6 * dt));
       dust.material.color.copy(glow.color);
+      shell.uA.value.copy(env.tint.grid);
+      shell.uB.value.copy(env.tint.gridB);
+      shell.uG.value.copy(glow.color);
+      top.uA.value.copy(env.tint.grid);
+      top.uB.value.copy(env.tint.gridB);
+      top.uG.value.copy(glow.color);
+      if (lights) lights.twinkle(t);
+      if (night) night.material.opacity = 0.45 + 0.06 * Math.sin(t * 2.3);
       dust.position.set(Math.sin(t * 0.07) * 14, Math.sin(t * 0.11) * 6, Math.cos(t * 0.05) * 14);
       // the cat breathes, and its tail sweeps slowly across the floor
       kitty.body.scale.y = kitty.body.scale.x * (1 + Math.sin(t * 0.9) * 0.025);
@@ -468,62 +857,104 @@ export function toyboxEnv(spot = 'desk', opts = {}) {
 
 // ------------------------------------------------------------------ the road's finish
 // Candy gloss, the TOYBOX CUP's finish (SIGNAL is phosphor, STATIC is static grain, PARADOX is iridescent): the road
-// is wet-look toy plastic. A hard bright highlight from the lamp slides along it as you drive, a softer sheen comes
-// up at glancing angles, and a fine metal flake in the plastic glints as each fleck catches the light. With both
-// worlds open the gloss is warm (toy yellow into white); through a lens it's that lens's colour only.
-const GLOSS = { uCgTint: { value: new THREE.Color(1, 1, 1) }, uCgBoth: { value: 1 }, uCgK: { value: 1 }, uCgL: { value: new THREE.Vector3(-0.5, 0.62, -0.6).normalize() } };
+// is a tray of boiled sweets set in toy plastic. Square candy pillows, cherry, lemon and blueberry in diagonal rows,
+// each one domed so it catches the lamp on its own shoulder, with dark grout between; over the lot a hard wet
+// highlight from the lamp that slides along as you drive, a sheen at glancing angles, and metal flake that glints.
+// With both worlds open it is the three sweets and a warm highlight. Through a lens (and on a road that belongs to
+// one world) the sweets are three strengths of that one colour, so nothing of the other world is left in it.
+const CG_L = { value: new THREE.Vector3(-0.5, 0.62, -0.6).normalize() };
+const CG_K = { value: 1 }; // 0 drops the pattern (a course, or LOW graphics, can turn it down)
+const CG_RED = new THREE.Color(1, 0.2, 0.28);
+const CG_BLUE = new THREE.Color(0.18, 0.52, 1);
+export const CANDY = { uCgK: CG_K, uCgL: CG_L };
+function patchCandy(mat, u) {
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, r) => {
+    prev?.(sh, r);
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vCgP;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvCgP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vCgP;\nuniform vec3 uCgTint;\nuniform float uCgMono;\nuniform float uCgK;\nuniform vec3 uCgL;')
+      .replace(
+        '#include <opaque_fragment>',
+        `#include <opaque_fragment>
+        {
+          vec3 cv = cameraPosition - vCgP;
+          float cd = length(cv);
+          cv /= max(cd, 0.001);
+          float ccos = clamp(abs(cv.y), 0.0, 1.0);
+          float glance = pow(1.0 - ccos, 1.5);
+          // the tray of sweets: square pillows 2.5 across, every other row half a sweet along
+          vec2 cq = vCgP.xz / 2.5;
+          float crow = floor(cq.y);
+          cq.x += mod(crow, 2.0) * 0.5;
+          vec2 ci = floor(cq);
+          vec2 cf = fract(cq) - 0.5;
+          // how much of the detail survives at this distance (far off, a sweet is smaller than a pixel)
+          float caa = clamp(1.2 - max(fwidth(cq.x), fwidth(cq.y)) * 2.2, 0.0, 1.0);
+          // a rounded square: 0 in the grout, 1 on the sweet
+          vec2 cb = abs(cf);
+          float cedge = max(cb.x, cb.y);
+          float cround = length(max(cb - 0.3, 0.0));
+          float sweet = (1.0 - smoothstep(0.13, 0.19, cround)) * (1.0 - smoothstep(0.43, 0.47, cedge));
+          // each sweet is domed: its normal leans out toward its edges
+          float lean = smoothstep(0.12, 0.46, cedge);
+          vec3 cn = normalize(vec3(cf.x * 2.6 * lean, 1.0, cf.y * 2.6 * lean));
+          vec3 crf = reflect(-cv, cn);
+          float cl = max(dot(crf, uCgL), 0.0);
+          float glint = (pow(cl, 40.0) + pow(cl, 8.0) * 0.12) * sweet;
+          // which sweet: cherry, lemon, blueberry in diagonal rows
+          float cs = mod(ci.x + crow * 2.0, 3.0);
+          float step3 = cs < 0.5 ? 1.0 : (cs < 1.5 ? 0.62 : 0.34);
+          vec3 both = cs < 0.5 ? vec3(1.0, 0.16, 0.3) : (cs < 1.5 ? vec3(1.0, 0.74, 0.12) : vec3(0.14, 0.5, 1.0));
+          vec3 mono = uCgTint * step3;
+          vec3 body = mix(both, mono, uCgMono);
+          // light comes up through the sweet: brighter at its middle and where you look along it
+          float dome = 1.0 - smoothstep(0.05, 0.47, cedge) * 0.8;
+          float through = (0.05 + 0.26 * glance) * dome * sweet;
+          through = mix((0.05 + 0.26 * glance) * 0.5, through, caa);
+          // the lamp's reflection in the flat, wet top coat
+          vec3 cr0 = reflect(-cv, vec3(0.0, 1.0, 0.0));
+          float c0 = max(dot(cr0, uCgL), 0.0);
+          float hot = pow(c0, 140.0) * 1.2 + pow(c0, 14.0) * 0.1;
+          // metal flake between and in the sweets
+          vec2 fq = vCgP.xz * 4.5;
+          vec2 fi = floor(fq);
+          vec2 fh = fract(sin(vec2(dot(fi, vec2(127.1, 311.7)), dot(fi, vec2(269.5, 183.3)))) * 43758.5453);
+          vec3 fn = normalize(vec3((fh.x - 0.5) * 0.9, 1.0, (fh.y - 0.5) * 0.9));
+          float flake = pow(max(dot(reflect(-cv, fn), uCgL), 0.0), 60.0);
+          flake *= step(0.55, fract(fh.x * 7.31 + fh.y * 3.17)) * smoothstep(0.38, 0.08, length(fract(fq) - 0.5)) * (1.0 - smoothstep(30.0, 130.0, cd));
+          vec3 warm = mix(vec3(1.0, 0.72, 0.14), vec3(1.0, 0.96, 0.82), clamp(hot, 0.0, 1.0));
+          vec3 shine = mix(warm, uCgTint * (0.7 + 0.6 * clamp(hot, 0.0, 1.0)), uCgMono);
+          vec3 white = mix(vec3(1.0, 0.95, 0.85), uCgTint, uCgMono);
+          gl_FragColor.rgb += uCgK * (body * through + white * glint * 0.55 * caa * (0.35 + glance)) + shine * (hot * 0.16 + flake * 0.4);
+        }`,
+      );
+  };
+  const key = mat.customProgramCacheKey.call(mat);
+  mat.customProgramCacheKey = () => `${key}|candy`;
+  mat.needsUpdate = true;
+}
 export function candyGloss(world) {
   if (world.candyGloss) return;
   world.candyGloss = true;
+  const L = world.layers;
+  let neutral = null;
   for (const mask of [M.ALL, M.R, M.B, M.RO, M.BO, M.X]) {
-    const mat = world.layers.materials(mask).road;
-    const prev = mat.onBeforeCompile;
-    mat.onBeforeCompile = (sh, r) => {
-      prev?.(sh, r);
-      Object.assign(sh.uniforms, GLOSS);
-      sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vCgP;')
-        .replace('#include <project_vertex>', '#include <project_vertex>\nvCgP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-      sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vCgP;\nuniform vec3 uCgTint;\nuniform float uCgBoth;\nuniform float uCgK;\nuniform vec3 uCgL;')
-        .replace(
-          '#include <opaque_fragment>',
-          `#include <opaque_fragment>
-          {
-            vec3 cv = cameraPosition - vCgP;
-            float cd = length(cv);
-            cv /= max(cd, 0.001);
-            float ccos = abs(cv.y);
-            // the lamp's reflection in a flat, wet surface
-            vec3 crf = reflect(-cv, vec3(0.0, 1.0, 0.0));
-            float cl = max(dot(crf, uCgL), 0.0);
-            float hot = pow(cl, 140.0) * 1.2 + pow(cl, 14.0) * 0.1;
-            // sheen at glancing angles, like looking along a toy car's bonnet
-            float fres = pow(clamp(1.0 - ccos, 0.0, 1.0), 3.0);
-            // metal flake: each fleck in the plastic has its own tilt, and glints when it catches the lamp
-            vec2 cq = vCgP.xz * 4.5;
-            vec2 ci = floor(cq);
-            vec2 ch = fract(sin(vec2(dot(ci, vec2(127.1, 311.7)), dot(ci, vec2(269.5, 183.3)))) * 43758.5453);
-            vec3 cn = normalize(vec3((ch.x - 0.5) * 0.9, 1.0, (ch.y - 0.5) * 0.9));
-            float flake = pow(max(dot(reflect(-cv, cn), uCgL), 0.0), 60.0);
-            vec2 cf = fract(cq) - 0.5;
-            flake *= step(0.55, fract(ch.x * 7.31 + ch.y * 3.17)) * smoothstep(0.38, 0.08, length(cf)) * (1.0 - smoothstep(30.0, 130.0, cd));
-            vec3 warm = mix(vec3(1.0, 0.72, 0.14), vec3(1.0, 0.96, 0.82), clamp(hot, 0.0, 1.0));
-            vec3 lens = uCgTint * (0.7 + 0.6 * clamp(hot, 0.0, 1.0));
-            vec3 ccol = mix(lens, warm, uCgBoth);
-            gl_FragColor.rgb += ccol * uCgK * (hot * 0.16 + fres * 0.1 + flake * 0.4);
-          }`,
-        );
-    };
-    const key = mat.customProgramCacheKey.call(mat);
-    mat.customProgramCacheKey = () => `${key}|candy`;
-    mat.needsUpdate = true;
+    const tint = mask === M.ALL ? 0xffffff : mask === M.X ? 0xb04cff : mask & RED ? CG_RED : CG_BLUE;
+    const u = { uCgTint: { value: new THREE.Color(tint) }, uCgMono: { value: mask === M.ALL ? 0 : 1 }, uCgK: CG_K, uCgL: CG_L };
+    patchCandy(L.materials(mask).road, u);
+    if (mask === M.ALL) neutral = u;
   }
-  world.animated.push(() => {
-    const tint = world.layers.level.get('tint');
-    if (!tint) return;
-    GLOSS.uCgTint.value.copy(tint);
-    const lo = Math.min(tint.r, tint.g, tint.b);
-    GLOSS.uCgBoth.value = Math.min(1, Math.max(0, (lo - 0.35) / 0.6));
-  });
+  // the neutral road follows the lens each view is drawn for
+  const update = L.update.bind(L);
+  L.update = (dt, mode, time = 0, instant = false) => {
+    update(dt, mode, time, instant);
+    const lens = mode === RED || mode === BLUE;
+    if (lens) neutral.uCgTint.value.copy(mode === RED ? CG_RED : CG_BLUE);
+    const k = instant || !dt || L.views ? 1 : 1 - Math.exp(-10 * dt);
+    neutral.uCgMono.value += ((lens ? 1 : 0) - neutral.uCgMono.value) * k;
+  };
 }
