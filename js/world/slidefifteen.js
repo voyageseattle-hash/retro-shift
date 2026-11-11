@@ -249,6 +249,7 @@ export class SlideFifteen extends Platforms {
     const main = w.main;
     const hw = main.halfW;
     const yellow = TOY_YELLOW;
+    this.buildHole();
     // the slip roads, printed once in each colour
     for (const { inn, out } of this.slips) for (const p of [inn, out]) {
       this.drawRoad(L, p, M.RO, COLORS.red);
@@ -303,7 +304,6 @@ export class SlideFifteen extends Platforms {
       }
     }
     for (let k = 1; k <= 15; k++) this.buildTile(this.tiles[k]);
-    this.buildHole();
     w.animated.push((t) => this.animate(t));
   }
 
