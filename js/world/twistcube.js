@@ -173,9 +173,9 @@ const straight = (x, z0, z1) => {
   return pts;
 };
 const EXPRESS = [
-  ...[1, 2].map((f) => ({ face: f, axis: 'v', def: { from: lapAt(`eo${f}`), to: lapAt(`out${f}`, RF * TH), side: 1, lead: 50, halfWidth: 8, pts: straight(D, f * DC - ZQ - 4, f * DC + ZQ + 4) } })),
-  { face: 3, axis: 'u', def: { from: onB(14), to: onB(166), side: 1, lead: 30, halfWidth: 8 } },
-  ...[2, 1].map((f) => ({ face: f, axis: 'v', def: { from: lapAt(`eh${f}`), to: lapAt(`in${f}`, RF * TH), side: 1, lead: 50, halfWidth: 8, pts: straight(-D, f * DC + ZQ + 4, f * DC - ZQ - 4) } })),
+  ...[1, 2].map((f) => ({ face: f, axis: 'v', shut: 'u+', def: { from: lapAt(`eo${f}`), to: lapAt(`out${f}`, RF * TH), side: 1, lead: 50, halfWidth: 8, pts: straight(D, f * DC - ZQ - 4, f * DC + ZQ + 4) } })),
+  { face: 3, axis: 'u', shut: 'v+', def: { from: onB(14), to: onB(166), side: 1, lead: 30, halfWidth: 8 } },
+  ...[2, 1].map((f) => ({ face: f, axis: 'v', shut: 'u-', def: { from: lapAt(`eh${f}`), to: lapAt(`in${f}`, RF * TH), side: 1, lead: 50, halfWidth: 8, pts: straight(-D, f * DC + ZQ + 4, f * DC - ZQ - 4) } })),
 ];
 
 // ------------------------------------------------------------------ the stickers
@@ -217,6 +217,15 @@ function faceP(F, u, v, h, out) {
 }
 // The fast lines' spokes: which of each face's four edge stickers carry one when the cube is solved (by the way out
 // from the middle of the face). A fast line is open when the two edge stickers it crosses both have a spoke.
+// The gaps: three edge stickers (by the face they start on, and where on it) have no road round the roundabout across
+// them. Where a turn leaves one on a stretch of the lap that a fast line goes past, that stretch is shut (bare plastic:
+// a crawl) and the fast line is open whatever its spokes say. Where it lands on a stretch with no way past, a plank
+// bridge is laid over it. They start where the lap doesn't go; the song first brings one onto it with its fourth turn.
+const GAPS = [[5, 'v+'], [2, 'v-'], [1, 'v-']];
+const PLANKS = [[0, 'u+'], [0, 'u-'], [0, 'v-'], [3, 'u+'], [3, 'u-']];
+const CELL = { 'u+': [1, 0], 'u-': [-1, 0], 'v+': [0, 1], 'v-': [0, -1] };
+const posName = (cu, cv) => ((!cu) !== (!cv) ? (cu ? (cu > 0 ? 'u+' : 'u-') : cv > 0 ? 'v+' : 'v-') : null);
+const HOLE = 0.45; // how fast a shut stretch lets you go, of your top speed
 const SPOKES = [['v+', 'u+'], ['v+', 'v-', 'u-'], ['v-', 'u+', 'u-'], ['u+', 'u-', 'v+'], ['u+', 'v-', 'v+'], ['u-', 'v+', 'v-']];
 
 // The turns, as a cube player writes them: a face's letter is a quarter turn clockwise seen from outside, with a '
@@ -317,7 +326,7 @@ class TwistCube {
     const mouthOf = new Map();
     for (const [k, E] of EXPRESS.entries()) {
       const path = w.paths[k + 1];
-      const e = { ...E, path, mouth: [], open: false, gate: new THREE.Group(), road: new THREE.Group(), glow: 0 };
+      const e = { ...E, path, mouth: [], open: false, gate: new THREE.Group(), road: new THREE.Group(), sign: new THREE.Group(), glow: 0 };
       const span = Math.ceil(((E.def.lead ?? 30) * 1.3) / main.ds);
       const iA = main.index(E.def.from);
       const iB = main.index(E.def.to);
@@ -356,12 +365,63 @@ class TwistCube {
       w.group.add(mesh(K, e.road));
       w.group.add(mesh(e.gateK || kit(), e.gate));
       delete e.gateK;
+      // the sign that the road ahead is shut: a gantry over the main road where the fast line's mouth begins, a cross
+      // over each lane of it, and arrows on the fast line's side
+      {
+        const S2 = kit();
+        const i0 = main.wrap(main.index(e.def.from) + 4);
+        const mh = main.halfW;
+        const TOP = 10;
+        for (const lat of [-mh - 1.2, mh + 1.2]) {
+          for (const d of [-0.5, 0.5]) line(S2, P(main, i0, lat + d, 0.3), P(main, i0, lat + d, TOP), TOY_YELLOW);
+        }
+        quad(S2, P(main, i0, -mh - 1.2, TOP), P(main, i0, mh + 1.2, TOP), P(main, i0, mh + 1.2, TOP - 0.7), P(main, i0, -mh - 1.2, TOP - 0.7), TOY_YELLOW, 0.8);
+        for (const c of [-mh / 2, mh / 2]) {
+          for (const sg of [-1, 1]) quad(S2, P(main, i0, c - 3.4, TOP - 4.6 + sg * 3.1 + 0.5), P(main, i0, c - 3.4, TOP - 4.6 + sg * 3.1 - 0.5), P(main, i0, c + 3.4, TOP - 4.6 - sg * 3.1 - 0.5), P(main, i0, c + 3.4, TOP - 4.6 - sg * 3.1 + 0.5), COLORS.red, 1);
+        }
+        // (the fast line leaves by the road's +lat side: three arrows that way, on the gantry's post)
+        for (let a = 0; a < 3; a++) {
+          const l0 = mh + 2.6 + a * 3.4;
+          for (const sg of [-1, 1]) quad(S2, P(main, i0, l0, TOP - 2 + sg * 1.9), P(main, i0, l0 + 1.3, TOP - 2 + sg * 1.9), P(main, i0, l0 + 3, TOP - 2), P(main, i0, l0 + 1.7, TOP - 2), TOY_YELLOW, 0.9);
+        }
+        w.group.add(mesh(S2, e.sign));
+      }
+    }
+    // the plank bridges: one for each stretch of the lap a gap can land on that has no way past
+    this.planks = [];
+    for (const [face, pn] of PLANKS) {
+      const K = kit();
+      const [cu, cv] = CELL[pn];
+      const pw = main.halfW - 1.4;
+      let n = 0;
+      for (let i = 0; i < main.N; i++) {
+        if (this.zone[i] !== face || this.zone[main.wrap(i + 1)] !== face) continue;
+        const inCell = (j) => {
+          const x = main.px[j];
+          const al = main.pz[j] - face * DC;
+          return (Math.abs(x) > S / 2 ? Math.sign(x) : 0) === cu && (Math.abs(al) > S / 2 ? Math.sign(al) : 0) === cv;
+        };
+        if (!inCell(i) || !inCell(main.wrap(i + 1))) continue;
+        const j = main.wrap(i + 1);
+        const a = P(main, i, -pw, 0.4), b = P(main, j, -pw, 0.4), c = P(main, j, pw, 0.4), d = P(main, i, pw, 0.4);
+        K.gp.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
+        for (const side of [-1, 1]) quad(K, P(main, i, side * pw, 0.48), P(main, j, side * pw, 0.48), P(main, j, side * (pw - 0.5), 0.48), P(main, i, side * (pw - 0.5), 0.48), TOY_YELLOW, 0.7);
+        // the planks' joins
+        if (n++ % 2 === 0) line(K, P(main, i, -pw, 0.5), P(main, i, pw, 0.5), TOY_YELLOW);
+      }
+      const group = mesh(K, new THREE.Group());
+      group.visible = false;
+      w.group.add(group);
+      this.planks.push({ face, pn, group });
     }
   }
 
   // Is a fast line made just now: do the two edge stickers it crosses both carry a spoke?
   expressOpen(e) {
     const F = SIDES[e.face];
+    // (shut road past it: it's the way round, spokes or no spokes)
+    e.forced = !!this.stickerOn(e.face, e.shut)?.gap;
+    if (e.forced) return true;
     const dir = e.axis === 'v' ? F.ev : F.eu;
     for (const s of [-1, 1]) {
       const st = this.stickerAt(_w.copy(F.n).addScaledVector(dir, s).round(), F.n);
@@ -373,8 +433,16 @@ class TwistCube {
     e.open = open;
     for (const i of e.mouth) this.world.main.railR[i] = open ? 0 : 1;
     e.path.def.closed = !open;
+    e.path.def.must = open && !!e.forced; // (vehicles/ai.js: nobody chooses the shut road)
     e.gate.visible = !open;
     e.road.visible = open;
+    e.sign.visible = open && !!e.forced;
+  }
+  // The sticker now at a place on one of the road's four faces.
+  stickerOn(face, pn) {
+    const F = SIDES[face];
+    const [cu, cv] = CELL[pn];
+    return this.stickerAt(_w.copy(F.n).addScaledVector(F.eu, cu).addScaledVector(F.ev, cv).round(), F.n);
   }
 
   // ---------------------------------------------------------------- what's drawn
@@ -429,8 +497,10 @@ class TwistCube {
         const cv = Math.round(V(cx, cy, cz).dot(F.ev));
         if (Math.round(V(cx, cy, cz).dot(F.n)) !== 1) continue;
         // (an edge sticker may carry a spoke of the fast line: see SPOKES)
-        const spoke = (!cu) !== (!cv) && SPOKES[fi].includes(cu ? (cu > 0 ? 'u+' : 'u-') : cv > 0 ? 'v+' : 'v-');
-        cubie.stickers.push({ n0: st.n.clone(), mask: st.mask, color: st.color, spoke, hub: !cu && !cv });
+        const pn = posName(cu, cv);
+        const spoke = !!pn && SPOKES[fi].includes(pn);
+        const gap = !!pn && GAPS.some(([f, q]) => f === fi && q === pn);
+        cubie.stickers.push({ n0: st.n.clone(), mask: st.mask, color: st.color, spoke, gap, hub: !cu && !cv });
         const P = (u, v, h) => faceP(F, u, v, h, V(0, 0, 0));
         const [u0, u1] = cell(cu);
         const [v0, v1] = cell(cv);
@@ -782,6 +852,42 @@ class TwistCube {
     }
 
     const _p = [V(0, 0, 0), V(0, 0, 0), V(0, 0, 0), V(0, 0, 0)];
+    const gapOn = (F, cu, cv) => {
+      const pn = posName(cu, cv);
+      return !!pn && GAPS.some(([f, q]) => SIDES[f] === F && q === pn);
+    };
+    // what a gap sticker has where its road would be: the bed's outline, dashed, and hazard stripes at each end
+    for (const [fi, pn] of GAPS) {
+      const F = SIDES[fi];
+      const [cu, cv] = CELL[pn];
+      const slot = _v.copy(F.n).addScaledVector(F.eu, cu).addScaledVector(F.ev, cv).round();
+      const K = bySlot.get(key(slot.x, slot.y, slot.z)).K;
+      const a0 = Math.atan2(cv, cu);
+      const SPAN = Math.asin(S / 2 / R) - 0.012;
+      const Q = (a, rad, h) => faceP(F, Math.cos(a) * rad, Math.sin(a) * rad, h, V(0, 0, 0));
+      const n = 24;
+      for (let i = 0; i < n; i++) {
+        const b0 = a0 - SPAN + ((2 * SPAN) * i) / n;
+        const b1 = a0 - SPAN + ((2 * SPAN) * (i + 0.55)) / n;
+        for (const rad of [R - HW, R + HW]) K.quad(M.ALL, Q(b0, rad - 0.3, 0.26), Q(b1, rad - 0.3, 0.26), Q(b1, rad + 0.3, 0.26), Q(b0, rad + 0.3, 0.26), TOY_YELLOW, 0.45);
+        if (i % 4 === 1) {
+          // a cross on the bare bed
+          const bm = (b0 + b1) / 2;
+          const d = 3.2 / R;
+          for (const e of [-1, 1]) K.quad(M.ALL, Q(bm - d, R - e * 3.2 - 0.3, 0.24), Q(bm - d, R - e * 3.2 + 0.3, 0.24), Q(bm + d, R + e * 3.2 + 0.3, 0.24), Q(bm + d, R + e * 3.2 - 0.3, 0.24), TOY_YELLOW, 0.6);
+        }
+      }
+      for (const end of [-1, 1]) {
+        const b = a0 + end * SPAN;
+        const w = 2.2 / R;
+        for (let j = 0; j < 8; j++) {
+          if (j % 2) continue;
+          const r0 = R - HW + (j * 2 * HW) / 8;
+          const r1 = r0 + (2 * HW) / 8;
+          K.quad(M.ALL, Q(b, r0, 0.3), Q(b, r1, 0.3), Q(b - end * w, r1, 0.3), Q(b - end * w, r0, 0.3), TOY_YELLOW, 0.9);
+        }
+      }
+    }
     for (const F of SIDES) {
       for (const pr of prims) {
         let u = 0, v = 0;
@@ -794,6 +900,8 @@ class TwistCube {
           u /= pr.pts.length;
           v /= pr.pts.length;
         }
+        // (a gap sticker has no roundabout across it)
+        if (!pr.at && gapOn(F, cellOf(u), cellOf(v)) && pr.pts.every((q) => Math.abs(Math.hypot(q[0], q[1]) - R) < HW + 0.8)) continue;
         const slot = _v.copy(F.n).addScaledVector(F.eu, cellOf(u)).addScaledVector(F.ev, cellOf(v)).round();
         const K = bySlot.get(key(slot.x, slot.y, slot.z)).K;
         const q = pr.pts.map((p, i) => faceP(F, p[0], p[1], p[2], _p[i]));
@@ -901,7 +1009,14 @@ class TwistCube {
 
   // The lenses the glass over flat (x, z) is there in. Over an edge there's none to be on or off (null); where a
   // turning layer has carried it off round the corner it's there in no lens (0).
-  maskAt(x, z) {
+  maskAt(x, z, riding) {
+    const st = this.stickerFlat(x, z, riding);
+    if (!st) return st;
+    return this.mono && st.mask === M.X ? M.ALL : st.mask;
+  }
+  // The sticker under flat (x, z): null over an edge, 0 where a turning layer has it off round the corner (unless
+  // you're `riding` that layer: then it's the one you're on).
+  stickerFlat(x, z, riding) {
     const k = band(z);
     if (k < 0) return null;
     const f = FACES[k];
@@ -918,10 +1033,18 @@ class TwistCube {
     _w.copy(f.n).addScaledVector(f.t, cellOf(along));
     _w.x += cellOf(lx);
     _w.round();
-    if (mv && mv.face !== k && _w[mv.axis] === mv.side) return 0; // (its glass is off round the corner just now)
-    const st = this.stickerAt(_w, f.n);
-    if (!st) return null;
-    return this.mono && st.mask === M.X ? M.ALL : st.mask;
+    if (mv && mv.face !== k && _w[mv.axis] === mv.side && !riding) return 0; // (its glass is off round the corner just now)
+    return this.stickerAt(_w, f.n) || null;
+  }
+  // Is the road shut under flat (x, z): a gap sticker's bare bed, on a stretch the open fast line goes past?
+  holeAt(x, z, i) {
+    const k = this.zone[i];
+    if (k < 0) return false;
+    const st = this.stickerFlat(x, z);
+    if (!st || !st.gap) return false;
+    const along = z - k * DC;
+    const pn = posName(Math.abs(x) > S / 2 ? Math.sign(x) : 0, Math.abs(along) > S / 2 ? Math.sign(along) : 0);
+    return this.express.some((e) => e.open && e.forced && e.face === k && e.shut === pn);
   }
 
   // After the cube changes: which boosts are lit.
@@ -932,6 +1055,14 @@ class TwistCube {
       s.pad.mask = lens;
       s.meshes[M.RO].visible = lens === M.RO;
       s.meshes[M.BO].visible = lens === M.BO;
+    }
+    const mv = this.move;
+    for (const pl of this.planks || []) {
+      const F = SIDES[pl.face];
+      const [cu, cv] = CELL[pl.pn];
+      const slot = _w.copy(F.n).addScaledVector(F.eu, cu).addScaledVector(F.ev, cv).round();
+      // (not while that piece is on its way somewhere)
+      pl.group.visible = !(mv && slot[mv.axis] === mv.side) && !!this.stickerAt(slot, F.n)?.gap;
     }
   }
 
@@ -1074,8 +1205,100 @@ function live(race) {
     au.noiseHit(t, 0.07, 0.14, au.sfxDry, 'bandpass', 900, 1.2, 300);
   });
 
+  // A side layer (the one on the right of the road, or the one on the left) turns the way the road runs round the
+  // cube: whoever is on it when it goes is carried round the corner with it, to the same place on the next face. That
+  // is a face further round the lap or a face back (and between the top and the back, the two ends of the lap, most
+  // of a lap). In the flat world it's done at once, when the turn starts; the racer is drawn riding the layer round
+  // (pose, below) until the turn is over or they drive off it.
+  const X = new THREE.Vector3(1, 0, 0);
+  const qr = new THREE.Quaternion();
+  const board = (mv, T) => {
+    const about = mv.total * mv.side; // the turn, about +x
+    const step = Math.sign(about); // faces along the flat road
+    for (const r of race.racers) {
+      r._qtRide = null;
+      if (r.puppet || r.respawnT > 0 || !r.grounded || r.finished) continue;
+      const g = r.gnd;
+      if (!g.onRoad || g.path !== m) continue;
+      if (Math.sign(r.pos.x) !== mv.side || Math.abs(r.pos.x) <= S / 2) continue;
+      const k = Math.round(r.pos.z / DC);
+      if (k < 0 || k > 3 || band(r.pos.z) < 0) continue;
+      const k1 = (k + step + 4) % 4;
+      const shift = (k1 - k) * DC;
+      const x = r.pos.x;
+      const z = r.pos.z + shift;
+      let i = m.nearest(x, z, -1, r.pos.y);
+      let lat = 0;
+      let f = m.frac(i);
+      if (m.frame(x, z, i, fr, r.pos.y) && Math.abs(fr.lat) < m.halfW - 1.2) {
+        r.pos.x = x;
+        r.pos.z = z;
+        lat = fr.lat;
+        f = fr.f;
+        i = fr.i ?? i;
+      } else {
+        // (the road there isn't quite the road here, at the two ends of the lap: set down on the nearest of it,
+        // going its way)
+        m.pointF(f, 0, 0, a);
+        const sp = Math.hypot(r.vel.x, r.vel.z);
+        r.pos.x = a.x;
+        r.pos.z = a.z;
+        r.vel.x = m.thx[i] * sp;
+        r.vel.z = m.thz[i] * sp;
+        r.yaw = Math.atan2(m.thx[i], m.thz[i]);
+      }
+      // the lap: carried on, or carried back
+      const u0 = m.mainU(g.i);
+      const u1 = m.mainU(i);
+      r.prog += u1 - u0;
+      r.lastU = u1;
+      r.sec = Math.max(0, Math.floor(r.prog * 3));
+      r.secFull = false;
+      r.secStart = T;
+      g.i = i;
+      g.f = f;
+      g.lat = lat;
+      r.track = { path: m, i, f, lat };
+      if (r.hints) r.hints[m.id] = i;
+      if (r.ai) {
+        r.ai.path = m;
+        r.ai._branch = null;
+        r.ai.decided?.clear?.();
+      }
+      r._qtRide = { side: mv.side, about, shift, w: 1, left: false, gain: u1 - u0 };
+      if (r.isPlayer) {
+        const cam = race.camOf?.(r);
+        if (cam) {
+          const dx = r.pos.x - x;
+          const dz = r.pos.z - (z - shift);
+          for (const v of [cam.pos, cam.look, cam.anchor]) if (v) {
+            v.x += dx;
+            v.z += dz;
+          }
+          cam.addShake(0.45);
+          cam.fovPunch?.(8);
+        }
+        sound((au, t) => {
+          au.swell(t, TURN * 0.9, 0.16, au.sfxDry, 'bandpass', 500, u1 > u0 ? 2400 : 180, 1.4);
+        });
+      }
+    }
+  };
+
   return {
     cube,
+    // A racer riding a side layer round is drawn where the layer has them (vehicles/racer.js calls this once the
+    // racer is posed in the drawn world).
+    pose(r) {
+      const ride = r._qtRide;
+      const mv = cube.move;
+      if (!ride || !mv || ride.w <= 0 || !r.cv) return;
+      qr.setFromAxisAngle(X, ride.w * (mv.angle * mv.side - ride.about));
+      r.root.position.applyQuaternion(qr);
+      r.root.quaternion.premultiply(qr);
+      r.cv.pos.applyQuaternion(qr);
+      r.cv.quat.premultiply(qr);
+    },
     // For the rivals (vehicles/ai.js): how much a lens is worth just here. A single lens over glass of its own colour
     // is the fast way (and lights that colour's boosts); over glass that isn't there in it, it's the groove.
     lensScore(r, mode) {
@@ -1114,6 +1337,7 @@ function live(race) {
           lights ||= cube.seamLights(name);
           cube.begin(name);
           whirr();
+          if (cube.move.axis === 'x') board(cube.move, T);
         }
         if (cube.move) {
           const mv = cube.move;
@@ -1122,7 +1346,9 @@ function live(race) {
           if (lights) lights.material.opacity = 1 - 0.6 * Math.min(1, (T - due) / TURN);
           if (!cube.move) {
             cube.done++;
+            world.songLamp?.(cube.done % SONG.length);
             clunk();
+            for (const r of race.racers) r._qtRide = null;
             if (lights) {
               cube.root.remove(lights);
               lights.geometry.dispose();
@@ -1172,13 +1398,22 @@ function live(race) {
         if (r.puppet) continue;
         r._qtMul ??= r.speedMul;
         const onMain = r.grounded && r.gnd.onRoad && r.gnd.path === m;
-        const mask = onMain ? cube.maskAt(r.pos.x, r.pos.z) : null;
+        // (riding a side layer round: you're still on the sticker you were on, and it leaves you when you leave it)
+        const ride = cube.move ? r._qtRide : null;
+        if (ride) {
+          if (!onMain || Math.sign(r.pos.x) !== ride.side || Math.abs(r.pos.x) < S / 2 - 1) ride.left = true;
+          if (ride.left) ride.w = Math.max(0, ride.w - dt / 0.35);
+        }
+        const riding = ride && !ride.left;
+        const mask = onMain ? (riding ? cube.maskAt(r.pos.x, r.pos.z - ride.shift, true) : cube.maskAt(r.pos.x, r.pos.z)) : null;
+        const hole = onMain && !riding && cube.holeAt(r.pos.x, r.pos.z, r.gnd.i);
         // (and on a turning face, anywhere but its roundabout, the road has swung out from under you)
         const swung = onMain && cube.move && cube.move.face >= 0 && mask != null && cube.zone[r.gnd.i] !== cube.move.face && Math.round(r.pos.z / DC) === cube.move.face;
-        const off = swung || (mask != null && !solidIn(mask, r.mode));
+        const off = hole || swung || (mask != null && !solidIn(mask, r.mode));
         r.inGroove = off;
-        // (glass that's there but not in your lens costs more than glass a turn has taken for a moment)
-        r.speedMul = r._qtMul * (!off ? 1 : swung || mask === 0 ? 0.86 : 0.72);
+        // (glass that's there but not in your lens costs more than glass a turn has taken for a moment; a shut road
+        // costs most of all)
+        r.speedMul = r._qtMul * (!off ? 1 : hole ? HOLE : swung || mask === 0 ? 0.86 : 0.72);
         // (the tell: bare track under you rattles and throws sparks)
         if (off && r.speed > 12 && (r._qtSpark = (r._qtSpark || 0) - dt) <= 0) {
           r._qtSpark = 0.09;
@@ -1189,7 +1424,7 @@ function live(race) {
         }
         if (off) {
           const top = r.phys.topSpeed * r.speedMul;
-          if (r.speed > top) r.vel.multiplyScalar(1 - Math.min(0.9, 1.6 * dt));
+          if (r.speed > top) r.vel.multiplyScalar(1 - Math.min(0.9, (hole ? 3.2 : 1.6) * dt));
         }
       }
     },
@@ -1229,6 +1464,22 @@ function decor(world, L) {
     const a = (k / 8) * Math.PI * 2;
     L.line(M.ALL, V(Math.cos(a) * 22, y0 + 20, Math.sin(a) * 22), V(Math.cos(a) * 110, y0 + 0.5, Math.sin(a) * 110), TOY_YELLOW);
   }
+  // the song, written round the foot: a tick for each of its turns in that layer's colour (a long one for a turn the
+  // other way), and a lamp that stands at the turn that's next
+  const tint = { U: COLORS.white, F: COLORS.red, D: COLORS.violet, B: COLORS.blue, L: TOY_YELLOW, R: GREEN };
+  SONG.forEach((name, k) => {
+    const a = (k / SONG.length) * Math.PI * 2;
+    const r1 = name.endsWith("'") ? 150 : 140;
+    for (const da of [-0.035, 0, 0.035]) L.line(M.ALL, V(Math.cos(a + da) * 124, y0 + 0.5, Math.sin(a + da) * 124), V(Math.cos(a + da) * r1, y0 + 0.5, Math.sin(a + da) * r1), tint[name[0]]);
+  });
+  L.ring(M.ALL, V(0, y0 + 0.5, 0), AX.x, AX.z, 124, 48, TOY_YELLOW);
+  const lamp = new THREE.Mesh(new THREE.OctahedronGeometry(5), new THREE.MeshBasicMaterial({ color: TOY_YELLOW, fog: false }));
+  lamp.position.set(132, y0 + 7, 0);
+  world.group.add(lamp);
+  world.songLamp = (k) => {
+    const a = (k / SONG.length) * Math.PI * 2;
+    lamp.position.set(Math.cos(a) * 132, y0 + 7, Math.sin(a) * 132);
+  };
   world.cube = new TwistCube(world);
 }
 
