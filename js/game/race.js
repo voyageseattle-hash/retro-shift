@@ -26,6 +26,7 @@ import { Construction } from './construction.js';
 import { Quake } from './quake.js';
 import { Fold } from './fold.js';
 import { PopupBook, offPage } from './popup.js';
+import { DropTower } from './droptower.js';
 import { chainMove, chainTick, chainEnd, shiftTiming, perfectFx, newChain, newTally } from './chain.js';
 import { PIPE } from '../world/warp.js';
 import { buildRoomFrame } from '../world/paradox.js';
@@ -116,6 +117,9 @@ export class Race {
     // the pop-up book (PAGE TURNER): a spread per lap
     this.book = new PopupBook(this);
     this.scene.add(this.book.group);
+    // DROP TOWER's moving pieces and marbles, on the race clock
+    this.tower = this.world.tower ? new DropTower(this) : null;
+    if (this.tower) this.scene.add(this.tower.group);
     this.slowT = 0;
     this.slowLen = 0.9; // (so a slow-motion beat never divides by nothing)
     // player + rivals. Online, the host's slot list decides the grid: each slot is a person or an AI rival, and every
@@ -904,6 +908,7 @@ export class Race {
     this.quake.update(sim, p);
     this.fold.update(sim);
     this.book.update(sim);
+    this.tower?.update(sim, p);
     this.traffic.update(sim, p);
     this.police.update(sim, p);
     this.world.mirrors?.update(this);
@@ -1166,6 +1171,8 @@ export class Race {
           continue;
         }
       } else r.stuckT = 0;
+      this.tower?.step(r, dt);
+      if (r.respawnT > 0) continue;
       this.features(r, dt);
       this.moves(r, dt);
       this.progress(r, dt);

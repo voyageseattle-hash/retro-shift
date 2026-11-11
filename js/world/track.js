@@ -19,6 +19,7 @@ import { layWarps, buildWarps, PIPE } from './warp.js';
 import { layFold, runFold } from './fold.js';
 import { layMirrors, buildMirrors } from './mirrors.js';
 import { layCurved, spot, drawnAt } from './curved.js';
+import { layDropTower } from './marblerun.js';
 import { FORMS } from '../vehicles/forms.js';
 import { Mobius } from './mobius.js';
 import { buildPhosphor } from './phosphor.js';
@@ -447,6 +448,7 @@ export class TrackWorld {
     layFold(this, !!opts.preview);
     layMirrors(this);
     layCurved(this);
+    layDropTower(this);
     this.minY = Math.min(...this.paths.map((p) => p.minY));
     this.maxY = Math.max(...this.paths.map((p) => p.maxY));
     this.floorY = this.minY - (def.floorDrop ?? 26);
@@ -522,7 +524,8 @@ export class TrackWorld {
         S.y = A.y;
         E.y = B.y;
       }
-      const pts = [A.clone().addScaledVector(tA, -4), A, midA, S];
+      // (a catch road, drop: true, starts in mid-air at its first via point: nothing leads onto it, you land on it)
+      const pts = b.drop ? [] : [A.clone().addScaledVector(tA, -4), A, midA, S];
       const lift = b.lift ?? 0;
       const inner = [];
       if (b.via) {
@@ -549,12 +552,13 @@ export class TrackWorld {
       const tE = E.clone().sub(midB).setY(0).normalize();
       const first = inner[0] || E;
       const last = inner[inner.length - 1] || S;
-      pts.push(...bendToward(S, tS, first), ...inner, ...bendToward(E, tE, last).reverse());
+      pts.push(...(b.drop ? [] : bendToward(S, tS, first)), ...inner, ...bendToward(E, tE, last).reverse());
       pts.push(E, midB, B, B.clone().addScaledVector(tB, 4));
       const path = new Path(`b${k}`, pts, false, hw, { bankFactor: 3, mainFrom: b.from, mainTo: b.to, profile: b.profile });
       path.mask.fill(b.mask ?? M.ALL);
       path.def = b;
       path.side = side;
+      if (b.drop) path.noFork = true;
       // No rails where it overlaps the main road (where it leaves and rejoins it); rails everywhere else.
       const fr = {};
       const fr2 = {};
@@ -591,7 +595,7 @@ export class TrackWorld {
       }
       // And no main rail on that side at the junctions.
       const w = Math.ceil((lead * 1.3) / main.ds);
-      for (const i0 of [iA, iB]) {
+      for (const i0 of b.drop ? [iB] : [iA, iB]) {
         for (let k2 = -4; k2 <= w; k2++) {
           const i = main.wrap(i0 === iA ? i0 + k2 : i0 - k2);
           // the gap in the rail is only open in the worlds the branch is in: anyone else still bounces off it
@@ -684,13 +688,15 @@ export class TrackWorld {
     const L = this.layers;
     const v = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
     for (const path of this.paths) {
+      // (a piece that moves is drawn by whoever moves it: marblerun.js)
+      if (path.skipDraw) continue;
       const hw = path.halfW;
       const last = path.closed ? path.N : path.N - 1;
       for (let i = 0; i < last; i++) {
         const j = path.wrap(i + 1);
         const mask = path.mask[i];
         if (this.room) L.region = this.room.regionOf(path, i);
-        if (!mask) continue; // a glide gap: nothing there in any world
+        if (!mask || path.hide?.[i]) continue; // a glide gap: nothing there in any world
         const neutral = mask === M.ALL;
         // (the Möbius strip's road is one colour a side: red along the top, blue along the underside)
         const face = neutral && this.mob && path.closed ? (i < path.N / 2 ? COLORS.red : COLORS.blue) : null;

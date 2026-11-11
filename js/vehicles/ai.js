@@ -62,7 +62,8 @@ export class RaceAI {
     // ---- forks: decide once per approach
     if (this.path === w.main) {
       for (const b of w.paths) {
-        if (b.closed) continue;
+        // (noFork: a strip nothing leads onto, DROP TOWER's catch chute and seesaw plank)
+        if (b.closed || b.noFork) continue;
         const iFrom = w.main.index(b.mainFrom);
         let d = iFrom - i;
         if (d < -w.main.N / 2) d += w.main.N;
@@ -120,6 +121,7 @@ export class RaceAI {
     // traffic and the police convoy read like obstacles (each in its own world), see game/traffic.js, game/police.js
     for (const o of r.session?.traffic?.near(P, pi, n) || []) obs.push(o);
     for (const o of r.session?.police?.near(P, pi, n) || []) obs.push(o);
+    for (const o of r.session?.tower?.near(P, pi, n) || []) obs.push(o); // DROP TOWER's marbles
     // For each world, the best single lane through everything solid in it.
     const LANES = [-0.65, -0.35, 0, 0.35, 0.65].map((f) => f * P.halfW);
     // Obstacles inside the reaction distance can't be dodged by a lane change any more, so they are checked
@@ -220,6 +222,7 @@ export class RaceAI {
         let c = Math.abs(lat - (r.track ? r.track.lat : 0)) * 0.05 + Math.abs(lat - this.prefLat) * 0.02;
         c += hits(this.wantMode, lat, true) * 10;
         c += (r.session?.quake?.laneCost(r, this.wantMode, lat) || 0) * 6;
+        c += (r.session?.tower?.laneCost(r, this.wantMode, lat) || 0) * 6;
         // a route with a slit: get on the middle line early, so there's no last-moment swerve to thread it
         if (P.slit) c += Math.abs(lat) * 0.4;
         for (const p of w.pads) if (p.path === P && solidIn(p.mask, this.wantMode) && Math.abs(p.i - pi) < n && Math.abs(lat - p.lat) < 2) c -= 0.6;
@@ -355,6 +358,8 @@ export class RaceAI {
   }
 
   wantsBranch(b) {
+    // a route that says it's shut to this car right now (DROP TOWER's spring, stretched)
+    if (b.shut?.(this.r)) return false;
     if (!this.canTakeBranch(b)) return false;
     return Math.random() < 0.35 + this.skill * 0.5;
   }

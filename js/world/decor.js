@@ -8,6 +8,7 @@ import { buildDreamCity } from './dreamcity.js';
 import { tesseractDecor } from './tesseract.js';
 import { decorParadox } from './paradox.js';
 import { buildBook } from './popupbook.js';
+import { buildDropTower } from './marblerun.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const UP = V(0, 1, 0);
@@ -72,6 +73,8 @@ const DECOR = {
   tesseract: tesseractDecor,
   // 14 RELATIVITY ROOM: stair stringers, spiral columns and arches (paradox.js)
   paradox: (world, L) => decorParadox(world, L),
+  // 21 DROP TOWER: the marble run and its moving pieces (marblerun.js)
+  marblerun: buildDropTower,
 
   // 01 CORE CIRCUIT: big red and blue arches, a skyline at the edges.
   core(world, L, main, rng) {

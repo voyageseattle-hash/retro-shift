@@ -596,6 +596,7 @@ export const COURSE_SONG = {
   mirror: 'tunnelB',
   relativity: 'paradox',
   popup: 'circuit',
+  marblerun: 'helixB',
 };
 
 const STING_MIX = {

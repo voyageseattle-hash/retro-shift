@@ -10,7 +10,7 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const flag = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
-const ids = flag('--only', 'core,layered,tunnels,orbital,city,void,helix,fractal,lattice,ruins,dream,relativity').split(',');
+const ids = flag('--only', 'core,layered,tunnels,orbital,city,void,helix,fractal,lattice,ruins,dream,relativity,marblerun').split(',');
 const laps = Number(flag('--laps', 2));
 const skill = Number(flag('--skill', 0.5));
 const noise = Number(flag('--noise', 0.25));
