@@ -5,6 +5,7 @@
 import * as THREE from '../../vendor/three.js';
 import { M, COLORS } from './shift.js';
 import { TABLE, SC, V3, tableY } from './pinball.js';
+import { pinballScenery, pinballSceneryArt } from './pinball-scenery.js';
 
 const YELLOW = 0xffd23a;
 const CHROME = 0xdfe8ff;
@@ -272,6 +273,9 @@ export function pinballDecor(world, L, main) {
     p.z -= 8;
     L.ring(k % 2 ? M.R : M.B, p, new THREE.Vector3(1, 0, 0), UP, 2.2, 8);
   }
+
+  // ---- the art pass: everything that stands beside the road (pinball-scenery.js)
+  pinballScenery(world, L, main);
 }
 
 // ------------------------------------------------------------------ the parts that move, and the playfield itself
@@ -314,6 +318,7 @@ export function buildPinballArt(world) {
     const sheet = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x070312, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 }));
     sheet.renderOrder = 0;
     G.add(sheet);
+    pinballSceneryArt(world, sheet); // its paint, and the chase lamps
     K.drainAt = K.lane.point(Math.round((D.i0 + D.i1) / 2), 0, 0, new THREE.Vector3());
     K.drainAt.y = tableY(K.drainAt.z);
   }
