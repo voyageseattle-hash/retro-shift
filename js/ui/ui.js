@@ -10,6 +10,7 @@ import { TRACKS } from '../world/tracks.js';
 import { TrackWorld } from '../world/track.js';
 import { CARS } from '../vehicles/racer.js';
 import { drawPaths, MiniMap } from './minimap.js';
+import { MAP_STYLES, MAP_LABEL, mapStyle, drawCard } from './coursemap.js';
 import { BOTH, RED, BLUE, MODE_NAME } from '../world/shift.js';
 import { SPLIT_GLYPHS } from '../core/input.js';
 import { formatTime, ordinal, storage } from '../core/util.js';
@@ -185,6 +186,7 @@ export class UI {
       { label: '', cycle: (d) => ((S.difficulty = (S.difficulty + d + 3) % 3), save(), refresh()), action: () => items[2].cycle(1) },
       { label: '', cycle: (d) => ((S.quality = quals[(quals.indexOf(S.quality) + d + quals.length) % quals.length]), save(), refresh()), action: () => items[3].cycle(1) },
       { label: '', cycle: () => ((S.assist = S.assist === false), save(), refresh()), action: () => items[4].cycle(1) },
+      { label: '', cycle: (d) => ((S.map = MAP_STYLES[(MAP_STYLES.indexOf(mapStyle(S)) + d + MAP_STYLES.length) % MAP_STYLES.length]), save(), refresh()), action: () => items[5].cycle(1) },
       { label: 'ACCESSIBILITY', action: () => accessScreen(this) },
       { label: 'BACK', action: () => this.title() },
     ];
@@ -192,7 +194,7 @@ export class UI {
     this.root.appendChild(s);
     this.menu = new Menu(this.app, list, items, { onBack: () => this.title() });
     const refresh = () => {
-      const labels = [`MUSIC ◀ ${pct(S.music)} ▶`, `EFFECTS ◀ ${pct(S.sfx)} ▶`, `RIVALS ◀ ${diffs[S.difficulty]} ▶`, `GRAPHICS ◀ ${S.quality.toUpperCase()} ▶`, `STEERING ◀ ${S.assist === false ? 'FULL CONTROL' : 'ASSIST'} ▶`];
+      const labels = [`MUSIC ◀ ${pct(S.music)} ▶`, `EFFECTS ◀ ${pct(S.sfx)} ▶`, `RIVALS ◀ ${diffs[S.difficulty]} ▶`, `GRAPHICS ◀ ${S.quality.toUpperCase()} ▶`, `STEERING ◀ ${S.assist === false ? 'FULL CONTROL' : 'ASSIST'} ▶`, `MAP ◀ ${MAP_LABEL[mapStyle(S)]} ▶`];
       labels.forEach((l, k) => (this.menu.nodes[k].innerHTML = l));
     };
     refresh();
@@ -236,8 +238,7 @@ export class UI {
       const medalTag = medal && mode !== 'race' ? ` <span class="medal" style="--mc:${medal.color}">${medal.name}</span>` : '';
       card.appendChild(el('div', 'tbest', best ? `BEST ${formatTime(best.time)}${medalTag}` : '&nbsp;'));
       requestAnimationFrame(() => {
-        const ctx = cv.getContext('2d');
-        drawPaths(ctx, this.preview(def).paths, cv.width, cv.height, 7, 10, null, 2.5);
+        drawCard(cv, this.preview(def).paths, mapStyle(this.settings), def);
       });
       return {
         node: card,
@@ -412,7 +413,7 @@ export class UI {
       <div class="lobby-course"><span>COURSE</span><b>${courseName(net.course)}</b><canvas width="220" height="130"></canvas></div></div>`;
     const cv = s.querySelector('canvas');
     const def = TRACKS.find((t) => t.id === net.course);
-    if (def) requestAnimationFrame(() => drawPaths(cv.getContext('2d'), this.preview(def).paths, cv.width, cv.height, 7, 10, null, 2.5));
+    if (def) requestAnimationFrame(() => drawCard(cv, this.preview(def).paths, mapStyle(this.settings), def));
     const list = el('div', 'list row');
     const cycleCourse = (d) => {
       const open = openTracks();
@@ -920,7 +921,7 @@ export class UI {
         count: q('.h-count'),
         wrong: q('.h-wrong'),
         flash: q('.h-flash'),
-        map: new MiniMap(q('.h-map')),
+        map: new MiniMap(q('.h-map'), mapStyle(this.settings), race.split ? null : { race, renderer: this.app.renderer }),
       };
       h.course.textContent = `${race.def.num} ${race.def.name}`;
       h.best.innerHTML = bits.join('<br>');
