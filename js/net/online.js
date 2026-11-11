@@ -21,10 +21,11 @@ const INTERP = 0.1;
 const PROTOCOL = 2;
 
 // One racer's state, packed into a short array.
-const F = { grounded: 1, drift: 2, boost: 4, hidden: 8, finished: 16 };
+// (twist: the Blade is mid-SWITCHBACK, so its half turn of yaw is drawn as the spin, not smeared sideways)
+const F = { grounded: 1, drift: 2, boost: 4, hidden: 8, finished: 16, twist: 32 };
 function pack(r) {
   const q = (v, k = 100) => Math.round(v * k) / k;
-  const flags = (r.grounded ? F.grounded : 0) | (r.drift.active ? F.drift : 0) | (r.boostTime > 0 ? F.boost : 0) | (r.respawnT > 0 ? F.hidden : 0) | (r.finished ? F.finished : 0);
+  const flags = (r.grounded ? F.grounded : 0) | (r.drift.active ? F.drift : 0) | (r.boostTime > 0 ? F.boost : 0) | (r.respawnT > 0 ? F.hidden : 0) | (r.finished ? F.finished : 0) | (r.twistT > 0 ? F.twist : 0);
   return [q(r.pos.x), q(r.pos.y), q(r.pos.z), q(r.yaw, 1000), q(r.vel.x), q(r.vel.y), q(r.vel.z), q(r.speed), r.mode, flags, q(r.prog, 10000), r.lap, r.finished ? q(r.finishTime, 1000) : 0, isFinite(r.bestLap) ? q(r.bestLap, 1000) : 0, r.drift.dir, r.drift.level, q(r.up.x), q(r.up.z), q(r.energy)];
 }
 
@@ -363,10 +364,14 @@ export class Online {
       let dy = d[3] - a[3];
       if (dy > Math.PI) dy -= Math.PI * 2;
       if (dy < -Math.PI) dy += Math.PI * 2;
-      r.yaw = a[3] + dy * k;
+      const flags = d[9];
+      // a SWITCHBACK between the two updates: jump to the new facing and play the spin, rather than turn through it
+      if (flags & F.twist && Math.abs(dy) > 2) {
+        r.yaw = d[3];
+        if (!(r.twistT > 0)) r.switchback(true);
+      } else r.yaw = a[3] + dy * k;
       r.vel.set(d[4], d[5], d[6]);
       r.speed = d[7];
-      const flags = d[9];
       if (r.mode !== d[8]) r.shiftT = 0.35;
       r.mode = d[8];
       r.grounded = !!(flags & F.grounded);
