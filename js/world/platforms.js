@@ -412,6 +412,13 @@ export class Platforms {
     return !!(r.gnd.onRoad && r.gnd.path?.sockets);
   }
 
+  // Steering assist (race.js) keeps a player off the edges of the road they're on. Return true where this craft is
+  // steering (positive: toward +lat) for a way off the edge that's open to it, and the assist should let it go.
+  // tr: { path, i, lat } where it is.
+  assistOff() {
+    return false;
+  }
+
   // ------------------------------------------------------------------ rivals
   // Should this rival take the road in at gate g? Subclasses say: return the lens to take it in, or 0.
   plan() {

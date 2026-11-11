@@ -7,21 +7,26 @@
 // fixed order (slidepuzzle.js) and solve the puzzle as the race goes on: the last one lands as the leaders start
 // lap 3, the picture is whole, and a red road runs straight down the board and a blue one straight across it.
 //
+// The empty slot is where each form has a way of its own. Under it is a red crossroads (RED and BOTH: the Pair car's
+// way onto the board, where it can shove the tile that goes next and make it go now). Narrow lanes peel off that
+// crossroads into the two deep cracks down the middle of the board, between the tiles, which only the Blade fits
+// and which run out under the board's edge onto the frame. And a cushion of blue air crosses the slot east to west
+// for the Skimmer.
+//
 // The moving-platform machinery (roads that move, carrying, sockets, caps, gates, the rivals' driving) is
 // platforms.js; this file is the board, the frame and the slip roads; slideart.js is what's printed on them and
 // what stands round them.
 
 import * as THREE from '../../vendor/three.js';
 import { Path } from './track.js';
-import { Platforms, Platform } from './platforms.js';
+import { Platforms, Platform, CAP } from './platforms.js';
 import { Puzzle, worth, KINDS, TILE, SIZE, FRAME, DX, DZ, cellX, cellZ, homeCell, mouthCell } from './slidepuzzle.js';
-import { M, RED, BLUE, COLORS } from './shift.js';
+import { M, RED, BLUE, BOTH, COLORS } from './shift.js';
 import { toyboxEnv, TOY_YELLOW } from './toybox.js';
 import { SlideArt, DEPTH } from './slideart.js';
 
 const { D, RC, R, HW, Y: FY } = FRAME;
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
-const LENS_ROAD = RED | BLUE; // a slip road: there in either lens, never in BOTH
 const YELLOW = new THREE.Color(TOY_YELLOW);
 
 // The frame: a rounded square round the board, driven W side first (heading +z), then N, E and S, the board always
@@ -104,32 +109,120 @@ export class SlideFifteen extends Platforms {
       });
       this.tiles[k] = this.addPlatform(pl);
     }
-    // the empty slot: a red road under the board, crossing it both ways, there in RED only. It's wherever the hole
-    // is, so it moves (the other way) every time a tile does, and carries whoever is down there with it.
+    // the empty slot. It's wherever the hole is, so it moves (the other way) every time a tile does, and carries
+    // whoever is in it. Three things live there:
+    //   a red road under the board, crossing it both ways: the red world's, so RED and BOTH can drive it (it's the
+    //     Pair car's way onto the board);
+    //   a cushion of blue air across it east to west, which only the Skimmer can ride (a humped road, in truth);
+    //   four narrow red lanes that peel off the under-road and run down into the cracks between the tiles (below).
     const at0 = start.indexOf(0);
     const hole = new Platform('hole', cellX(at0), 0, cellZ(at0));
     hole.k = 0;
     const under = ['NS', 'EW'].map((name) => {
       const path = new Path(`h${name.toLowerCase()}`, tileRoad(KINDS[name], UNDER), false, HW, { bankFactor: 0 });
-      this.addRoad(path, hole, { mask: M.RO });
+      this.addRoad(path, hole, { mask: M.R });
       Object.assign(path, { kind: KINDS[name], colour: 0 });
-      // (where the two cross there are no rails: it's a junction)
-      for (let i = 0; i < path.N; i++) if (Math.abs(i * path.ds - path.length / 2) < HW + 1.5) path.railL[i] = path.railR[i] = 0;
+      for (let i = 0; i < path.N; i++) {
+        const u = i * path.ds - path.length / 2;
+        // (where the two cross there are no rails: it's a junction)
+        if (Math.abs(u) < HW + 1.5) path.railL[i] = path.railR[i] = 0;
+      }
       return path;
     });
     under[0].cross = under[1];
     under[1].cross = under[0];
+    const air = new Path('hair', tileRoad(KINDS.EW, -HUMP), false, HW, { bankFactor: 0 });
+    this.addRoad(air, hole, { mask: M.BO });
+    Object.assign(air, { kind: KINDS.EW, colour: 1 });
+    this.air = air;
+    // the peel-offs: out of the junction along the under-road, then a quarter turn to the cell's edge, to end on the
+    // crack line pointing down it. One for each edge; an edge that isn't on a crack has a bumper at the end of its.
+    this.peels = [1, 3, 0, 2].map((side) => {
+      const ew = side % 2 === 1;
+      const sg = side === 1 || side === 0 ? 1 : -1;
+      const pts = [];
+      const h = TILE / 2;
+      const put = (a, b) => pts.push(ew ? V(sg * a, -UNDER, -b) : V(b, -UNDER, sg * a));
+      put(2, 0);
+      put(9, 0);
+      for (let k = 0; k <= 8; k++) {
+        const t = (k / 8) * (Math.PI / 2);
+        put(h - TURN + TURN * Math.sin(t), TURN * (1 - Math.cos(t)));
+      }
+      // (wider than the crack it feeds, and it draws a craft to its middle as it goes: a funnel)
+      const path = new Path(`hp${side}`, pts, false, PEELW, { bankFactor: 0 });
+      this.addRoad(path, hole, { mask: M.RO });
+      path.oneWay = true;
+      path.railL.fill(0);
+      path.railR.fill(0);
+      path.groove = (f) => 0.16 * THREE.MathUtils.smoothstep(f, 0.3, 0.8);
+      path.live = false;
+      return path;
+    });
+    // where a peel-off crosses the under-road's edge, the rail has a gap (fenced, in hold(), to anyone the peel-off
+    // isn't for)
+    const f = {};
+    for (const path of under) {
+      path.gapL = new Array(path.N).fill(null);
+      path.gapR = new Array(path.N).fill(null);
+      for (let i = 0; i < path.N; i++) for (const sd of [-1, 1]) {
+        const x = path.px[i] + path.rightX(i) * HW * sd;
+        const z = path.pz[i] + path.rightZ(i) * HW * sd;
+        for (const peel of this.peels) {
+          if (!peel.frame(x, z, -1, f, path.py[i]) || Math.abs(f.lat) > PEELW - 0.8 || f.f < 0.2) continue;
+          (sd < 0 ? path.gapL : path.gapR)[i] = peel;
+          (sd < 0 ? path.railL : path.railR)[i] = 0;
+        }
+      }
+    }
     this.hole = this.addPlatform(hole);
+    // The cracks: the two deep ones, down the board's centre lines, under the level of the tiles. Fixed roads, RED
+    // only (the Blade's: narrow enough for nothing else), each one way: the north-south crack runs south and comes
+    // up onto the frame on the S side, the east-west one runs east and comes up on the E side. The only way in is
+    // from the empty slot, when it's beside a crack: each stretch starts where a peel-off ends.
+    this.cracks = [];
+    const mid = SIZE / 2;
+    for (const [id, at, side] of [['cs', (u) => V(mid, -UNDER, SIZE - u), 2], ['ce', (u) => V(u, -UNDER, mid), 1]]) {
+      const stops = [0, 1, 2, 3].map((n) => TILE / 2 + TURN + n * TILE);
+      for (let n = 0; n < 3; n++) {
+        const pts = [];
+        for (let k = 0; k <= 8; k++) pts.push(at(stops[n] + ((stops[n + 1] - stops[n]) * k) / 8));
+        const path = new Path(`${id}${n}`, pts, false, CRACK, { bankFactor: 0 });
+        this.addRoad(path, null, { mask: M.RO });
+        path.oneWay = true;
+        path.groove = () => 0.12;
+        this.cracks.push(path);
+      }
+      // the last stretch: out from under the board, round and up onto the frame
+      const [ox, oz] = OUT[side];
+      const [tx, tz] = RUN[side];
+      const mx = mid + (ox * SIZE) / 2;
+      const mz = mid + (oz * SIZE) / 2;
+      const pts = [at(stops[3]), at((stops[3] + SIZE) / 2)];
+      const RX = D - this.world.main.halfW + CRACK; // (so its inner edge ends flush with the frame's)
+      for (let k = 0; k <= 9; k++) {
+        const a = (1 - k / 9) * (Math.PI / 2);
+        const rise = THREE.MathUtils.smoothstep(k / 9, 0.05, 0.7);
+        pts.push(V(mx + tx * RX * (1 - Math.sin(a)) + ox * RX * Math.cos(a), -UNDER + (FY + UNDER) * rise, mz + tz * RX * (1 - Math.sin(a)) + oz * RX * Math.cos(a)));
+      }
+      for (const d of [5, 10]) pts.push(V(mx + ox * RX + tx * (RX + d), FY, mz + oz * RX + tz * (RX + d)));
+      const up = new Path(`${id}3`, pts, false, CRACK, { bankFactor: 0 });
+      this.addRoad(up, null, { mask: M.RO, main: [1] });
+      // (the frame's rail stays shut there to anyone on the frame: the lane comes up through it)
+      this.joinMain(up, 0);
+      up.groove = () => 0.08;
+      this.cracks.push(up);
+    }
     // the slip roads: into each mouth off the frame, and back out onto it
     this.slips = [];
     for (let side = 0; side < 4; side++) for (let idx = 0; idx < 4; idx++) {
       const inn = new Path(`in${side}${idx}`, this.slipPoints(side, idx, true), false, HW, { bankFactor: 0 });
-      this.addRoad(inn, null, { mask: LENS_ROAD, main: [0] });
+      this.addRoad(inn, null, { mask: M.ALL, main: [0] });
       this.joinMain(inn, 0);
       const gate = this.addGate(inn, { side, idx });
       const out = new Path(`out${side}${idx}`, this.slipPoints(side, idx, false), false, HW, { bankFactor: 0 });
-      this.addRoad(out, null, { mask: LENS_ROAD, main: [1] });
-      this.joinMain(out, LENS_ROAD);
+      this.addRoad(out, null, { mask: M.ALL, main: [1] });
+      this.joinMain(out, M.ALL);
       inn.pair = out;
       out.pair = inn;
       this.slips.push({ inn, out, gate });
@@ -191,8 +284,108 @@ export class SlideFifteen extends Platforms {
 
   joins(P, end, mode) {
     const pl = P.platform;
-    if (!pl || (mode !== RED && mode !== BLUE)) return true;
+    if (!pl || !P.kind || (mode !== RED && mode !== BLUE)) return true;
     return this.puzzle.joins(pl.k, P.colour, P.kind[end], this.time);
+  }
+
+  // The gates, and two things of our own: which peel-offs lead into a crack just now, and the Pair car's way in.
+  // With both worlds open a mouth is open while the empty slot is behind it (the under-road is the red world's, and
+  // solid to the car), and while a tile with its arrows showing is (the one that goes next, or the one after): the
+  // car can't drive onto that tile, but it can drive up to it and shove (hold(), below).
+  relink() {
+    super.relink();
+    for (const peel of this.peels || []) peel.live = peel.sockets[1].links.length > 0;
+    if (!this.puzzle) return;
+    const B = this.puzzle.at(this.time);
+    const main = this.world.main;
+    for (const g of this.gates) {
+      const k = B.cells[mouthCell(g.side, g.idx)];
+      if (B.moving || !k || (B.next?.k !== k && B.after?.k !== k)) continue;
+      g.open |= BOTH;
+      const J = g.path.mainSide > 0 ? main.jR : main.jL;
+      for (const i of g.path.mainSpan) J[i] = g.open;
+    }
+  }
+
+  hold(r, race) {
+    const g = r.gnd;
+    const P = g.path;
+    if (g.onRoad && P?.sockets) {
+      if (r.mode === BOTH && !race.online && !r.puppet) this.ram(r, race, P);
+      const side = g.lat < 0 ? -1 : 1;
+      // a crack is a groove: it draws the wheel to its middle
+      if (P.groove) {
+        const k = P.groove(g.f);
+        r.pos.x -= g.rx * g.lat * k;
+        r.pos.z -= g.rz * g.lat * k;
+        const vl = r.vel.x * g.rx + r.vel.z * g.rz;
+        r.vel.x -= g.rx * vl * k;
+        r.vel.z -= g.rz * vl * k;
+      }
+      // the gap in the under-road's rail is the Blade's, and only while its peel-off leads somewhere
+      const peel = (side < 0 ? P.gapL : P.gapR)?.[g.i];
+      if (peel && !(r.mode === RED && peel.live)) {
+        const over = Math.abs(g.lat) - (P.halfW - 1.3);
+        if (over > 0) {
+          r.pos.x -= g.rx * side * over;
+          r.pos.z -= g.rz * side * over;
+          const vl = (r.vel.x * g.rx + r.vel.z * g.rz) * side;
+          if (vl > 0) {
+            r.vel.x -= g.rx * side * vl * 1.1;
+            r.vel.z -= g.rz * side * vl * 1.1;
+            if (vl > 6) race.onWallHit?.(r, vl);
+          }
+        }
+      }
+    }
+    super.hold(r, race);
+  }
+
+  // Steering for an open mouth, or for a peel-off that leads into a crack: the assist lets you.
+  assistOff(r, tr, steer) {
+    if (Math.abs(steer) < 0.3) return false;
+    const P = tr.path;
+    const side = steer < 0 ? -1 : 1;
+    if (P === this.world.main) {
+      for (const g of this.gates) {
+        if (!(g.open & r.mode) || g.path.mainSide !== side) continue;
+        let d = tr.i - g.path.mainSpan[0];
+        if (d < -P.N / 2) d += P.N;
+        if (d > -12 && d < g.path.mainSpan.length) return true;
+      }
+      return false;
+    }
+    const gaps = side < 0 ? P.gapL : P.gapR;
+    if (!gaps || r.mode !== RED) return false;
+    for (let i = Math.max(0, tr.i - 8); i <= Math.min(P.N - 1, tr.i + 8); i++) if (gaps[i]?.live) return true;
+    return false;
+  }
+
+  // The Pair car's shove: run it into the bumper in front of a tile with its arrows showing and the next slide goes
+  // now (that tile's, if its arrows are the bright ones; the one before it, if they're faint: shove again). The
+  // clock jumps to the slide, for everyone. (Not online: every browser keeps its own
+  // clock, and they have to agree.)
+  ram(r, race, P) {
+    const s = r.gnd.f * P.length;
+    for (const S of P.sockets) {
+      const d = S.end ? P.length - s : s;
+      if (S.main || d > CAP + 1 || this.open(S, BOTH)) continue;
+      if (r.vel.x * S.dx + r.vel.z * S.dz < 9) continue;
+      const B = this.puzzle.at(this.time);
+      if (B.moving || !B.next) continue;
+      const c = Math.floor((S.x + (S.dx * TILE) / 2) / TILE);
+      const w = Math.floor((S.z + (S.dz * TILE) / 2) / TILE);
+      const k = c < 0 || c > 3 || w < 0 || w > 3 ? 0 : B.cells[c + 4 * w];
+      if (!k || (B.next.k !== k && B.after?.k !== k)) continue;
+      const wait = this.puzzle.nextMove(0, this.time);
+      if (!(wait > 0.05) || !isFinite(wait)) continue;
+      this.time += wait;
+      this.shoves = (this.shoves || 0) + 1;
+      r.energy = Math.min(1, r.energy + 0.15);
+      race.app?.audio?.play('smash');
+      if (r.isPlayer) race.emitP?.(r, 'popup', { text: 'SHOVE · +SHIFT', color: '#d8c8ff', small: true });
+      return;
+    }
   }
 
   step(dt, race) {
@@ -230,7 +423,7 @@ export class SlideFifteen extends Platforms {
       // (no tile there means the hole and its red road, unless something is mid-slide)
       if (B.cells[cell] !== k || (k ? B.warn?.k === k : B.moving)) return 0;
     }
-    for (const colour of k ? [0, 1] : [0]) {
+    for (const colour of [0, 1]) {
       const W = worth(this.puzzle, G.side, G.idx, colour, t0, 46 + ai.skill * 8);
       if (W && W.gain > best) {
         best = W.gain;
@@ -269,6 +462,8 @@ export class SlideFifteen extends Platforms {
       const cz = SIZE / 2 + (oz * SIZE) / 2;
       // (the rim runs between the mouths: each mouth is a road's width plus its rails)
       const cuts = [-200, -150 - HW - 1.5, -150 + HW + 1.5, -50 - HW - 1.5, -50 + HW + 1.5, 50 - HW - 1.5, 50 + HW + 1.5, 150 - HW - 1.5, 150 + HW + 1.5, 200];
+      // (and a door in the middle of the S and E sides, where a crack lane comes out under the rim)
+      if (side === 1 || side === 2) cuts.splice(5, 0, -CRACK - 1, CRACK + 1);
       for (let k = 0; k < cuts.length; k += 2) {
         const a = V(cx + tx * cuts[k] + ox * 1.2, 0, cz + tz * cuts[k] + oz * 1.2);
         const b = V(cx + tx * cuts[k + 1] + ox * 1.2, 0, cz + tz * cuts[k + 1] + oz * 1.2);
@@ -291,14 +486,13 @@ export class SlideFifteen extends Platforms {
         if (i % 12 === 0) L.line(M.ALL, a, a.clone().setY(base), 0x8a6c14);
       }
     }
-    // with both worlds open every mouth is shut: the rail runs unbroken (drawn here, for the overlap only)
-    for (const { inn, out, gate } of this.slips) {
-      for (const p of [inn, out]) this.railAlong(L, p.mainSpan, M.X, COLORS.red);
-      // and through a lens, a rail in that lens's colour that's there only while the mouth is shut to it
+    // a rail across each mouth that's there only while the mouth is shut: in each lens's colour through a lens,
+    // violet with both worlds open (the red one stops short of where a crack lane comes up through it)
+    for (const { inn, gate } of this.slips) {
       gate.bars = {};
-      for (const [lens, mask, col] of [[RED, M.RO, COLORS.red], [BLUE, M.BO, COLORS.blue]]) {
+      for (const [lens, mask, col] of [[RED, M.RO, COLORS.red], [BLUE, M.BO, COLORS.blue], [BOTH, M.X, VIOLET]]) {
         const holder = { group: new THREE.Group() };
-        this.railAlong(this.layersFor(holder), inn.mainSpan, mask, col);
+        this.railAlong(this.layersFor(holder), lens === RED ? inn.mainSpan.filter((i) => !this.crossed.has(i)) : inn.mainSpan, mask, col);
         this.group.add(holder.group);
         gate.bars[lens] = holder.group;
       }
@@ -322,6 +516,7 @@ export class SlideFifteen extends Platforms {
     for (let k = 0; k < span.length - 1; k++) {
       const i = span[k];
       const j = span[k + 1];
+      if (j !== main.wrap(i + 1)) continue;
       let p0 = P(i, hw - 0.5, 0.045);
       let p1 = P(j, hw - 0.5, 0.045);
       for (let s = 1; s <= 3; s++) {
@@ -339,14 +534,101 @@ export class SlideFifteen extends Platforms {
     }
   }
 
-  // The empty slot's road: red only, dipping under the level of the tiles, with a red floor light under the junction.
+  // What's in the empty slot, the cracks, and what the Pair car sees.
   buildHole() {
+    const w = this.world;
+    const W = w.layers;
+    const main = w.main;
     const pl = this.hole;
     const L = this.layersFor(pl);
-    for (const p of pl.paths) this.drawRoad(L, p, M.RO, COLORS.red);
+    const red = COLORS.red;
+    // a road's points in its platform's own space (the hole never turns)
+    const at = (path) => (i, lat, h) => {
+      const v = path.point(i, lat, h, new THREE.Vector3());
+      return path.platform ? v.sub(path.platform.pos) : v;
+    };
+    // a narrow lane down the middle of a road: glass, two bright edges, chevrons the way it runs
+    const lane = (LL, path, mask, col, half) => {
+      const P = at(path);
+      for (let i = 0; i < path.N - 1; i++) {
+        const j = i + 1;
+        LL.roadQuad(mask, P(i, -half, -0.02), P(j, -half, -0.02), P(j, half, -0.02), P(i, half, -0.02));
+        for (const sd of [-1, 1]) LL.quad(mask, P(i, sd * half, 0.04), P(j, sd * half, 0.04), P(j, sd * (half - 0.3), 0.04), P(i, sd * (half - 0.3), 0.04), col);
+        LL.quad(mask, P(i, -half, 0.03), P(j, -half, 0.03), P(j, half, 0.03), P(i, half, 0.03), col, 0.22);
+        if (i % 3 === 0) for (const sd of [-1, 1]) LL.line(mask, P(i, sd * half * 0.7, 0.05), P(j, 0, 0.05), col);
+      }
+    };
+    // a piece of rail along one edge of a road
+    const rail = (LL, path, i, sd, mask, col) => {
+      const P = at(path);
+      const hw = path.halfW;
+      const j = i + 1;
+      LL.quad(mask, P(i, sd * (hw + 0.2), 1.1), P(j, sd * (hw + 0.2), 1.1), P(j, sd * (hw + 0.2), 0.75), P(i, sd * (hw + 0.2), 0.75), col, 0.8);
+      LL.quad(mask, P(i, sd * (hw - 0.5), 0.045), P(j, sd * (hw - 0.5), 0.045), P(j, sd * (hw + 0.2), 0.75), P(i, sd * (hw + 0.2), 0.75), col, 0.3);
+      if (i % 2 === 0) LL.line(mask, P(i, sd * (hw + 0.2), 0), P(i, sd * (hw + 0.2), 1.1), col);
+    };
+    // the under-road: the red world's, so it's there in RED and with both open
+    const [ns, ew] = pl.paths;
+    for (const p of [ns, ew]) this.drawRoad(L, p, M.R, red);
     const y = -UNDER - 0.05;
     const h = HW + 1.5;
-    L.quad(M.RO, V(-h, y, -h), V(h, y, -h), V(h, y, h), V(-h, y, h), COLORS.red, 0.22);
+    L.quad(M.R, V(-h, y, -h), V(h, y, -h), V(h, y, h), V(-h, y, h), red, 0.22);
+    // the peel-offs: each drawn (as narrow as the crack it leads to) only while it leads into one; otherwise the
+    // gap it leaves by has a rail across it. With both worlds open the gap is always railed.
+    for (const peel of this.peels) {
+      const lit = { group: new THREE.Group() };
+      lane(this.layersFor(lit), peel, M.RO, red, 1.2);
+      const bar = { group: new THREE.Group() };
+      const BL = this.layersFor(bar);
+      for (const p of [ns, ew]) for (let i = 0; i < p.N - 1; i++) for (const sd of [-1, 1]) {
+        if ((sd < 0 ? p.gapL : p.gapR)[i] !== peel) continue;
+        rail(BL, p, i, sd, M.RO, red);
+        rail(L, p, i, sd, M.X, red);
+      }
+      pl.group.add(lit.group, bar.group);
+      peel.lane = lit.group;
+      peel.bar = bar.group;
+    }
+    // the Skimmer's cushion of air, east to west: no road to see, only the air itself. Bars of blue light hanging
+    // over the gap, and the jets under them.
+    const air = { group: new THREE.Group() };
+    const AL = this.layersFor(air);
+    const A = at(this.air);
+    const blue = COLORS.blue;
+    for (let i = 1; i < this.air.N - 1; i++) {
+      const j = i + 1;
+      for (const sd of [-1, 1]) AL.quad(M.BO, A(i, sd * HW, 0.02), A(j, sd * HW, 0.02), A(j, sd * (HW - 0.35), 0.02), A(i, sd * (HW - 0.35), 0.02), blue, i % 2 ? 0.75 : 0.2);
+      if (i % 2) continue;
+      AL.quad(M.BO, A(i, -HW + 1, 0), A(i, HW - 1, 0), A(i, HW - 1, -0.02).add(V(0.7, 0, 0)), A(i, -HW + 1, -0.02).add(V(0.7, 0, 0)), blue, 0.4);
+      AL.quadFade(M.BO, A(i, -HW + 1, 0), A(i, HW - 1, 0), A(i, HW - 2.5, -1.6), A(i, -HW + 2.5, -1.6), blue, 0.16, 0);
+      for (const lat of [-5, 0, 5]) AL.line(M.BO, A(i, lat, 0), V(A(i, lat, 0).x, -UNDER, A(i, lat, 0).z), blue);
+    }
+    pl.group.add(air.group);
+    this.puffs = air.group;
+    // the cracks: fixed, in the world's own layers, each stretch a narrow red lane; the last one has its rails
+    for (const c of this.cracks) {
+      lane(W, c, M.RO, red, c.mainSpan ? 1.4 : 0.9); // (between the tiles there's a metre either side to see it by)
+      if (!c.mainSpan) continue;
+      for (let i = 0; i < c.N - 1; i++) for (const sd of [-1, 1]) if ((sd < 0 ? c.railL : c.railR)[i]) rail(W, c, i, sd, M.RO, red);
+    }
+    // where a crack lane comes up through the frame's rail: the rail is whole to the blue world and to both, and
+    // to the red world too but for the stretch the lane crosses (the mouths' own rails cover the rest)
+    const taken = new Set();
+    for (const { inn, out } of this.slips) for (const i of [...inn.mainSpan, ...out.mainSpan]) taken.add(i);
+    this.crossed = new Set();
+    const f = {};
+    for (const c of this.cracks) {
+      if (!c.mainSpan) continue;
+      for (const i of c.mainSpan) {
+        const e = main.point(i, c.mainSide * main.halfW, 0);
+        if (c.frame(e.x, e.z, -1, f, e.y) && Math.abs(f.lat) < CRACK + 0.8) this.crossed.add(i);
+      }
+      const free = c.mainSpan.filter((i) => !taken.has(i));
+      this.railAlong(W, free, M.B, COLORS.blue);
+      this.railAlong(W, free.filter((i) => !this.crossed.has(i)), M.RO, red);
+    }
+    // the slip roads again for the Pair car, in the overlap's violet
+    for (const { inn, out } of this.slips) for (const p of [inn, out]) this.drawRoad(W, p, M.X, VIOLET);
   }
 
   buildTile(pl) {
@@ -447,7 +729,13 @@ export class SlideFifteen extends Platforms {
     for (const g of this.gates) {
       g.bars[RED].visible = !(g.open & RED);
       g.bars[BLUE].visible = !(g.open & BLUE);
+      g.bars[BOTH].visible = !(g.open & BOTH);
     }
+    for (const peel of this.peels) {
+      peel.lane.visible = peel.live;
+      peel.bar.visible = !peel.live;
+    }
+    this.puffs.position.y = Math.sin(t * 3.1) * 0.12;
   }
 }
 
@@ -456,6 +744,11 @@ export class SlideFifteen extends Platforms {
 // roads that meet overlap.
 // (dip: a straight road that drops under the board in the middle, for the empty slot)
 const UNDER = 1.3;
+const HUMP = 2.4; // how high the Skimmer's air cushion carries it over the middle of the empty slot
+const CRACK = 2; // half the width of a crack lane
+const PEELW = 8; // and of a peel-off, where it leaves the under-road
+const TURN = 44; // the radius a peel-off turns on, from the under-road to the crack
+const VIOLET = 0xb070ff; // what's there only with both worlds open
 function tileRoad([a, b], dip = 0) {
   const h = TILE / 2;
   const pts = [];

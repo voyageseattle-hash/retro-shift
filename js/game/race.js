@@ -799,6 +799,9 @@ export class Race {
     if (!tr || !r.grounded || drift || r.drift.active || r.speed < 8) return steer;
     const P = tr.path;
     if (P.warpK?.[tr.i] > 0) return steer;
+    // (a rig's roads open and shut: where a way off the edge is open to this craft and it's steering for it, that's
+    // meant, and the assist doesn't fight it: platforms.js)
+    if (this.world.rig?.assistOff(r, tr, steer)) return steer;
     const j = P.wrap(tr.i + Math.round((6 + r.speed * 0.25) / P.ds));
     let err = r.yaw - Math.atan2(P.thx[j], P.thz[j]);
     err = Math.atan2(Math.sin(err), Math.cos(err));
