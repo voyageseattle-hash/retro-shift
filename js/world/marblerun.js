@@ -29,6 +29,7 @@ import { M, COLORS } from './shift.js';
 import { clamp, smoothstep } from '../core/util.js';
 import { addSign } from './signs.js';
 import { toyboxEnv } from './toybox.js';
+import { dressDropTower } from './marblerun-art.js';
 
 // ------------------------------------------------------------------ the layout
 const OX = -60; // tower A's axis (the funnel and the corkscrew wind round it)
@@ -824,4 +825,7 @@ export function buildDropTower(world, L, main) {
   }
   void n;
   void COLORS;
+
+  // ---- the art pass: snap-together track, the rest of the set beside the road, marbles everywhere
+  dressDropTower(world, L, main, T, { OX, TOP });
 }
