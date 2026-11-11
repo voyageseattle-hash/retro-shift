@@ -8,7 +8,8 @@
 // lap 3, the picture is whole, and a red road runs straight down the board and a blue one straight across it.
 //
 // The moving-platform machinery (roads that move, carrying, sockets, caps, gates, the rivals' driving) is
-// platforms.js; this file is the board, the frame, the slip roads and the look.
+// platforms.js; this file is the board, the frame and the slip roads; slideart.js is what's printed on them and
+// what stands round them.
 
 import * as THREE from '../../vendor/three.js';
 import { Path } from './track.js';
@@ -16,6 +17,7 @@ import { Platforms, Platform } from './platforms.js';
 import { Puzzle, worth, TILE, SIZE, FRAME, DX, DZ, cellX, cellZ, homeCell, mouthCell } from './slidepuzzle.js';
 import { M, RED, BLUE, COLORS } from './shift.js';
 import { toyboxEnv, TOY_YELLOW } from './toybox.js';
+import { SlideArt, DEPTH } from './slideart.js';
 
 const { D, RC, R, HW, Y: FY } = FRAME;
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -58,7 +60,8 @@ export function slideFifteenDef() {
     blurb: 'A sliding puzzle on the bed. Ride the tile that lines your road up.',
     decor: 'none',
     skyPiece: 'none',
-    dressEnv: toyboxEnv('bed'),
+    // (the bed's own toys are laid out round this course in slideart.js, so the shared loose ones are left out)
+    dressEnv: toyboxEnv('bed', { props: false }),
     seed: 2020,
     laps: 3,
     sun: 0,
@@ -82,10 +85,6 @@ const mouthAt = (side, idx) => {
   const cell = mouthCell(side, idx);
   return [cellX(cell) + (DX[side] * TILE) / 2, cellZ(cell) + (DZ[side] * TILE) / 2];
 };
-
-// seven-segment digits, for the numbers on the tiles: segments as [x0, y0, x1, y1] in a 1 by 2 box
-const SEG = { a: [0, 2, 1, 2], b: [1, 2, 1, 1], c: [1, 1, 1, 0], d: [0, 0, 1, 0], e: [0, 1, 0, 0], f: [0, 2, 0, 1], g: [0, 1, 1, 1] };
-const DIGIT = ['abcdef', 'bc', 'abged', 'abgcd', 'fgbc', 'afgcd', 'afgedc', 'abc', 'abcdefg', 'abfgcd'];
 
 export class SlideFifteen extends Platforms {
   constructor(world) {
@@ -228,7 +227,8 @@ export class SlideFifteen extends Platforms {
       this.drawRoad(L, p, M.BO, COLORS.blue);
     }
     // the tray: its floor under the tiles, the cells marked on it, and a rim round the board between the mouths
-    const ty = -1.6;
+    const ty = DEPTH; // (the look only: nothing drives down there)
+    const art = (this.art = new SlideArt(this));
     L.fillQuad(M.ALL, V(-1, ty, -1), V(SIZE + 1, ty, -1), V(SIZE + 1, ty, SIZE + 1), V(-1, ty, SIZE + 1));
     for (let k = 0; k <= 4; k++) {
       L.lineXYZ(M.ALL, k * TILE, ty + 0.05, 0, k * TILE, ty + 0.05, SIZE, 0x6a5310);
@@ -276,6 +276,13 @@ export class SlideFifteen extends Platforms {
       }
     }
     for (let k = 1; k <= 15; k++) this.buildTile(this.tiles[k]);
+    art.board(L, this.slips.map(({ gate }) => {
+      const [mx, mz] = mouthAt(gate.side, gate.idx);
+      return { gate, mx, mz, ox: OUT[gate.side][0], oz: OUT[gate.side][1], tx: RUN[gate.side][0], tz: RUN[gate.side][1] };
+    }));
+    art.rail(L);
+    art.bed(L);
+    art.finish();
     w.animated.push((t) => this.animate(t));
   }
 
@@ -317,48 +324,17 @@ export class SlideFifteen extends Platforms {
     };
     const top = ring(h, y0 + 0.04, TOY_YELLOW);
     const inner = ring(h - 2.2, y0 + 0.04, 0x8a6c14);
-    const foot = ring(h, -1.5, 0x8a6c14);
+    const foot = ring(h, DEPTH + 0.1, 0x8a6c14);
     for (let i = 0; i < 4; i++) {
       L.line(M.ALL, top[i], foot[i], TOY_YELLOW);
       L.quad(M.ALL, top[i], top[(i + 1) % 4], inner[(i + 1) % 4], inner[i], TOY_YELLOW, 0.14);
       L.fillQuad(M.ALL, top[i], top[(i + 1) % 4], foot[(i + 1) % 4], foot[i]);
     }
-    // its number, top left as the picture reads (looking toward -z: +x is right, -z is up)
-    const digits = String(pl.k);
-    const s = 5;
-    digits.split('').forEach((ch, n) => {
-      const x0 = -h + 7 + n * s * 1.6;
-      const z0 = -h + 7;
-      for (const seg of DIGIT[+ch]) {
-        const [ax, ay, bx, by] = SEG[seg];
-        const a = V(x0 + ax * s, y0 + 0.06, z0 + (2 - ay) * s);
-        const b = V(x0 + bx * s, y0 + 0.06, z0 + (2 - by) * s);
-        L.line(M.ALL, a, b, TOY_YELLOW);
-        // (a fat stroke, so it reads from the frame)
-        const nx = (b.z - a.z) / s;
-        const nz = -(b.x - a.x) / s;
-        L.quad(M.ALL, a.clone().add(V(nx * 0.3, 0, nz * 0.3)), b.clone().add(V(nx * 0.3, 0, nz * 0.3)), b.clone().add(V(-nx * 0.3, 0, -nz * 0.3)), a.clone().add(V(-nx * 0.3, 0, -nz * 0.3)), TOY_YELLOW, 0.8);
-      }
-    });
     // its two roads
     this.drawRoad(L, pl.paths[0], M.RO, COLORS.red);
     this.drawRoad(L, pl.paths[1], M.BO, COLORS.blue);
-    // its piece of the picture: the studio's mark, cut in sixteen (the sixteenth is the hole)
-    const home = homeCell(pl.k);
-    const g = new THREE.PlaneGeometry(2 * h, 2 * h);
-    g.rotateX(-Math.PI / 2);
-    const uv = g.getAttribute('uv');
-    const pos = g.getAttribute('position');
-    for (let i = 0; i < uv.count; i++) {
-      // across the picture: u with +x, v up toward -z; the art is wider than tall, so it's letterboxed
-      const u = ((home % 4) + (pos.getX(i) + h) / (2 * h)) / 4;
-      const v = 1 - ((home >> 2) + (pos.getZ(i) + h) / (2 * h)) / 4;
-      uv.setXY(i, u, 0.5 + (v - 0.5) / 0.795);
-    }
-    const pic = new THREE.Mesh(g, this.pictureMat());
-    pic.position.y = y0 + 0.05;
-    pic.renderOrder = 2;
-    pl.group.add(pic);
+    // its printed face, kerbs, sides and the number blocks on its corners
+    this.art.tile(pl, L);
     // the arrows that light before it slides: one set for each way it can go
     pl.arrows = [0, 1, 2, 3].map((dir) => {
       const posn = [];
@@ -387,14 +363,6 @@ export class SlideFifteen extends Platforms {
     });
   }
 
-  pictureMat() {
-    if (!this._pic) {
-      const tex = new THREE.TextureLoader().load('assets/splash/ff-lines.webp');
-      tex.colorSpace = THREE.SRGBColorSpace;
-      this._pic = new THREE.MeshBasicMaterial({ map: tex, color: TOY_YELLOW, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
-    }
-    return this._pic;
-  }
   arrowMat() {
     return (this._arrow ||= new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, side: THREE.DoubleSide }));
   }
@@ -411,8 +379,7 @@ export class SlideFifteen extends Platforms {
       col.copy(tint).lerp(YELLOW, both);
     } else col.copy(YELLOW);
     const solved = B.done >= this.puzzle.steps.length && !B.moving;
-    this._pic.color.copy(col);
-    this._pic.opacity = solved ? 0.75 + 0.15 * Math.sin(t * 2) : 0.42;
+    this.art.update(t, B, tint, tint ? Math.min(1, Math.max(0, (Math.min(tint.r, tint.g, tint.b) - 0.35) / 0.6)) : 1, col, solved);
     this._arrow.color.copy(col);
     const step = B.moving || B.warn;
     for (let k = 1; k <= 15; k++) {
