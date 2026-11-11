@@ -122,7 +122,7 @@ A lap of a giant pinball table standing on the desk. The countdown draws the plu
 
 - **The flippers** swing on a steady beat (three lamps count each swing in). Be on the left bat when it swings and it throws you up the clear centre ramp, the short way home. Miss it and you run off its tip into the drain, down to the ball trough for a slow ride back up under the table, unless you are in BLUE: the Skimmer floats the drain to the right bat.
 - **The bumper pit** is the fast, rough way round the top. Each pop bumper kicks you, three kicks in a row is a RICOCHET (a long boost and some SHIFT), and the BOTH car is heavy enough to hold its line through them. The outer lane is slower and calm.
-- **The printing is in two colours.** The rollover lanes over the arch boost only in their own lens, the drop targets across the centre lane are lens walls, and under the red plastic upper deck there is a secret lane that only shows in BLUE.
+- **The printing is in two colours.** The rollover lanes over the arch boost only in their own lens, the drop-target banks across the centre lane and the left orbit are lens walls, and under the red plastic upper deck there is a secret lane that only shows in BLUE.
 - **The wire ramp** high over the arch is a single steel wireform that only the RED Blade can balance on.
 - **Lap 2** lights the kickback in the left outlane and brings the right flipper to life. **Lap 3** is multiball: three steel balls roll down the centre lane on a fixed timetable.
 - The backbox shows the race as a score table.

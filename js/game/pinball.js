@@ -368,6 +368,10 @@ export class Pinball {
     }
     for (const r of R.racers) {
       if (r.puppet || r.respawnT > 0 || r.respawnGrace > 0 || r.flip || r.finished) continue;
+      // coming back onto the centre lane (off the ramp, out of the trough, off the flipper lane) you can't have seen
+      // what is rolling down it: a moment's grace
+      const P = r.track?.path;
+      if (P === this.K.trough || P === this.K.ramp || P === this.K.lane) r.ballT = Math.max(r.ballT || 0, R.t + 1.2);
       for (const b of this.balls) {
         if (!b.show || b.sink > 0.3 || (r.ballT || 0) > R.t) continue;
         const dx = r.pos.x - b.pos.x;
@@ -401,7 +405,9 @@ export class Pinball {
       if (!b.on) continue;
       let d = b.i - pi;
       if (d < -P.N / 2) d += P.N;
-      if (d >= -2 && d <= n) out.push(b);
+      // a ball comes to meet you: the place to be clear of it is where you'll meet, nearer than where it is now, and
+      // it needs seeing from further off than something standing still
+      if (d >= -2 && d <= n * 1.5) out.push(d > 4 ? { ...b, i: pi + Math.round(d * 0.66) } : b);
     }
     return out;
   }
