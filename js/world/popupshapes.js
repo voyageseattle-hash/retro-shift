@@ -257,3 +257,125 @@ export function palm(h) {
   }
   return done(pts, segs);
 }
+
+// ---------------------------------------------------------------- the little pieces that line the road
+// (each a few metres tall: the street furniture of its spread)
+
+export function lamp(h) {
+  const a = h * 0.035;
+  const pts = [[-a, 0], [-a, h * 0.8], [-h * 0.14, h * 0.84], [-h * 0.1, h * 0.96], [0, h], [h * 0.1, h * 0.96], [h * 0.14, h * 0.84], [a, h * 0.8], [a, 0]];
+  const segs = [-h * 0.14, h * 0.84, h * 0.14, h * 0.84, -a * 3, 0.5, a * 3, 0.5];
+  return done(pts, segs);
+}
+
+// a lollipop street tree
+export function tree(h) {
+  const a = h * 0.045;
+  const r = h * 0.3;
+  const cy = h - r;
+  const pts = [[-a, 0], [-a, cy - r * 0.8]];
+  for (let k = 0; k <= 10; k++) {
+    const an = Math.PI * 1.3 - (k / 10) * Math.PI * 1.6;
+    pts.push([Math.cos(an) * r * (1 + 0.1 * Math.sin(k * 2.6)), cy + Math.sin(an) * r]);
+  }
+  pts.push([a, cy - r * 0.8], [a, 0]);
+  return done(pts, [0, cy - r * 0.8, 0, cy, 0, cy - r * 0.3, -r * 0.4, cy + r * 0.2, 0, cy - r * 0.1, r * 0.45, cy + r * 0.3]);
+}
+
+export function house(w, h) {
+  const a = w / 2;
+  const pts = [[-a, 0], [-a, h * 0.6], [-a * 1.15, h * 0.6], [0, h], [a * 0.5, h * 0.77], [a * 0.5, h * 0.95], [a * 0.75, h * 0.95], [a * 0.75, h * 0.69], [a * 1.15, h * 0.6], [a, h * 0.6], [a, 0]];
+  const segs = [];
+  rect(segs, -a * 0.2, 0, a * 0.2, h * 0.36);
+  rect(segs, -a * 0.75, h * 0.25, -a * 0.4, h * 0.48);
+  rect(segs, a * 0.4, h * 0.25, a * 0.75, h * 0.48);
+  segs.push(-a, h * 0.6, a, h * 0.6);
+  return done(pts, segs);
+}
+
+export function stopSign(h) {
+  const a = h * 0.03;
+  const r = h * 0.2;
+  const cy = h - r;
+  const pts = [[-a, 0], [-a, cy - r]];
+  for (let k = 0; k < 8; k++) {
+    const an = Math.PI * 1.375 - (k / 8) * Math.PI * 2;
+    pts.push([Math.cos(an) * r, cy + Math.sin(an) * r]);
+  }
+  pts.push([a, cy - r], [a, 0]);
+  return done(pts, [-r * 0.5, cy, r * 0.5, cy]);
+}
+
+export function buoy(h) {
+  const a = h * 0.22;
+  const pts = [[-a * 1.3, 0], [-a, h * 0.35], [-a * 0.45, h * 0.4], [-a * 0.3, h * 0.8], [-a * 0.5, h * 0.84], [0, h], [a * 0.5, h * 0.84], [a * 0.3, h * 0.8], [a * 0.45, h * 0.4], [a, h * 0.35], [a * 1.3, 0]];
+  return done(pts, [-a * 1.15, h * 0.18, a * 1.15, h * 0.18, -a * 0.38, h * 0.6, a * 0.38, h * 0.6]);
+}
+
+export function sailboat(h) {
+  const a = h * 0.5;
+  const pts = [[-a * 0.7, 0], [-a, h * 0.2], [-a * 0.08, h * 0.2], [-a * 0.08, h], [a * 0.75, h * 0.28], [a * 0.02, h * 0.28], [a * 0.02, h * 0.2], [a, h * 0.2], [a * 0.72, 0]];
+  return done(pts, [-a * 0.16, h * 0.9, -a * 0.75, h * 0.28, -a * 0.75, h * 0.28, -a * 0.16, h * 0.28, a * 0.2, h * 0.5, a * 0.42, h * 0.5]);
+}
+
+// a clump of reeds or sea grass
+export function reeds(w, h, seed = 0) {
+  const pts = [[-w / 2, 0]];
+  const n = 5;
+  for (let k = 0; k < n; k++) {
+    const x = -w / 2 + ((k + 0.5) / n) * w;
+    const hh = h * (0.55 + 0.45 * Math.abs(Math.sin(k * 2.3 + seed)));
+    const lean = Math.sin(k * 1.7 + seed) * w * 0.12;
+    pts.push([x - w * 0.07, hh * 0.2], [x + lean, hh], [x + w * 0.07, hh * 0.2]);
+  }
+  pts.push([w / 2, 0]);
+  return done(pts, []);
+}
+
+export function fish(h) {
+  // leaping: nose up
+  const pts = [[-h * 0.1, 0], [-h * 0.28, h * 0.12], [-h * 0.12, h * 0.26], [-h * 0.22, h * 0.6], [-h * 0.05, h * 0.9], [h * 0.12, h], [h * 0.2, h * 0.8], [h * 0.16, h * 0.5], [h * 0.3, h * 0.42], [h * 0.12, h * 0.3], [h * 0.16, h * 0.08], [h * 0.05, 0]];
+  const segs = [];
+  ring(segs, h * 0.07, h * 0.86, h * 0.03, 6);
+  segs.push(-h * 0.02, h * 0.74, h * 0.16, h * 0.68);
+  return done(pts, segs);
+}
+
+export function fern(h) {
+  const pts = [[-h * 0.03, 0]];
+  const L = [];
+  const Rr = [];
+  for (let k = 1; k <= 5; k++) {
+    const y = (k / 6) * h;
+    const r = h * 0.34 * (1 - (k / 6) * 0.75);
+    L.push([-h * 0.04, y - h * 0.05], [-r, y + h * 0.02], [-h * 0.04, y + h * 0.04]);
+    Rr.unshift([h * 0.04, y + h * 0.04], [r, y + h * 0.02], [h * 0.04, y - h * 0.05]);
+  }
+  pts.push(...L, [0, h], ...Rr, [h * 0.03, 0]);
+  return done(pts, [0, h * 0.1, 0, h * 0.92]);
+}
+
+// a little vent with a puff over it
+export function vent(h) {
+  const a = h * 0.5;
+  const pts = [[-a, 0], [-a * 0.45, h * 0.5], [-a * 0.2, h * 0.62], [0, h * 0.54], [a * 0.22, h * 0.64], [a * 0.5, h * 0.48], [a, 0]];
+  const segs = [];
+  ring(segs, 0, h * 0.82, h * 0.1, 7);
+  ring(segs, h * 0.12, h * 0.98, h * 0.07, 6);
+  segs.push(-a * 0.1, h * 0.56, -a * 0.25, h * 0.2, a * 0.12, h * 0.58, a * 0.3, h * 0.25);
+  return done(pts, segs);
+}
+
+// a long-necked dinosaur, because every pop-up volcano has one
+export function dino(h) {
+  const u = h;
+  const pts = [
+    [-u * 0.62, 0], [-u * 0.6, u * 0.3], [-u * 1.15, u * 0.16], [-u * 1.3, u * 0.2], [-u * 0.62, u * 0.52], [-u * 0.2, u * 0.6], [u * 0.2, u * 0.56],
+    [u * 0.42, u * 0.9], [u * 0.5, u], [u * 0.76, u * 0.98], [u * 0.8, u * 0.9], [u * 0.6, u * 0.86], [u * 0.52, u * 0.5], [u * 0.36, u * 0.26], [u * 0.36, 0],
+    [u * 0.2, 0], [u * 0.2, u * 0.2], [-u * 0.42, u * 0.2], [-u * 0.42, 0],
+  ];
+  const segs = [];
+  ring(segs, u * 0.62, u * 0.94, u * 0.02, 5);
+  for (let k = 0; k < 4; k++) segs.push(-u * 0.4 + k * u * 0.18, u * 0.56, -u * 0.34 + k * u * 0.18, u * 0.46);
+  return done(pts, segs);
+}

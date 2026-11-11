@@ -22,6 +22,7 @@ import * as THREE from '../../vendor/three.js';
 import { M, RED, BLUE, COLORS } from '../world/shift.js';
 import { BOOK, pageY, SPREADS } from '../world/tracks-popup.js';
 import * as S from '../world/popupshapes.js';
+import { patchPlate, cardMaterial, followCards, cardLines, Tuft } from '../world/popupprint.js';
 import { FORMS } from '../vehicles/forms.js';
 import { mulberry32, smoothstep, clamp } from '../core/util.js';
 
@@ -70,8 +71,13 @@ function drawPrint(idx, plate, paths) {
   g.fillRect(0, 0, CW, CH);
   const rng = mulberry32(1900 + idx * 17 + (plate === 'r' ? 0 : 5));
   const red = plate === 'r';
-  g.strokeStyle = '#fff';
-  g.fillStyle = '#fff';
+  // line work goes in the red channel and prints solid; tone goes in the blue channel and prints through the
+  // halftone screen (world/popupprint.js)
+  const LINE = '#f00';
+  const TONE = '#00f';
+  g.globalCompositeOperation = 'lighter';
+  g.strokeStyle = LINE;
+  g.fillStyle = LINE;
   g.lineCap = 'round';
   g.lineJoin = 'round';
   const line = (pts, w = 1.5, a = 0.6) => {
@@ -88,6 +94,33 @@ function drawPrint(idx, plate, paths) {
     g.arc(X(bx), Y(bz), r * PX, 0, Math.PI * 2);
     g.stroke();
   };
+  // tone: a filled shape, or a fat stroke, at `a` of full ink
+  const wash = (pts, a, close = true) => {
+    g.globalAlpha = a;
+    g.fillStyle = TONE;
+    g.beginPath();
+    pts.forEach(([bx, bz], k) => (k ? g.lineTo(X(bx), Y(bz)) : g.moveTo(X(bx), Y(bz))));
+    if (close) g.closePath();
+    g.fill();
+    g.fillStyle = LINE;
+  };
+  const band = (pts, w, a) => {
+    g.globalAlpha = a;
+    g.strokeStyle = TONE;
+    g.lineWidth = w * PX;
+    g.beginPath();
+    pts.forEach(([bx, bz], k) => (k ? g.lineTo(X(bx), Y(bz)) : g.moveTo(X(bx), Y(bz))));
+    g.stroke();
+    g.strokeStyle = LINE;
+  };
+  const disc = (bx, bz, r, a) => {
+    g.globalAlpha = a;
+    g.fillStyle = TONE;
+    g.beginPath();
+    g.arc(X(bx), Y(bz), r * PX, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = LINE;
+  };
   // the picture is clipped to the two pages' frames
   g.save();
   g.beginPath();
@@ -98,8 +131,26 @@ function drawPrint(idx, plate, paths) {
     if (!red) {
       for (let bx = -W; bx <= W; bx += 34) line([[bx + 7, -D / 2], [bx + 7, D / 2]], 1.2, 0.45);
       for (let bz = -D / 2; bz <= D / 2; bz += 34) line([[-W, bz + 9], [W, bz + 9]], 1.2, 0.45);
+      // the river, and its banks
+      band([[-W, -200], [-40, 120], [W, 250]], 30, 0.16);
+      band([[-W, -200], [-40, 120], [W, 250]], 18, 0.3);
       line([[-W, -200], [-40, 120], [W, 250]], 3, 0.5);
-      for (let k = 0; k < 9; k++) circle(-150 + (rng() - 0.5) * 60, -20 + (rng() - 0.5) * 60, 3 + rng() * 4, 1.2, 0.5);
+      // the park: a green and its trees
+      disc(-150, -20, 44, 0.2);
+      for (let k = 0; k < 9; k++) {
+        const bx = -150 + (rng() - 0.5) * 60;
+        const bz = -20 + (rng() - 0.5) * 60;
+        const r = 3 + rng() * 4;
+        disc(bx, bz, r, 0.4);
+        circle(bx, bz, r, 1.2, 0.5);
+      }
+      // squares and a second green on the other page
+      disc(140, -40, 30, 0.2);
+      for (let k = 0; k < 14; k++) {
+        const bx = Math.round(((rng() * 2 - 1) * (W - 40)) / 34) * 34 + 9;
+        const bz = Math.round(((rng() - 0.5) * (D - 60)) / 34) * 34 + 11;
+        wash([[bx, bz], [bx + 30, bz], [bx + 30, bz + 30], [bx, bz + 30]], 0.1 + rng() * 0.1);
+      }
     } else {
       for (let bx = -W + 12; bx < W; bx += 34) {
         for (let bz = -D / 2 + 14; bz < D / 2; bz += 34) {
@@ -109,7 +160,13 @@ function drawPrint(idx, plate, paths) {
           g.globalAlpha = 0.5;
           g.lineWidth = 1.4;
           g.strokeRect(X(bx), Y(bz + h), w * PX, h * PX);
-          if (rng() < 0.5) line([[bx, bz], [bx + w, bz + h]], 1, 0.35);
+          const hip = rng() < 0.5;
+          // the roofs: flat tone, one slope of a hipped one heavier
+          wash([[bx, bz], [bx + w, bz], [bx + w, bz + h], [bx, bz + h]], 0.2 + rng() * 0.25);
+          if (hip) {
+            wash([[bx, bz], [bx + w, bz], [bx + w, bz + h]], 0.3);
+            line([[bx, bz], [bx + w, bz + h]], 1, 0.35);
+          }
         }
       }
     }
@@ -119,6 +176,9 @@ function drawPrint(idx, plate, paths) {
       for (let bz = -D / 2 + 10; bz < D / 2; bz += 20) {
         const pts = [];
         for (let bx = -W; bx <= W; bx += 6) pts.push([bx, bz + Math.sin(bx * 0.09 + bz * 0.5) * 3.2]);
+        // the back of each swell in tone, heavier toward the bottom of the page
+        const back = pts.map(([bx, z]) => [bx, z - 9 - Math.sin(bx * 0.05 + bz) * 2.5]).reverse();
+        wash([...pts, ...back], 0.14 + 0.2 * (0.5 - bz / D));
         line(pts, 1.3, 0.5);
       }
     } else {
@@ -127,14 +187,20 @@ function drawPrint(idx, plate, paths) {
         const bz = (rng() - 0.5) * (D - 60);
         const s = 5 + rng() * 6;
         const d = rng() < 0.5 ? -1 : 1;
+        wash([[bx - s * d, bz], [bx, bz + s * 0.45], [bx + s * d, bz], [bx, bz - s * 0.45]], 0.5);
+        wash([[bx - s * d, bz], [bx - s * 1.5 * d, bz + s * 0.5], [bx - s * 1.5 * d, bz - s * 0.5]], 0.35);
         line([[bx - s * d, bz], [bx, bz + s * 0.45], [bx + s * d, bz], [bx, bz - s * 0.45], [bx - s * d, bz], [bx - s * 1.5 * d, bz + s * 0.5], [bx - s * 1.5 * d, bz - s * 0.5], [bx - s * d, bz]], 1.3, 0.5);
       }
       for (const [bx, bz] of [[-150, 40], [130, -60]]) {
+        disc(bx, bz, 30, 0.18);
+        disc(bx, bz, 12, 0.3);
         circle(bx, bz, 30, 1.5, 0.5);
         circle(bx, bz, 24, 1, 0.4);
         for (let k = 0; k < 8; k++) {
           const a = (k / 8) * Math.PI * 2;
           const r = k % 2 ? 22 : 40;
+          const sp = Math.PI / 8;
+          wash([[bx, bz], [bx + Math.cos(a - sp) * r * 0.3, bz + Math.sin(a - sp) * r * 0.3], [bx + Math.cos(a) * r, bz + Math.sin(a) * r]], 0.5);
           line([[bx, bz], [bx + Math.cos(a) * r, bz + Math.sin(a) * r]], 1.2, 0.5);
         }
       }
@@ -143,6 +209,9 @@ function drawPrint(idx, plate, paths) {
     // THE VOLCANO: red contours and lava rivers, blue steam and ash
     const craters = [[-140, 20], [120, 70]];
     if (red) {
+      // the slopes: tone heaviest at the crater, thinning ring by ring
+      for (let r = 142; r > 12; r -= 26) for (const [bx, bz] of craters) disc(bx, bz, r, 0.09);
+      for (const [bx, bz] of craters) disc(bx, bz, 10, 0.5);
       for (const [bx, bz] of craters) {
         for (let r = 12; r < 150; r += 13) {
           const pts = [];
@@ -157,6 +226,7 @@ function drawPrint(idx, plate, paths) {
           const a = rng() * Math.PI * 2;
           const pts = [];
           for (let r = 8; r < 190; r += 12) pts.push([bx + Math.cos(a + Math.sin(r * 0.05 + k) * 0.25) * r, bz + Math.sin(a + Math.sin(r * 0.05 + k) * 0.25) * r]);
+          band(pts, 7, 0.45);
           line(pts, 2.4, 0.55);
         }
       }
@@ -166,24 +236,50 @@ function drawPrint(idx, plate, paths) {
         const bz = (rng() - 0.5) * (D - 80);
         const pts = [];
         for (let q = 0; q < 26; q++) pts.push([bx + Math.cos(q * 0.55) * q * 0.7, bz + Math.sin(q * 0.55) * q * 0.7]);
+        // a puff of steam round each curl
+        disc(bx, bz, 20, 0.14);
+        disc(bx + 9, bz + 6, 13, 0.14);
+        disc(bx - 10, bz + 4, 11, 0.14);
         line(pts, 1.3, 0.5);
       }
       g.globalAlpha = 0.5;
       for (let k = 0; k < 500; k++) g.fillRect(rng() * CW, rng() * CH, 1.6, 1.6);
+      // ash lying in drifts
+      for (let k = 0; k < 12; k++) {
+        const bx = (rng() * 2 - 1) * (W - 50);
+        const bz = (rng() - 0.5) * (D - 90);
+        const w = 30 + rng() * 40;
+        wash([[bx - w, bz], [bx - w * 0.3, bz + 7], [bx + w * 0.4, bz + 5], [bx + w, bz], [bx + w * 0.2, bz - 6], [bx - w * 0.5, bz - 4]], 0.16);
+      }
     }
   }
-  // nothing is printed where the road is cut through the page
-  g.globalAlpha = 1;
-  g.strokeStyle = '#000';
-  for (const p of paths) {
-    g.lineWidth = (p.halfW * 2 + 10) * PX;
+  // the road is cut through the page. The printing shades toward the cut, as if the road cast a shadow in ink (so
+  // there is colour on the paper right beside the car), and nothing is printed in the cut itself
+  const trace = (p) => {
     g.beginPath();
     for (let i = 0; i < p.N; i += 2) (i ? g.lineTo(X(-p.px[i]), Y(p.pz[i])) : g.moveTo(X(-p.px[i]), Y(p.pz[i])));
     if (p.closed) g.closePath();
     g.stroke();
+  };
+  g.strokeStyle = TONE;
+  for (const [extra, a] of [[44, 0.07], [28, 0.1], [16, 0.14]]) {
+    g.globalAlpha = a;
+    for (const p of paths) {
+      g.lineWidth = (p.halfW * 2 + 10 + extra) * PX;
+      trace(p);
+    }
+  }
+  g.globalCompositeOperation = 'source-over';
+  g.globalAlpha = 1;
+  g.strokeStyle = '#000';
+  for (const p of paths) {
+    g.lineWidth = (p.halfW * 2 + 10) * PX;
+    trace(p);
   }
   g.restore();
-  g.strokeStyle = '#fff';
+  g.globalCompositeOperation = 'lighter';
+  g.strokeStyle = LINE;
+  g.fillStyle = LINE;
   // each page's frame, its number, and the words (both plates, a hair apart: the fringe of a 3-D comic)
   const off = red ? -1.5 : 1.5;
   for (const s of [-1, 1]) {
@@ -248,6 +344,7 @@ export class PopupBook {
     this.rng = mulberry32(race.def.seed || 19);
     this.pieces = []; // every pop-up: { page, left, d, r, h, root, flaps, ob?, kind?, ... }
     this.water = []; // THE SEA's water: { i0, n }
+    this.tufts = []; // the little roadside pieces, batched: { page, left, d, r, h, group }
     this.views = [0, 1].map(() => ({ page: 0, from: 0, s: 9, landed: true }));
     this.buildPaper(world);
     this.buildLeaf();
@@ -260,7 +357,7 @@ export class PopupBook {
   buildPaper(world) {
     this.tex = [0, 1, 2].map((i) => ({ r: drawPrint(i, 'r', world.paths), b: drawPrint(i, 'b', world.paths) }));
     const paper = new THREE.MeshBasicMaterial({ color: 0x0c0818, side: THREE.DoubleSide });
-    const plate = (c) => new THREE.MeshBasicMaterial({ color: c, map: this.tex[0].r, side: THREE.DoubleSide, ...ADD });
+    const plate = (c) => patchPlate(new THREE.MeshBasicMaterial({ color: c, map: this.tex[0].r, side: THREE.DoubleSide, ...ADD }), c === COLORS.red ? M.R : M.B, [2 * W, D]);
     const u = (bx) => (bx + W) / (2 * W);
     const mk = (geo, mat, y = 0, order = 0) => {
       const m = new THREE.Mesh(geo, mat);
@@ -343,6 +440,9 @@ export class PopupBook {
       pos.push(a[0], a[1], 0, b[0], b[1], 0);
     }
     for (let k = 0; k < shape.segs.length; k += 4) pos.push(shape.segs[k], shape.segs[k + 1], 0, shape.segs[k + 2], shape.segs[k + 3], 0);
+    // card, not wire: an edge with thickness, a glue tab at the foot and struts behind (not for what stands on the road)
+    cardLines(shape, pos, { tab: !opts.onRoad, strut: !opts.onRoad });
+    const card = cardMaterial(this.race.world.layers, mask);
     const lg = new THREE.BufferGeometry();
     lg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     const fg = new THREE.ShapeGeometry(new THREE.Shape(shape.pts.map(([px, py]) => new THREE.Vector2(px, py))));
@@ -352,7 +452,7 @@ export class PopupBook {
       const flap = new THREE.Group();
       const lines = new THREE.LineSegments(lg, mats.wire);
       lines.renderOrder = 2;
-      flap.add(new THREE.Mesh(fg, mats.fill), lines);
+      flap.add(new THREE.Mesh(fg, card), lines);
       flap.position.z = -q * (opts.gap ?? 5);
       flap.scale.setScalar(1 - q * 0.16);
       flap.position.x = q * (opts.shift ?? 0);
@@ -417,6 +517,7 @@ export class PopupBook {
         this.roadPiece(page, shape, pick < 0.42 ? M.R : pick < 0.84 ? M.B : M.ALL, i, lat, { layers: rng() < 0.3 ? 2 : 1, gap: 4, shift: 3 });
       }
     }
+    this.buildTufts(page);
     // the big pieces: a V of two leaning sheets each, so they read from along the page and from across it
     const big = (shape, mask, bx, bz, layers = 2) => {
       for (const yaw of [0.35, -0.75]) {
@@ -521,6 +622,44 @@ export class PopupBook {
       lump(z5.at(16), 0.45, M.B, true);
       lump(z5.at(40), -0.4, M.R, true);
       flap('lava', z5.at(78), M.R, true);
+    }
+  }
+
+  // The little pieces along the cut edge of the road (lamp posts and street trees; buoys, reeds and leaping fish;
+  // ferns, vents and a dinosaur or two), close enough to flick past the car. They are too many to be a mesh each, so
+  // each page's are batched by world (world/popupprint.js: Tuft) and stand up together.
+  buildTufts(page) {
+    const m = this.main;
+    const hw = m.halfW;
+    const rng = mulberry32(7700 + page * 31);
+    const kinds = [
+      () => (rng() < 0.34 ? S.lamp(5.5 + rng() * 1.5) : rng() < 0.5 ? S.tree(5 + rng() * 3.5) : rng() < 0.6 ? S.house(5 + rng() * 2, 4.5 + rng() * 2) : S.stopSign(3.6 + rng())),
+      () => (rng() < 0.4 ? S.reeds(3 + rng() * 3, 3 + rng() * 3, rng() * 9) : rng() < 0.4 ? S.buoy(3.4 + rng() * 1.6) : rng() < 0.55 ? S.fish(3.2 + rng() * 2) : S.sailboat(5 + rng() * 3)),
+      () => (rng() < 0.42 ? S.fern(3.5 + rng() * 3.5) : rng() < 0.45 ? S.vent(3 + rng() * 2.5) : rng() < 0.8 ? S.crag(rng, 3.5 + rng() * 3, 2.5 + rng() * 3) : S.dino(4.5 + rng() * 2.5)),
+    ][page];
+    // [left page?][world]
+    const T = [0, 1].map(() => ({ [M.R]: new Tuft(), [M.B]: new Tuft() }));
+    for (let i = 3; i < m.N; i += 5) {
+      // (in runs of one colour, so a stretch of road has a red verge and a blue one, not confetti)
+      const run = Math.floor(i / 40);
+      for (const s of [-1, 1]) {
+        if (rng() < 0.3) continue;
+        const shape = kinds();
+        const lat = s * (hw + 6.2 + shape.w / 2 + rng() * 3.5);
+        const p = m.point(i, lat, 0, _v);
+        if (!this.clear(p.x, p.z, shape.w / 2 + 1.5)) continue;
+        const mask = (run + (s > 0 ? 1 : 0)) % 2 ? M.B : M.R;
+        // facing the driver, turned a little so the row isn't a fence
+        const yaw = Math.atan2(m.thx[i], m.thz[i]) + (rng() - 0.5) * 0.9;
+        T[p.x > 0 ? 1 : 0][mask].add(shape, p.x, PY(-p.x), p.z, yaw);
+      }
+    }
+    for (const left of [0, 1]) {
+      for (const mask of [M.R, M.B]) {
+        const group = T[left][mask].build(this.race.world.layers, mask);
+        this.group.add(group);
+        this.tufts.push({ page, left: !!left, d: 0.6, r: W * 0.6, h: 6, group });
+      }
     }
   }
 
@@ -681,7 +820,8 @@ export class PopupBook {
     // the book opens: the first spread stands up during the fly-by
     const intro = v.page === 0 && R.state === 'intro' ? R.introT : 99;
     const tanLeaf = theta > HALF_PI ? Math.tan(Math.PI - theta) : Infinity;
-    for (const P of this.pieces) {
+    followCards(R.world.layers);
+    const stand = (P) => {
       let k = 0;
       if (P.page === v.page) {
         if (v.s >= 1.6) k = 1;
@@ -701,6 +841,20 @@ export class PopupBook {
           k = room >= P.h ? 1 : Math.asin(clamp(room / P.h, 0, 1)) / HALF_PI;
         }
       }
+      return k;
+    };
+    // the little pieces rise out of the paper together
+    const Y0 = BOOK.H - PAPER_DROP;
+    for (const T of this.tufts) {
+      const k = stand(T);
+      T.group.visible = k > 0.004;
+      if (!T.group.visible) continue;
+      const kk = Math.max(0.001, easeOutBack(k));
+      T.group.scale.y = kk;
+      T.group.position.y = Y0 * (1 - kk);
+    }
+    for (const P of this.pieces) {
+      const k = stand(P);
       const shown = k > 0.004;
       const here = shown && !P.ob?.broken;
       P.root.visible = here;
