@@ -213,9 +213,9 @@ export class RaceAI {
     }
     // A lens is held for a moment once chosen: where the scores sit close (the police chase, lava, a storm over a
     // shortcut) a rival would otherwise flick between lenses several times a second, its forms splitting and
-    // docking in a blur. Only a road that is gone in the lens we're in overrides the hold.
+    // docking in a blur. Only a road that is gone in the lens we're in, or a wall across it, overrides the hold.
     this.modeHold = Math.max(0, this.modeHold - dt);
-    if (this.wantMode !== r.mode && (this.modeHold <= 0 || !ok[r.mode]) && r.canShift(this.wantMode)) {
+    if (this.wantMode !== r.mode && (this.modeHold <= 0 || !ok[r.mode] || blocked[r.mode] >= 10) && r.canShift(this.wantMode)) {
       if (r.shiftTo(this.wantMode, r.session)) this.modeHold = 0.7;
     }
 

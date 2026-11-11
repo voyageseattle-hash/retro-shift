@@ -47,7 +47,8 @@ const HALF_PI = Math.PI / 2;
 // the race clock, for offPage (set every update)
 let NOW = 0;
 // Is this obstacle off this racer's page (or folded flat, or not stood up for them yet)? True: it isn't there.
-export const offPage = (o, r) => o.page !== undefined && (o.page !== (r.page || 0) || o.down || (o.late && NOW < (r.pageSolidAt || 0)));
+// (r.pass: a flap that snapped up in a rival's face, too close for it to answer; see update)
+export const offPage = (o, r) => o.page !== undefined && (o.page !== (r.page || 0) || o.down || r.pass === o || (o.late && NOW < (r.pageSolidAt || 0)));
 
 const easeOutBack = (x) => {
   const c = 1.9;
@@ -850,6 +851,7 @@ export class PopupBook {
         P.beat = k;
         const was = o.down;
         o.down = k < 0.55;
+        if (!was && o.down) for (const r of R.racers) if (r.pass === o) r.pass = null;
         // anyone it comes up under is let out of it rather than thrown
         if (was && !o.down) {
           for (const r of R.racers) {
@@ -859,6 +861,10 @@ export class PopupBook {
             if (di > m.N / 2) di -= m.N;
             if (di < -m.N / 2) di += m.N;
             if (Math.abs(di * m.ds) < o.len + r.halfL + 1.5) r.inside = o;
+            // A rival can't read the twitch. One that has already picked its lens for the piece in front and is
+            // inside its reaction distance when this one stands up is let through it, rather than hit it at full
+            // speed, spin and drive off the wrong way.
+            else if (r.ai && di < 0 && -di * m.ds < 8 + Math.abs(r.speed) * 0.8) r.pass = o;
           }
         }
       } else if (P.kind === 'tab') {
