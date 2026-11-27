@@ -181,12 +181,12 @@ function shiftChevrons(world, path, at, color) {
   const ds = path.ds;
   const w = path.halfW * 0.55;
   const tip = Math.max(1, Math.round(5 / ds));
-  const th = Math.max(1, Math.round(1.4 / ds));
+  const th = Math.max(1, Math.round(3 / ds));
   const P = (i, lat) => path.wpoint(path.wrap(i), lat, 0.05, new THREE.Vector3());
   for (let m = 130, gap = 26; m >= 25; m -= gap, gap = Math.max(9, gap * 0.78)) {
     const i = at - Math.round(m / ds);
     // brighter as they close in
-    const k = 0.35 + 0.45 * (1 - (m - 25) / 105);
+    const k = 0.55 + 0.45 * (1 - (m - 25) / 105);
     for (const s of [-1, 1]) L.quad(M.ALL, P(i, s * w), P(i + tip, 0), P(i + tip + th, 0), P(i + th, s * w), color, k);
   }
 }
