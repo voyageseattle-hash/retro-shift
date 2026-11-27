@@ -13,9 +13,10 @@ const NEUTRAL = M.ALL;
 const TINT_BOTH = new THREE.Color(1, 1, 1);
 const TINT_RED = new THREE.Color(1, 0.2, 0.28);
 const TINT_BLUE = new THREE.Color(0.18, 0.52, 1);
-// COMFORT view: the lens still colours the shared road, but only part way, so a lens isn't a whole screen of one colour
-const COMFY_RED = new THREE.Color(1, 1, 1).lerp(TINT_RED, 0.6);
-const COMFY_BLUE = new THREE.Color(1, 1, 1).lerp(TINT_BLUE, 0.6);
+// COMFORT view: the lens colours the shared road just as fully (the look stays vivid), only dimmer, so a lens isn't a
+// whole screen of glare (washing it toward white was tried: everything went pale lavender)
+const COMFY_RED = TINT_RED.clone().multiplyScalar(0.7);
+const COMFY_BLUE = TINT_BLUE.clone().multiplyScalar(0.7);
 // and every line and glow strip is drawn this bright (they're additive: opacity is brightness)
 const COMFY_LINE = 0.72;
 
