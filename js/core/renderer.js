@@ -1,4 +1,4 @@
-import { ACCESS } from './access.js';
+import { ACCESS, comfort } from './access.js';
 import * as THREE from '../../vendor/three.js';
 
 // Ported from Absurd Combat Racing (bloom + grade composer), retuned for neon wireframe.
@@ -94,7 +94,11 @@ const PRESETS = {
   high: { pixelRatio: 1.75, shadows: 0, bloom: true, fx: 1 },
   medium: { pixelRatio: 1.1, shadows: 0, bloom: true, fx: 0.7 },
   low: { pixelRatio: 0.75, shadows: 0, bloom: true, fx: 0.45 },
+  // the lightest: no bloom or grade pass at all (one plain draw per frame) and fewer pixels, for laptops that still lag on LOW
+  lite: { pixelRatio: 0.6, shadows: 0, bloom: false, fx: 0.3 },
 };
+// AUTO steps down through these, one at a time
+const STEPS = ['high', 'medium', 'low', 'lite'];
 
 export class Renderer {
   constructor(container) {
@@ -161,7 +165,9 @@ export class Renderer {
 
   detectQuality() {
     const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && window.innerWidth < 1100);
-    return mobile ? 'medium' : 'high';
+    // (AUTO starts every machine on MEDIUM: a fast one is stepped up to HIGH after a few smooth seconds, which is
+    // gentler than starting on HIGH and making a slow one lag until it steps down)
+    return mobile ? 'low' : 'medium';
   }
 
   setQuality(q) {
@@ -233,7 +239,8 @@ export class Renderer {
     u.uFlash.value = g.flash * 0.18;
     u.uTime.value = (performance.now() * 0.001) % 100;
     // Grain only where there are enough pixels for it to read as texture.
-    u.uGrain.value = this.quality === 'high' ? 0.022 : 0.012;
+    // (COMFORT view: no grain at all)
+    u.uGrain.value = comfort() ? 0 : this.quality === 'high' ? 0.022 : 0.012;
     u.uWet.value = this.preset.fx * (G.wet ?? 0) * (this.mirror ? 0 : 1);
   }
 
@@ -258,6 +265,8 @@ export class Renderer {
   // views: [{ camera, x, y, w, h }] in 0..1 screen fractions.
   render(scene, views, bloomStrength = 0.75) {
     const r = this.renderer;
+    // COMFORT view: a softer glow
+    if (comfort()) bloomStrength *= 0.6;
     if (views.length === 1 && this.preset.bloom) {
       this.renderPass.scene = scene;
       this.renderPass.camera = views[0].camera;
@@ -309,7 +318,7 @@ export class Renderer {
   // the last frame (not the game's clamped step). Only racing counts: menus are light, and a race's first frames
   // (track build, shader compiles) and one-off hitches (a tab switch, a GC pause) are left out.
   trackFrame(frameTime, racing = true) {
-    if (!this.autoQuality || this.quality === 'low') return;
+    if (!this.autoQuality) return;
     if (!racing || frameTime > 0.5) {
       this.settleT = 1;
       return;
@@ -318,13 +327,29 @@ export class Renderer {
       this.settleT -= frameTime;
       return;
     }
-    // slower than ~40 fps builds up, faster pays it back at half rate: about 4 s of sluggish play steps down once
+    const at = STEPS.indexOf(this.quality);
+    // slower than ~40 fps builds up, faster pays it back at half rate: about 2.5 s of sluggish play steps down once
     if (frameTime > 1 / 40) this.lowFpsTime += frameTime;
     else this.lowFpsTime = Math.max(0, this.lowFpsTime - frameTime * 0.5);
-    if (this.lowFpsTime > 4) {
+    if (this.lowFpsTime > 2.5 && at < STEPS.length - 1) {
       this.lowFpsTime = 0;
+      this.fastTime = 0;
       this.settleT = 1.5;
-      this.setQuality(this.quality === 'high' ? 'medium' : 'low');
+      this.steppedDown = true;
+      this.setQuality(STEPS[at + 1]);
+      this.onAutoStep?.(this.quality, -1);
+      return;
+    }
+    // a machine that's never had to step down and holds ~55 fps on MEDIUM for 8 s goes up to HIGH, once
+    if (!this.steppedDown && this.quality === 'medium') {
+      this.fastTime = frameTime < 1 / 55 ? (this.fastTime || 0) + frameTime : 0;
+      if (this.fastTime > 8) {
+        this.fastTime = 0;
+        this.settleT = 1.5;
+        this.steppedDown = true; // (and never back up again: no flip-flopping)
+        this.setQuality('high');
+        this.onAutoStep?.(this.quality, 1);
+      }
     }
   }
 }

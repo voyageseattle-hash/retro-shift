@@ -40,7 +40,7 @@ export class SpeedLines {
   update(dt, camera, k, color) {
     // lens colour washed toward white, so the streaks read against roads of the same colour
     this.tint.lerp(_w.copy(color).lerp(WHITE, 0.45), 1 - Math.exp(-8 * dt));
-    const show = Math.max(0, (k - 0.42) / 0.5) * (ACCESS.calm ? 0.5 : 1);
+    const show = Math.max(0, (k - 0.42) / 0.5) * (ACCESS.calm || ACCESS.view === 'comfort' ? 0.5 : 1);
     this.mesh.visible = show > 0.01;
     if (!this.mesh.visible) return;
     camera.getWorldDirection(_f);

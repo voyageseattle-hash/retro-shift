@@ -3,7 +3,7 @@
 // secrets and stay unsigned (covers.js hides them).
 
 import * as THREE from '../../vendor/three.js';
-import { M, RED, BLUE, solidIn, colorForMask } from './shift.js';
+import { M, RED, BLUE, solidIn, colorForMask, COLORS } from './shift.js';
 import { signFormRoutes } from './formroutes.js';
 import { spot } from './curved.js';
 
@@ -154,7 +154,39 @@ export function buildSigns(world) {
     const name = there === 'RED' ? 'RED' : there === 'BLUE' ? 'BLUE' : 'OVERLAP';
     addSign(world, path, back(path, g.at, 60), 0, `${name} BRIDGE`, there === 'RED OR BLUE' || !there ? 'STAY IN BOTH' : `NO ROAD IN ${there === 'RED' ? 'BLUE' : 'RED'}`, g.mask);
   }
+  // the first courses (def.guide) also paint the lead-in to every forced shift: chevrons on the road in the colour
+  // of the lens that gets you through, closing up as you near it, so the road says "shift now" before the wall does
+  if (def.guide) {
+    for (const o of def.obstacles || []) {
+      if (o.type !== 'wall' || o.path) continue;
+      const pass = lensWords(o.mask, true);
+      if (pass === 'RED' || pass === 'BLUE') shiftChevrons(world, main, main.index(o.at), pass === 'RED' ? COLORS.red : COLORS.blue);
+    }
+    for (const g of def.gaps || []) {
+      if (g.path || g.secret || g.glide) continue;
+      const there = lensWords(g.mask, false);
+      if (there === 'RED' || there === 'BLUE') shiftChevrons(world, main, main.index(g.at), there === 'RED' ? COLORS.red : COLORS.blue);
+    }
+  }
   // a course's own boards: def.signs [{ at, title, sub, mask }]
   for (const s of def.signs || []) addSign(world, main, main.index(s.at), 0, s.title, s.sub || '', s.mask ?? M.ALL);
   signFormRoutes(world, addSign);
+}
+
+// Chevrons painted on the road ahead of index `at`, pointing on, in the colour of the lens to be in: from 130 m out to
+// 25 m out, further apart at first and closer together near the end. Drawn with the shared road, so they're there in
+// every lens (and take that lens's tint, like the road's own lines).
+function shiftChevrons(world, path, at, color) {
+  const L = world.layers;
+  const ds = path.ds;
+  const w = path.halfW * 0.55;
+  const tip = Math.max(1, Math.round(5 / ds));
+  const th = Math.max(1, Math.round(3 / ds));
+  const P = (i, lat) => path.wpoint(path.wrap(i), lat, 0.05, new THREE.Vector3());
+  for (let m = 130, gap = 26; m >= 25; m -= gap, gap = Math.max(9, gap * 0.78)) {
+    const i = at - Math.round(m / ds);
+    // brighter as they close in
+    const k = 0.55 + 0.45 * (1 - (m - 25) / 105);
+    for (const s of [-1, 1]) L.quad(M.ALL, P(i, s * w), P(i + tip, 0), P(i + tip + th, 0), P(i + th, s * w), color, k);
+  }
 }

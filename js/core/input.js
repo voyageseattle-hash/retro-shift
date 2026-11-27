@@ -56,8 +56,8 @@ const BIND_SPLIT = [
 ];
 // Keyboard key names for each player in split-screen.
 export const SPLIT_GLYPHS = [
-  { red: 'Q', both: 'F', blue: 'E', gas: 'W', brake: 'S', steer: 'A D', drift: 'SPACE', fire: 'X', form: 'Z', horn: 'V' },
-  { red: ',', both: '.', blue: '/', gas: '▲', brake: '▼', steer: '◀ ▶', drift: 'R-SHIFT', fire: "'", form: 'ENTER', horn: '\\' },
+  { red: 'Q', both: 'F', blue: 'E', gas: 'W', brake: 'S', steer: 'A D', drift: 'SPACE', fire: 'X', form: 'Z', horn: 'V', reset: 'R' },
+  { red: ',', both: '.', blue: '/', gas: '▲', brake: '▼', steer: '◀ ▶', drift: 'R-SHIFT', fire: "'", form: 'ENTER', horn: '\\', reset: '⌫' },
 ];
 // Buttons that act once per press. The game latches them per rendered frame so a short tap is
 // never lost between fixed sim steps, and online joiners send them as running counts.
@@ -111,9 +111,11 @@ export function padStyleOf(id = '') {
   return 'generic';
 }
 
-// Button prompts per device family.
+// Button prompts per device family. The keyboard's lens keys are shown as Q, E and F, the ones beside WASD: the HUD
+// used to show the Shift keys as L⇧ and R⇧, which players read as the letters L (bound to BLUE) and R (RESET).
+// Left and Right Shift still work as lens keys; they're left for players to find.
 const GLYPHS = {
-  keyboard: { confirm: 'ENTER', back: 'ESC', pause: 'ESC', gas: 'W', brake: 'S', steer: 'A D', drift: 'SPACE', fire: 'X', form: 'Z', item: 'L⇧', special: 'R⇧', red: 'L⇧', blue: 'R⇧', both: 'L⇧+R⇧', look: 'C', reset: 'R', jump: 'U', rear: 'I', horn: 'H', paint: '▲ ▼', choose: '◀ ▶' },
+  keyboard: { confirm: 'ENTER', back: 'ESC', pause: 'ESC', gas: 'W', brake: 'S', steer: 'A D', drift: 'SPACE', fire: 'X', form: 'Z', item: 'Q', special: 'E', red: 'Q', blue: 'E', both: 'F', look: 'C', reset: 'R', jump: 'F', rear: 'I', horn: 'H', paint: '▲ ▼', choose: '◀ ▶' },
   xbox: { confirm: 'A', back: 'B', pause: 'MENU', gas: 'RT', brake: 'LT', steer: 'L-STICK', drift: 'X', fire: 'B', form: 'Y', red: 'LB', blue: 'RB', both: 'LB+RB', item: 'LB', special: 'RB', look: 'RS', reset: 'VIEW', jump: 'D-PAD ▲', rear: 'D-PAD ▼', horn: 'LS', paint: '▲ ▼', choose: '◀ ▶' },
   ps: { confirm: '✕', back: '○', pause: 'OPTIONS', gas: 'R2', brake: 'L2', steer: 'L-STICK', drift: '□', fire: '○', form: '△', red: 'L1', blue: 'R1', both: 'L1+R1', item: 'L1', special: 'R1', look: 'R3', reset: 'SHARE', jump: 'D-PAD ▲', rear: 'D-PAD ▼', horn: 'L3', paint: '▲ ▼', choose: '◀ ▶' },
 };
@@ -527,7 +529,7 @@ export const REMAP_ACTIONS = [
 ];
 const DEFAULT_SOLO = JSON.parse(JSON.stringify(BIND_SOLO));
 const DEFAULT_GLYPHS = { ...GLYPHS.keyboard };
-const NAMES = { Space: 'SPACE', ShiftLeft: 'L⇧', ShiftRight: 'R⇧', ControlLeft: 'L-CTRL', ControlRight: 'R-CTRL', AltLeft: 'L-ALT', AltRight: 'R-ALT', ArrowUp: '▲', ArrowDown: '▼', ArrowLeft: '◀', ArrowRight: '▶', Enter: 'ENTER', Tab: 'TAB', Backspace: '⌫', Comma: ',', Period: '.', Slash: '/', Semicolon: ';', Quote: "'", BracketLeft: '[', BracketRight: ']', Backslash: '\\', Minus: '-', Equal: '=' };
+const NAMES = { Space: 'SPACE', ShiftLeft: 'L-SHIFT', ShiftRight: 'R-SHIFT', ControlLeft: 'L-CTRL', ControlRight: 'R-CTRL', AltLeft: 'L-ALT', AltRight: 'R-ALT', ArrowUp: '▲', ArrowDown: '▼', ArrowLeft: '◀', ArrowRight: '▶', Enter: 'ENTER', Tab: 'TAB', Backspace: '⌫', Comma: ',', Period: '.', Slash: '/', Semicolon: ';', Quote: "'", BracketLeft: '[', BracketRight: ']', Backslash: '\\', Minus: '-', Equal: '=' };
 export function keyLabel(code = '') {
   return NAMES[code] || code.replace(/^Key|^Digit/, '').replace(/^Numpad/, 'NUM ').toUpperCase();
 }

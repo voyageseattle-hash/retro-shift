@@ -63,6 +63,7 @@ export const TRACKS = [
     blurb: 'Clean, classic, and fast. Learn the shift.',
     decor: 'core',
     seed: 11,
+    guide: true, // road chevrons before each forced shift (signs.js)
     laps: 3,
     sun: 0,
     points: [
@@ -98,6 +99,7 @@ export const TRACKS = [
     blurb: 'Multi-level tracks with overlapping routes and hidden cuts.',
     decor: 'layered',
     seed: 22,
+    guide: true,
     laps: 3,
     sun: 1,
     points: [

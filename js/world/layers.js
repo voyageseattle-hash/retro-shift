@@ -6,12 +6,19 @@ import * as THREE from '../../vendor/three.js';
 import { colorForMask, solidIn, RED, BLUE, M } from './shift.js';
 import { damp } from '../core/util.js';
 import { WAVE, patchWave, patchWet } from './fx.js';
+import { comfort } from '../core/access.js';
 
 const _c = new THREE.Color();
 const NEUTRAL = M.ALL;
 const TINT_BOTH = new THREE.Color(1, 1, 1);
 const TINT_RED = new THREE.Color(1, 0.2, 0.28);
 const TINT_BLUE = new THREE.Color(0.18, 0.52, 1);
+// COMFORT view: the lens colours the shared road just as fully (the look stays vivid), only dimmer, so a lens isn't a
+// whole screen of glare (washing it toward white was tried: everything went pale lavender)
+const COMFY_RED = TINT_RED.clone().multiplyScalar(0.7);
+const COMFY_BLUE = TINT_BLUE.clone().multiplyScalar(0.7);
+// and every line and glow strip is drawn this bright (they're additive: opacity is brightness)
+const COMFY_LINE = 0.72;
 
 class Builder {
   constructor() {
@@ -56,6 +63,11 @@ export class Layers {
     let m = this.mats.get(mask);
     if (m) return m;
     const base = colorForMask(mask);
+    const comfy = comfort();
+    // the dark fill: near black for the shared road in CLASSIC; in COMFORT a deep violet surface for the eye to rest
+    // on, and coloured pieces read as solid tinted glass rather than outlines
+    const fillCol = mask === 7 ? (comfy ? _c.setRGB(0.022, 0.014, 0.05) : _c.set(base).multiplyScalar(0.006)) : _c.set(base).multiplyScalar(comfy ? 0.11 : 0.05);
+    const fillHex = fillCol.getHex();
     m = {
       mask,
       base,
@@ -63,7 +75,7 @@ export class Layers {
       ribbon: new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, transparent: true, opacity: 1, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }),
       // Tinted glass: coloured pieces get a rich see-through tint, neutral ones (mostly road) stay wet black.
       // (colours are linear here: 0.05 reads as about a quarter brightness on screen, 0.006 as near black)
-      fill: new THREE.MeshBasicMaterial({ color: _c.set(base).multiplyScalar(mask === 7 ? 0.006 : 0.05).getHex(), transparent: true, opacity: 0.9, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
+      fill: new THREE.MeshBasicMaterial({ color: fillHex, transparent: true, opacity: comfy ? 0.96 : 0.9, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
       solid: new THREE.MeshBasicMaterial({ color: base, transparent: true, opacity: 1 }),
       wire: new THREE.LineBasicMaterial({ color: base, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending }),
     };
@@ -280,7 +292,10 @@ export class Layers {
     // Through a single lens the other world is gone completely, and what's left (the neutral road, rails and pads)
     // takes that lens's colour, so the view is all red or all blue. BOTH shows both worlds and hides the lens-only
     // secrets.
-    const T = mode === RED ? TINT_RED : mode === BLUE ? TINT_BLUE : TINT_BOTH;
+    const comfy = comfort();
+    const T = mode === RED ? (comfy ? COMFY_RED : TINT_RED) : mode === BLUE ? (comfy ? COMFY_BLUE : TINT_BLUE) : TINT_BOTH;
+    const bright = comfy ? COMFY_LINE : 1;
+    const fillK = comfy ? 0.96 : 0.9;
     this.mode = mode; // (the lens this view is drawn for: rooms.js shuts lens-only portals in the others)
     // (kept in the level map, so each split-screen view has its own)
     let tint = this.level.get('tint');
@@ -323,10 +338,10 @@ export class Layers {
       let lv = this.level.get(mask);
       if (this.wave && m.per) {
         // the shader does the fading either side of the ring; keep both sides drawn while it passes
-        const shimmer = mask === RED || mask === BLUE ? 0.85 + 0.15 * Math.sin(time * 9) : 1;
+        const shimmer = (mask === RED || mask === BLUE) && !comfy ? 0.85 + 0.15 * Math.sin(time * 9) : 1;
         const on = m.per.uFrom.value > 0 || m.per.uTo.value > 0;
-        m.line.opacity = m.ribbon.opacity = m.wire.opacity = shimmer;
-        m.fill.opacity = m.road.opacity = 0.9;
+        m.line.opacity = m.ribbon.opacity = m.wire.opacity = shimmer * bright;
+        m.fill.opacity = m.road.opacity = fillK;
         m.solid.opacity = 1;
         m.line.visible = m.ribbon.visible = m.wire.visible = m.solid.visible = m.fill.visible = m.road.visible = on;
         continue;
@@ -335,12 +350,13 @@ export class Layers {
       if (lv < 0.003) lv = 0;
       this.level.set(mask, lv);
       // Single-lens-only pieces shimmer: they are a secret of that world.
-      const shimmer = mask === RED || mask === BLUE ? 0.85 + 0.15 * Math.sin(time * 9) : 1;
+      // (COMFORT keeps them steady: the secret still shows in its lens, it just doesn't flicker)
+      const shimmer = (mask === RED || mask === BLUE) && !comfy ? 0.85 + 0.15 * Math.sin(time * 9) : 1;
       const on = lv > 0;
-      m.line.opacity = lv * shimmer;
-      m.ribbon.opacity = lv * shimmer;
-      m.wire.opacity = lv * shimmer;
-      m.fill.opacity = m.road.opacity = 0.9 * lv;
+      m.line.opacity = lv * shimmer * bright;
+      m.ribbon.opacity = lv * shimmer * bright;
+      m.wire.opacity = lv * shimmer * bright;
+      m.fill.opacity = m.road.opacity = fillK * lv;
       m.solid.opacity = lv;
       m.line.visible = m.ribbon.visible = m.wire.visible = m.solid.visible = on;
       m.fill.visible = m.road.visible = lv > 0.02;
