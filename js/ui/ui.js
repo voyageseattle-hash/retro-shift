@@ -157,10 +157,11 @@ export class UI {
       <table class="keys">
         <tr><td>Drive</td><td>${g('W')} ${g('A')} ${g('S')} ${g('D')} / arrows</td><td>RT · LT · stick</td></tr>
         <tr><td>Drift (hold, release for turbo)</td><td>${g('SPACE')}</td><td>X / □</td></tr>
-        <tr><td>Shift to RED</td><td>${g('LEFT SHIFT')} or ${g('Q')}</td><td>LB / L1</td></tr>
-        <tr><td>Shift to BLUE</td><td>${g('RIGHT SHIFT')} or ${g('E')}</td><td>RB / R1</td></tr>
-        <tr><td>Back to BOTH (or press your lens again)</td><td>${g('BOTH SHIFTS')} or ${g('F')}</td><td>Y / △</td></tr>
-        <tr><td>Look back · Reset</td><td>${g('C')} · ${g('R')}</td><td>RS · VIEW</td></tr>
+        <tr><td>Shift to RED</td><td>${g('Q')}</td><td>LB / L1</td></tr>
+        <tr><td>Shift to BLUE</td><td>${g('E')}</td><td>RB / R1</td></tr>
+        <tr><td>Back to BOTH (or press your lens again)</td><td>${g('F')}</td><td>LB+RB · D-pad ▲</td></tr>
+        <tr><td>Form move · Fire charge</td><td>${g('Z')} · ${g('X')}</td><td>Y / △ · B / ○</td></tr>
+        <tr><td>Look back · Reset</td><td>${g('C')} · ${g('R')}</td><td>RS · VIEW / SHARE</td></tr>
       </table>`;
     const list = el('div', 'list row');
     s.appendChild(list);
@@ -177,7 +178,7 @@ export class UI {
     const list = el('div', 'list');
     const pct = (v) => `${Math.round(v * 100)}%`;
     const diffs = ['EASY', 'NORMAL', 'HARD'];
-    const quals = ['auto', 'high', 'medium', 'low'];
+    const quals = ['auto', 'high', 'medium', 'low', 'lite'];
     const save = () => {
       storage.set('rs.settings', S);
       this.app.applySettings(S);
@@ -1187,7 +1188,13 @@ export class UI {
       h.hullCells.forEach((c, i) => c.classList.toggle('off', i >= hp));
     }
     set(h.hull, 'hullCls', hullCls);
-    h.wrong.classList.toggle('on', (p.wrongWay || 0) > 0.8 && race.state === 'race' && !p.finished);
+    // WRONG WAY, or (no headway for a few seconds: pinned on a wall, lost) how to RESET out of it
+    const live = race.state === 'race' && !p.finished;
+    const wrong = live && (p.wrongWay || 0) > 0.8;
+    const stuck = live && !!p.stuck;
+    h.wrong.classList.toggle('on', wrong || stuck);
+    const wrongText = stuck ? `${wrong ? 'WRONG WAY' : 'STUCK?'}<small>PRESS ${this.lensGlyph(race, k, 'reset')} TO RESET</small>` : 'WRONG WAY<small>TURN AROUND</small>';
+    if (h._wrongText !== wrongText) h.wrong.innerHTML = h._wrongText = wrongText;
     const mode = MODE_NAME[p.mode];
     if (h.root.dataset.mode !== mode) h.root.dataset.mode = mode;
     // the controls, on the device in hand, while the grid waits for GO

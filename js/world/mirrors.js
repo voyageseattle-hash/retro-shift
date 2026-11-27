@@ -363,7 +363,7 @@ const _cp = new THREE.Vector3();
 const _look = new THREE.Vector3();
 const _size = new THREE.Vector2();
 const _clear = new THREE.Color();
-const BUDGET = { high: { n: 3, scale: 0.6 }, medium: { n: 2, scale: 0.5 }, low: { n: 1, scale: 0.4 } };
+const BUDGET = { high: { n: 3, scale: 0.6 }, medium: { n: 2, scale: 0.5 }, low: { n: 1, scale: 0.4 }, lite: { n: 1, scale: 0.3 } };
 const REACH = 300; // metres: further mirrors stay dark glass
 
 export class MirrorSet {

@@ -38,6 +38,9 @@ const _v = new THREE.Vector3();
 const _a = new THREE.Vector3();
 const _c = new THREE.Color();
 const _s = new THREE.Vector2();
+const _unclipFrom = new THREE.Vector3();
+const _unclipTo = new THREE.Vector3();
+const _unclipW = new THREE.Vector3();
 // closing speeds (m/s) where a hit starts to hurt: into a wall or block, and a car rammed by another
 const HURT_SPEED = 6;
 const TAKEDOWN_SPEED = 14;
@@ -50,6 +53,9 @@ const HORNS = { vector: 'honk1', scanline: 'honk2', polygon: 'honk3', chroma: 'h
 const G_AIR_RACE = 27; // racer.js G_AIR
 // recharge time of each form's move (seconds)
 const FORM_CD = { lift: 5, lance: 6, brace: 8 };
+// the player with no headway round the lap: the HUD offers RESET after PLAYER_STUCK_HINT s, and does it at PLAYER_AUTO_RESET
+const PLAYER_STUCK_HINT = 4;
+const PLAYER_AUTO_RESET = 10;
 // how many LANCEs this session have shown the SWITCHBACK hint
 let sbHints = 0;
 const NO_INPUT = { throttle: 0, brake: 0, steer: 0, drift: false, item: false, special: false, jump: false, reset: false, look: false };
@@ -619,6 +625,32 @@ export class Race {
     }
   }
 
+  // A chase camera pushed back into a wall that's solid in your lens (pinned against it, turned round on it) sees
+  // nothing but that wall's colour. Pull the view in toward the car until it's out of the block again. The spring's
+  // own position is left alone, so the camera eases back out as soon as there's room.
+  unclip(cam, pl) {
+    if (cam.cinematic || cam.mob || cam.fold || !pl.alive) return;
+    const c = cam.camera.position;
+    const hit = (pt) => {
+      for (const o of this.world.obstacles) {
+        if (!o.root || !o.w || o.broken || !o.root.visible || !solidIn(o.mask, pl.mode)) continue;
+        if (o.root.getWorldPosition(_unclipW).distanceToSquared(pt) > 900) continue;
+        o.root.worldToLocal(_a.copy(pt));
+        const m = 0.35;
+        if (Math.abs(_a.x) < o.w + m && Math.abs(_a.z) < o.len + m && Math.abs(_a.y) < o.h / 2 + m) return true;
+      }
+      return false;
+    };
+    if (!hit(c)) return;
+    const from = _unclipFrom.copy(c);
+    const to = _unclipTo.copy(pl.pos);
+    to.y += 1.3 * (pl.scale || 1);
+    for (let k = 1; k <= 8; k++) {
+      c.lerpVectors(from, to, k / 8);
+      if (!hit(c)) return;
+    }
+  }
+
   // A respawned car traces its lines back in over half a second; its hull fills in once the frame is mostly there.
   drawIn(r, dt) {
     r.drawIn = Math.min(1, r.drawIn + dt / 0.55);
@@ -786,6 +818,12 @@ export class Race {
       this.nudgeOn(r);
     }
     r.backAt = this.raceTime;
+    // (the player's stuck clock starts over; a rival keeps its own so a spot it sticks on twice moves it on)
+    if (r.isPlayer) {
+      r.headwayT = 0;
+      r.headway = undefined;
+      r.stuck = false;
+    }
     const u = r.lastU;
     const sp = this.world.respawnPoint(u, r.mono ? r.mode : BOTH);
     r.reset(sp.pos, sp.yaw);
@@ -1015,6 +1053,7 @@ export class Race {
         cam.snap(pl);
       }
       cam.update(dt, pl, this.world, C[k].look);
+      this.unclip(cam, pl);
     });
     this.dtLast = dt;
     this.feel.update(dt);
@@ -1159,7 +1198,7 @@ export class Race {
   beforeRender(renderer) {
     const gl = renderer.renderer;
     const on = !this.split && renderer.quality === 'high' && !this.world.room;
-    PHOSPHOR.uDetail.value = renderer.quality === 'low' ? 0 : 1;
+    PHOSPHOR.uDetail.value = renderer.quality === 'low' || renderer.quality === 'lite' ? 0 : 1;
     const size = gl.getDrawingBufferSize(_s);
     const p = this.player;
     // (no wet-road mirror on a road that's drawn turned over or folded)
@@ -1253,6 +1292,21 @@ export class Race {
           continue;
         }
       }
+      // the player gets the same no-headway check: pinned on a wall (still creeping, so the speed check above never
+      // fires) or turned round and lost. After a few seconds the HUD says how to RESET; a while later it's done for you.
+      if (r.isPlayer && !r.ai && !this.tag && !this.online && this.state === 'race' && !r.finished && !w.rig?.parked(r) && !r.offLoop) {
+        // (sitting still with hands off isn't stuck: the first run waits on HOLD THE GAS)
+        const trying = r.ctl.throttle > 0 || r.ctl.brake > 0 || Math.abs(r.speed) > 1;
+        if (r.prog > (r.headway ?? -Infinity) + 0.003) {
+          r.headway = r.prog;
+          r.headwayT = 0;
+        } else if (trying && (r.headwayT = (r.headwayT || 0) + dt) > PLAYER_AUTO_RESET) {
+          r.headwayT = 0;
+          this.onFell(r);
+          continue;
+        }
+        r.stuck = r.headwayT > PLAYER_STUCK_HINT;
+      } else r.stuck = false;
       this.tower?.step(r, dt);
       if (r.respawnT > 0) continue;
       this.features(r, dt);

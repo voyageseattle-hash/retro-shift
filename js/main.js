@@ -31,6 +31,8 @@ class App {
   constructor() {
     this.stage = document.getElementById('stage');
     this.renderer = new Renderer(this.stage);
+    // AUTO graphics says when it lightens the load, so a player who still lags knows the setting is there
+    this.renderer.onAutoStep = (q, d) => d < 0 && this.ui?.popup(`GRAPHICS ${q.toUpperCase()} FOR SPEED`, '#9fd8ff', true);
     this.input = new Input();
     this.audio = new Audio();
     this.ui = new UI(this);
