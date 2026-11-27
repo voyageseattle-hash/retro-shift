@@ -1,7 +1,7 @@
 // Settings > Accessibility: reduced flashing, screen shake, world shapes, and the solo keyboard keys.
 
 import { el, Menu } from './ui.js';
-import { ACCESS, saveAccess } from '../core/access.js';
+import { ACCESS, saveAccess, comfort } from '../core/access.js';
 import { REMAP_ACTIONS, soloKeys, keyLabel } from '../core/input.js';
 
 const SHAKES = [[1, 'FULL'], [0.35, 'LOW'], [0, 'OFF']];
@@ -9,26 +9,27 @@ const SHAKES = [[1, 'FULL'], [0.35, 'LOW'], [0, 'OFF']];
 export function accessScreen(ui) {
   ui.clear();
   const s = el('div', 'screen settings access');
-  s.innerHTML = '<h2>ACCESSIBILITY</h2><div class="sub">WORLD SHAPES marks the red world ▲, the blue world ● and the overlap ◆, on walls, blocks, lens-only road and the lens chips.</div>';
+  s.innerHTML = '<h2>ACCESSIBILITY</h2><div class="sub">VIEW: COMFORT is easier on the eyes (solid road, softer lines, less glow), same world and lenses. WORLD SHAPES marks the red world ▲, the blue world ● and the overlap ◆, on walls, blocks, lens-only road and the lens chips.</div>';
   const list = el('div', 'list');
   s.appendChild(list);
   ui.root.appendChild(s);
   const items = [
-    { label: '', cycle: () => ((ACCESS.calm = !ACCESS.calm), saveAccess(), refresh()), action: () => items[0].cycle(1) },
+    { label: '', cycle: () => ((ACCESS.view = comfort() ? 'classic' : 'comfort'), saveAccess(), refresh()), action: () => items[0].cycle(1) },
+    { label: '', cycle: () => ((ACCESS.calm = !ACCESS.calm), saveAccess(), refresh()), action: () => items[1].cycle(1) },
     { label: '', cycle: (d) => {
       const k = SHAKES.findIndex(([v]) => v === ACCESS.shake);
       ACCESS.shake = SHAKES[(Math.max(0, k) + (d || 1) + SHAKES.length) % SHAKES.length][0];
       saveAccess();
       refresh();
-    }, action: () => items[1].cycle(1) },
-    { label: '', cycle: () => ((ACCESS.shapes = !ACCESS.shapes), saveAccess(), refresh()), action: () => items[2].cycle(1) },
+    }, action: () => items[2].cycle(1) },
+    { label: '', cycle: () => ((ACCESS.shapes = !ACCESS.shapes), saveAccess(), refresh()), action: () => items[3].cycle(1) },
     { label: 'KEYBOARD KEYS', action: () => keysScreen(ui) },
     { label: 'BACK', action: () => ui.settingsScreen() },
   ];
   ui.menu = new Menu(ui.app, list, items, { onBack: () => ui.settingsScreen() });
   const refresh = () => {
     const sh = SHAKES.find(([v]) => v === ACCESS.shake)?.[1] || 'FULL';
-    [`FLASHING ◀ ${ACCESS.calm ? 'REDUCED' : 'FULL'} ▶`, `SCREEN SHAKE ◀ ${sh} ▶`, `WORLD SHAPES ◀ ${ACCESS.shapes ? 'ON' : 'OFF'} ▶`].forEach((l, k) => (ui.menu.nodes[k].innerHTML = l));
+    [`VIEW ◀ ${comfort() ? 'COMFORT' : 'CLASSIC'} ▶`, `FLASHING ◀ ${ACCESS.calm ? 'REDUCED' : 'FULL'} ▶`, `SCREEN SHAKE ◀ ${sh} ▶`, `WORLD SHAPES ◀ ${ACCESS.shapes ? 'ON' : 'OFF'} ▶`].forEach((l, k) => (ui.menu.nodes[k].innerHTML = l));
   };
   refresh();
   ui.menu.nodes.forEach((n) => list.appendChild(n));

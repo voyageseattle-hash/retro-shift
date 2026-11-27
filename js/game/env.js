@@ -4,6 +4,7 @@
 import * as THREE from '../../vendor/three.js';
 import { MODE_TINT, BOTH } from '../world/shift.js';
 import { damp } from '../core/util.js';
+import { comfort } from '../core/access.js';
 import { SkyPiece, SKY_PIECE } from './skypieces.js';
 import { mobiusEnv } from '../world/mobius-art.js';
 import { exemptFold } from '../world/fold.js';
@@ -154,6 +155,8 @@ export class Environment {
     this.group.add(this.stars);
     // (the room's far walls are 600 m off: they need to stay in sight)
     this.fog = world.def.room ? new THREE.Fog(0x0a0310, 320, 1900) : new THREE.Fog(0x0a0310, 180, 1100);
+    // COMFORT view: far lines fade out sooner, so less fine detail crawls along the horizon
+    if (comfort() && !world.def.room) [this.fog.near, this.fog.far] = [140, 760];
     // a course out in space (def.space) brings its own sky and has no ground: nothing of this is drawn
     if (world.def.space) {
       this.group.visible = false;

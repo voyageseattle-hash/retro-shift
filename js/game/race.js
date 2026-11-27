@@ -1392,6 +1392,10 @@ export class Race {
       const tz = P.thz[o.i];
       const penLat = o.w + r.halfW - Math.abs(dlat);
       const penAlong = o.len + r.halfL - Math.abs(along);
+      // (only a real overlap pushes. Within the metre of slack above the overlap is negative, and pushing by it pulled
+      // the car back against the wall every frame: spun round by a crash and driving away from a wall, a car was held
+      // there at full throttle going nowhere, the stuck-on-a-wall reports from the jam page)
+      if (penLat <= 0 || penAlong <= 0) continue;
       if (o.type !== 'wall' && penLat < penAlong) {
         const s = Math.sign(dlat) || 1;
         r.pos.x += P.rightX(o.i) * s * penLat;

@@ -9,6 +9,7 @@ import * as THREE from '../../vendor/three.js';
 import { clamp, lerp, wrapAngle, mulberry32, smoothstep } from '../core/util.js';
 import { M, BOTH, RED, BLUE, solidIn, colorForMask, COLORS } from './shift.js';
 import { Layers } from './layers.js';
+import { comfort } from '../core/access.js';
 import { buildDecor } from './decor.js';
 import { buildSigns, addSign } from './signs.js';
 import { Room } from './rooms.js';
@@ -699,6 +700,10 @@ export class TrackWorld {
     if (this.def.noRoads) return; // (a course that draws its own road: QUARTER TURN's is printed on its cube)
     const L = this.layers;
     const v = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    // COMFORT view thins the road grid: half the cross ribs, and no dashed outer lane lines (fewer lines streaming
+    // past at speed is most of what makes a wireframe road tiring to watch)
+    const comfy = comfort();
+    const ribEvery = comfy ? 4 : 2;
     for (const path of this.paths) {
       // (a piece that moves is drawn by whoever moves it: marblerun.js)
       if (path.skipDraw) continue;
@@ -762,9 +767,9 @@ export class TrackWorld {
           }
         }
         // grid: cross ribs and lane lines
-        if (i % 2 === 0) L.line(mask, path.wpoint(i, -hw, 0.03, _a), path.wpoint(i, hw, 0.03, _b), (i >> 1) % 2 ? ml : mr);
+        if (i % ribEvery === 0) L.line(mask, path.wpoint(i, -hw, 0.03, _a), path.wpoint(i, hw, 0.03, _b), (i >> 1) % 2 ? ml : mr);
         for (const f of [-1 / 3, 1 / 3]) L.line(mask, path.wpoint(i, f * hw * 2 * 0.75, 0.03, _a), path.wpoint(j, f * hw * 2 * 0.75, 0.03, _b), f < 0 ? ml : mr);
-        for (const f of [-2 / 3, 0, 2 / 3]) if (i % 3 !== 2 && f !== 0) L.line(mask, path.wpoint(i, f * hw, 0.03, _a), path.wpoint(j, f * hw, 0.03, _b), f < 0 ? ml : mr);
+        if (!comfy) for (const f of [-2 / 3, 0, 2 / 3]) if (i % 3 !== 2 && f !== 0) L.line(mask, path.wpoint(i, f * hw, 0.03, _a), path.wpoint(j, f * hw, 0.03, _b), f < 0 ? ml : mr);
         // underside and supports for raised road
         const bent = path.warpK?.[i] > 0;
         if (i % 2 === 0 && !bent && !this.mob) {

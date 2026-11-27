@@ -1,4 +1,4 @@
-import { ACCESS } from './access.js';
+import { ACCESS, comfort } from './access.js';
 import * as THREE from '../../vendor/three.js';
 
 // Ported from Absurd Combat Racing (bloom + grade composer), retuned for neon wireframe.
@@ -239,7 +239,8 @@ export class Renderer {
     u.uFlash.value = g.flash * 0.18;
     u.uTime.value = (performance.now() * 0.001) % 100;
     // Grain only where there are enough pixels for it to read as texture.
-    u.uGrain.value = this.quality === 'high' ? 0.022 : 0.012;
+    // (COMFORT view: no grain at all)
+    u.uGrain.value = comfort() ? 0 : this.quality === 'high' ? 0.022 : 0.012;
     u.uWet.value = this.preset.fx * (G.wet ?? 0) * (this.mirror ? 0 : 1);
   }
 
@@ -264,6 +265,8 @@ export class Renderer {
   // views: [{ camera, x, y, w, h }] in 0..1 screen fractions.
   render(scene, views, bloomStrength = 0.75) {
     const r = this.renderer;
+    // COMFORT view: a softer glow
+    if (comfort()) bloomStrength *= 0.6;
     if (views.length === 1 && this.preset.bloom) {
       this.renderPass.scene = scene;
       this.renderPass.camera = views[0].camera;
